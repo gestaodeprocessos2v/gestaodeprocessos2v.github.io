@@ -270,3 +270,6 @@ button.tile { font: inherit; text-align: left; border: 0; cursor: pointer; color
 button.tile:hover { filter: brightness(.97); box-shadow: var(--shadow), 0 0 0 2px currentColor; }
 button.tile:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .grupo { scroll-margin-top: 84px; }
+
+.grupo-cab .topo-link { padding: 3px 10px; font-size: 12.5px; white-space: nowrap; }
+@media (max-width: 720px) { .grupo-cab .topo-link { margin-left: auto; } }

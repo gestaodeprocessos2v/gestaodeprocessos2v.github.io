@@ -448,7 +448,7 @@
       if (!ls.length) continue;
       const total = ls.length;
       if (tipo === 'normal' && ls.length > f.limite) ls = ls.slice(0, f.limite);
-      h += `<section class="grupo g-${tipo}" id="grupo-${modo}-${tipo}" tabindex="-1"><div class="grupo-cab"><span class="ponto"></span><h2>${titulo}</h2><span class="contagem">${total}</span><p>${dica}</p></div><ol class="linhas">${CABECALHO_LINHAS}${ls.map(l => linhaHTML(l, modo)).join('')}</ol>`;
+      h += `<section class="grupo g-${tipo}" id="grupo-${modo}-${tipo}" tabindex="-1"><div class="grupo-cab"><span class="ponto"></span><h2>${titulo}</h2><span class="contagem">${total}</span><p>${dica}</p><button type="button" class="btn discreto topo-link" data-acao="topo">↑ Voltar ao topo</button></div><ol class="linhas">${CABECALHO_LINHAS}${ls.map(l => linhaHTML(l, modo)).join('')}</ol>`;
       if (ls.length < total) h += `<button class="btn mais" data-acao="mais">Mostrar mais ${Math.min(LIMITE_NORMAL, total - ls.length)} de ${total - ls.length} restantes</button>`;
       h += '</section>';
     }
@@ -570,6 +570,7 @@
     if (!alvo) return;
     const acao = alvo.dataset.acao;
     if (acao === 'sair-ver-como') { sairVerComo(); return; }
+    if (acao === 'topo') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     if (acao === 'ir') {
       const sec = document.getElementById('grupo-' + st.aba + '-' + alvo.dataset.tipo);
       if (sec) { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); sec.focus({ preventScroll: true }); }
