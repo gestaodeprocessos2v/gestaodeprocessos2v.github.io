@@ -671,7 +671,7 @@
   }
 
   function iniciar() {
-    $('#subtitulo').textContent = '2ª Vara Federal · processos do PJe · ' + new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+    $('#subtitulo').textContent = 'Gestão de Processos · 2ª Vara Federal · ' + new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
     ligarEventos();
     if (!window.supabase || !CFG) { st.estado = 'erro'; st.erro = 'Não foi possível carregar os componentes da página.'; render(); return; }
     st.sb = window.supabase.createClient(CFG.url, CFG.chave, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' } });

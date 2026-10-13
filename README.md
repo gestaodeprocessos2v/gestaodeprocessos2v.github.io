@@ -1,4 +1,4 @@
-# Fila de Trabalho da Vara
+# Fila de Trabalho · Gestão de Processos (2ª Vara Federal)
 
 Painel da fila de trabalho da 2ª Vara Federal da Paraíba. Página estática (GitHub Pages) com login Google e banco no Supabase.
 
