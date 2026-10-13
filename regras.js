@@ -370,7 +370,7 @@
 
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem,
-    atribuir, pessoasDoSetor, prepararLista, filtrarDiario, mesclarDiario, fatiar, podarMarcas, montarFila, chaveItem,
+    atribuir, pessoasDoSetor, prepararLista, filtrarDiario, mesclarDiario, fatiar, podarMarcas, montarFila, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

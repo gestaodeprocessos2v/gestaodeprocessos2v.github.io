@@ -239,6 +239,8 @@
     const ids = pessoa ? [pessoa] : pessoas().map(p => p.id);
     const out = [];
     for (const id of ids) for (const l of filaDe(id)) out.push(l);
+    // Todos os servidores: ordem geral (grupo e antiguidade), independente do servidor.
+    if (!pessoa) out.sort(R.comparar);
     return out;
   }
 
