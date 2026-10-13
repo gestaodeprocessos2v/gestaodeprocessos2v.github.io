@@ -67,10 +67,10 @@
 
   function opcoesPessoas(sel, vazio, excluir) {
     let h = vazio != null ? `<option value="">${esc(vazio)}</option>` : '';
-    for (const [tipo, , rot] of TIPOS) {
+    for (const [tipo, plural] of TIPOS) {
       const ps = pessoas().filter(p => (p.tipo || 'servidor') === tipo && p.id !== excluir);
       if (!ps.length) continue;
-      h += `<optgroup label="${rot}s">` + ps.map(p => `<option value="${esc(p.id)}"${p.id === sel ? ' selected' : ''}>${esc(p.nome)}</option>`).join('') + '</optgroup>';
+      h += `<optgroup label="${plural}">` + ps.map(p => `<option value="${esc(p.id)}"${p.id === sel ? ' selected' : ''}>${esc(p.nome)}</option>`).join('') + '</optgroup>';
     }
     return h;
   }
