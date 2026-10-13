@@ -204,8 +204,10 @@
 
   // ---------- urgência manual ----------
   function painelUrgencia() {
-    const abertas = st.urgencias.filter(u => !u.concluidaEm).sort((a, b) => (a.criadaEm || 0) - (b.criadaEm || 0));
-    const recentes = st.urgencias.filter(u => u.concluidaEm).sort((a, b) => b.concluidaEm - a.concluidaEm).slice(0, 8);
+    // só as incluídas à mão aqui; as que vêm das listas ficam nas filas, sem aparecer nesta seção
+    const manuais = st.urgencias.filter(u => u.via === 'gestor');
+    const abertas = manuais.filter(u => !u.concluidaEm).sort((a, b) => (a.criadaEm || 0) - (b.criadaEm || 0));
+    const recentes = manuais.filter(u => u.concluidaEm).sort((a, b) => b.concluidaEm - a.concluidaEm).slice(0, 8);
     const origem = u => (u.via === 'envio' ? ` <span class="muted small">(enviada por ${esc(nomeDe(u.remetente))})</span>` : u.via === 'lista' ? ' <span class="muted small">(da lista)</span>' : '');
     const linha = u => `<tr><td class="mono">${esc(R.formatarCNJ(u.numero))}</td><td>${esc(nomeDe(u.responsavel))}${origem(u)}</td><td>${esc(u.motivo || '')}</td><td>${u.concluidaEm ? 'Concluída ' + dataBR(u.concluidaEm) : 'Aberta desde ' + dataBR(u.criadaEm)}</td>
       <td>${st.confirmarRemocao === u.id ? `<button class="btn perigo" data-acao="remover-urgencia" data-id="${esc(u.id)}">Confirmar</button>` : `<button class="btn" data-acao="pedir-remocao" data-id="${esc(u.id)}">Remover</button>`}</td></tr>`;
