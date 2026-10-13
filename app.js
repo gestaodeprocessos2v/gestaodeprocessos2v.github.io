@@ -340,7 +340,7 @@
       if (l.concluido) {
         acoes = l.origem === 'lista' ? `<button class="btn" data-acao="desfazer"${dis}>Desfazer</button>` : '';
       } else {
-        acoes = `<button class="btn feito" data-acao="concluir"${dis}>Concluído</button>`;
+        acoes = `<button class="btn feito" data-acao="concluir"${dis}>Marcar como concluído</button>`;
         if (podeEnviar()) acoes += `<button class="btn" data-acao="enviar"${dis}>Enviar para outra pessoa</button>`;
         if (l.origem === 'lista' && podeDevolver()) acoes += `<button class="btn" data-acao="devolver"${dis}>Devolver</button>`;
       }
@@ -385,7 +385,7 @@
     </li>`;
   }
 
-  const CABECALHO_LINHAS = `<li class="linha cab" aria-hidden="true"><div></div><div>Número do processo</div><div>Classe</div><div>Tarefa</div><div>Cargo judicial</div><div>Data de chegada</div><div>Anotação</div><div>Situação</div></li>`;
+  const CABECALHO_LINHAS = `<li class="linha cab" aria-hidden="true"><div></div><div>Número do processo</div><div>Classe</div><div>Tarefa</div><div>Cargo judicial</div><div>Data de chegada</div><div>Anotação</div><div>Ações</div></li>`;
 
   function renderLista(modo) {
     const v = $('#v-' + modo);
