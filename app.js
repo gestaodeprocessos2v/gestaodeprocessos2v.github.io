@@ -330,7 +330,7 @@
     if (l.origem === 'urgencia') {
       if (l.via === 'envio') nota = `<div class="nota"><b>Enviado por ${esc(nomeDe(l.de))}</b> em ${dataHoraBR(l.criadaEm)}${l.motivo ? ': ' + esc(l.motivo) : ''}</div>`;
       else if (l.via === 'gestor') nota = `<div class="nota"><b>Urgência</b> incluída em ${dataHoraBR(l.criadaEm)}${l.motivo ? ': ' + esc(l.motivo) : ''}</div>`;
-      else nota = `<div class="nota"><b>Urgência</b> desde ${dataHoraBR(l.criadaEm)}${l.motivo ? ': ' + esc(l.motivo) : ''}</div>`;
+      else if (l.motivo) nota = `<div class="nota"><b>Urgência</b>: ${esc(l.motivo)}</div>`;
     }
     if (l.origem === 'devolucao') nota = `<div class="nota"><b>Devolvido por ${esc(nomeDe(l.de))}</b> em ${dataHoraBR(l.criadaEm)}${l.motivo ? ': ' + esc(l.motivo) : ''}</div>`;
     const resp = geral ? `<div class="sub sub-resp">Responsável: ${esc(nomeDe(l.dono))}</div>` : '';
