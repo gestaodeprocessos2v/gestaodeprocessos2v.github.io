@@ -418,10 +418,10 @@
     let h = '';
     if (novos) h += `<div class="aviso novo"><b>${novos} ${novos === 1 ? 'processo novo' : 'processos novos'}</b> em urgências ou tarefas prioritárias desde a sua última visita (${dataHoraBR(st.ultimaVisita)}).</div>`;
     h += `<div class="contagens">
-      <div class="tile urgente"><span>Urgentes</span><b>${conta('urgente')}</b></div>
-      <div class="tile devolvido"><span>Devolvidos</span><b>${conta('devolvido')}</b></div>
-      <div class="tile prioritaria"><span>Prioritárias</span><b>${conta('prioritaria')}</b></div>
-      <div class="tile"><span>Na fila</span><b>${conta('normal')}</b></div>
+      <button type="button" class="tile urgente" data-acao="ir" data-tipo="urgente" title="Ir para esta lista"><span>Urgentes</span><b>${conta('urgente')}</b></button>
+      <button type="button" class="tile devolvido" data-acao="ir" data-tipo="devolvido" title="Ir para esta lista"><span>Devolvidos</span><b>${conta('devolvido')}</b></button>
+      <button type="button" class="tile prioritaria" data-acao="ir" data-tipo="prioritaria" title="Ir para esta lista"><span>Prioritárias</span><b>${conta('prioritaria')}</b></button>
+      <button type="button" class="tile" data-acao="ir" data-tipo="normal" title="Ir para esta lista"><span>Na fila</span><b>${conta('normal')}</b></button>
       <div class="tile concluido"><span>Concluídos</span><b>${concluidos}</b></div>
     </div>
     <p class="atualizacao">Lista completa: ${ultimaLista ? dataHoraBR(ultimaLista) : 'ainda não enviada'} · Atualização diária: ${ultimoDiario ? dataHoraBR(ultimoDiario) : 'ainda não enviada'} · Clique no número para copiar.</p>
@@ -448,7 +448,7 @@
       if (!ls.length) continue;
       const total = ls.length;
       if (tipo === 'normal' && ls.length > f.limite) ls = ls.slice(0, f.limite);
-      h += `<section class="grupo g-${tipo}"><div class="grupo-cab"><span class="ponto"></span><h2>${titulo}</h2><span class="contagem">${total}</span><p>${dica}</p></div><ol class="linhas">${CABECALHO_LINHAS}${ls.map(l => linhaHTML(l, modo)).join('')}</ol>`;
+      h += `<section class="grupo g-${tipo}" id="grupo-${modo}-${tipo}" tabindex="-1"><div class="grupo-cab"><span class="ponto"></span><h2>${titulo}</h2><span class="contagem">${total}</span><p>${dica}</p></div><ol class="linhas">${CABECALHO_LINHAS}${ls.map(l => linhaHTML(l, modo)).join('')}</ol>`;
       if (ls.length < total) h += `<button class="btn mais" data-acao="mais">Mostrar mais ${Math.min(LIMITE_NORMAL, total - ls.length)} de ${total - ls.length} restantes</button>`;
       h += '</section>';
     }
@@ -570,6 +570,12 @@
     if (!alvo) return;
     const acao = alvo.dataset.acao;
     if (acao === 'sair-ver-como') { sairVerComo(); return; }
+    if (acao === 'ir') {
+      const sec = document.getElementById('grupo-' + st.aba + '-' + alvo.dataset.tipo);
+      if (sec) { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); sec.focus({ preventScroll: true }); }
+      else toast('Nenhum processo nessa lista.');
+      return;
+    }
     if (st.verComo && ['concluir', 'desfazer', 'devolver', 'enviar', 'anotar', 'apagar-nota'].includes(acao)) { toast('Visualização somente leitura.'); return; }
     const modo = st.aba;
     const f = st.vis[modo];

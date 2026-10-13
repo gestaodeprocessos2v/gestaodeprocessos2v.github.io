@@ -264,3 +264,9 @@ body { margin: 0; }
 .topo .ver-como { background: var(--band-2); color: var(--band-ink); border: 0; border-radius: var(--r); padding: 8px 10px; font: inherit; font-weight: 600; max-width: 100%; }
 .ver-como[hidden] { display: none; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Cartões de contagem como atalhos para as listas */
+button.tile { font: inherit; text-align: left; border: 0; cursor: pointer; color: inherit; }
+button.tile:hover { filter: brightness(.97); box-shadow: var(--shadow), 0 0 0 2px currentColor; }
+button.tile:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.grupo { scroll-margin-top: 84px; }
