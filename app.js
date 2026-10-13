@@ -261,6 +261,7 @@
   function renderTopo() {
     const ok = st.estado === 'ok';
     $('#sou').hidden = !ok;
+    document.title = ok ? 'Fila de Trabalho · Gestão de Processos' : 'Acesso restrito';
     $('#marca-nome').hidden = !ok; // título e subtítulo só aparecem depois de validado o acesso
     if (ok) $('#quem').innerHTML = `${esc(st.nome)} <small>${esc(PERFIS[st.perfil] || st.perfil)}</small>`;
     const abas = ok ? abasDisponiveis() : [];
