@@ -260,3 +260,4 @@ body { margin: 0; }
 @media (max-width: 560px) {
   .pessoa-cfg, .acesso-cfg { grid-template-columns: 1fr 1fr; }
 }
+.marca-nome[hidden]{display:none}

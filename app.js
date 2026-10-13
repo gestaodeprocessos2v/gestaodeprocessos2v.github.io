@@ -261,6 +261,7 @@
   function renderTopo() {
     const ok = st.estado === 'ok';
     $('#sou').hidden = !ok;
+    $('#marca-nome').hidden = !ok; // título e subtítulo só aparecem depois de validado o acesso
     if (ok) $('#quem').innerHTML = `${esc(st.nome)} <small>${esc(PERFIS[st.perfil] || st.perfil)}</small>`;
     const abas = ok ? abasDisponiveis() : [];
     const nav = $('#abas');
@@ -278,7 +279,7 @@
     if (st.estado === 'carregando') {
       v.innerHTML = `<div class="vazio"><h2>Carregando o painel…</h2><p>Buscando a configuração e as filas.</p></div>`;
     } else if (st.estado === 'login') {
-      v.innerHTML = `<div class="vazio"><h2>Entre para ver as filas</h2><p>Use a conta Google cadastrada pelo gestor.</p><button class="btn primario" type="button" data-acao="entrar">Entrar com Google</button></div>`;
+      v.innerHTML = `<div class="vazio"><p>Use a conta Google cadastrada pelo gestor.</p><button class="btn primario" type="button" data-acao="entrar">Entrar com Google</button></div>`;
     } else if (st.estado === 'negado') {
       v.innerHTML = `<div class="vazio"><h2>Acesso não autorizado</h2><p>O e-mail <b>${esc(st.email)}</b> não está cadastrado para acesso a essa página. Se você acredita que deve ter acesso, entre em contato com o gestor.</p><button class="btn primario" type="button" data-acao="sair">Sair</button></div>`;
     } else {
