@@ -29,7 +29,7 @@
     resumo: null,
     filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
     ver: 0, cache: { ver: -1, m: {} },
-    aba: 'fila',
+    aba: 'fila', verComo: '',
     vis: {
       fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '' },
       geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '' },
@@ -61,8 +61,11 @@
   const nomeDe = id => nomes()[id] || id || '—';
   const tipoDe = id => (pessoas().find(p => p.id === id) || {}).tipo;
   const temFila = () => COM_FILA.includes(st.perfil);
-  const podeDevolver = () => st.perfil === 'estagiario' || st.perfil === 'residente';
-  const podeEnviar = () => st.perfil === 'servidor';
+  // "Ver como": o gestor abre, só para leitura, a fila de outra pessoa.
+  const pessoaAtiva = () => st.verComo || st.pessoa;
+  const tipoAtivo = () => st.verComo ? tipoDe(st.verComo) : st.perfil;
+  const podeDevolver = () => tipoAtivo() === 'estagiario' || tipoAtivo() === 'residente';
+  const podeEnviar = () => tipoAtivo() === 'servidor';
   const opcoesTipo = sel => TIPOS.map(([id, , rot]) => `<option value="${id}"${(sel || 'servidor') === id ? ' selected' : ''}>${rot}</option>`).join('');
 
   function opcoesPessoas(sel, vazio, excluir) {
@@ -158,7 +161,7 @@
 
   function abasDisponiveis() {
     if (temFila()) return ['fila', 'geral'];
-    if (st.perfil === 'gestor') return ['geral', 'gestao'];
+    if (st.perfil === 'gestor') return st.verComo ? ['fila', 'geral', 'gestao'] : ['geral', 'gestao'];
     return ['geral'];
   }
 
@@ -263,6 +266,14 @@
     $('#sou').hidden = !ok;
     document.title = ok ? 'Fila de Trabalho · Gestão de Processos' : 'Acesso restrito';
     $('#marca-nome').hidden = !ok; // título e subtítulo só aparecem depois de validado o acesso
+    const sel = $('#ver-como');
+    const mostrarSel = ok && st.perfil === 'gestor' && pessoas().length > 0;
+    sel.hidden = !mostrarSel;
+    if (mostrarSel) {
+      const h = opcoesPessoas(st.verComo, 'Ver a fila como…');
+      if (sel.dataset.h !== h) { sel.innerHTML = h; sel.dataset.h = h; }
+      sel.value = st.verComo;
+    }
     if (ok) $('#quem').innerHTML = `${esc(st.nome)} <small>${esc(PERFIS[st.perfil] || st.perfil)}</small>`;
     const abas = ok ? abasDisponiveis() : [];
     const nav = $('#abas');
@@ -273,7 +284,11 @@
     for (const b of nav.querySelectorAll('.aba')) b.setAttribute('aria-selected', String(b.dataset.aba === st.aba));
   }
 
-  function renderAvisos() { $('#avisos').innerHTML = ''; }
+  function renderAvisos() {
+    $('#avisos').innerHTML = st.estado === 'ok' && st.verComo
+      ? `<div class="aviso novo"><b>Visualização somente leitura.</b> Você está vendo a fila de ${esc(nomeDe(st.verComo))} como ela vê. Nada é gravado. <button class="btn" type="button" data-acao="sair-ver-como">Voltar à minha visão</button></div>`
+      : '';
+  }
 
   function renderEstado() {
     const v = $('#v-estado');
@@ -318,15 +333,16 @@
     if (l.origem === 'devolucao') nota = `<div class="nota"><b>Devolvido por ${esc(nomeDe(l.de))}</b> em ${dataHoraBR(l.criadaEm)}${l.motivo ? ': ' + esc(l.motivo) : ''}</div>`;
     const resp = geral ? `<div class="sub sub-resp">Responsável: ${esc(nomeDe(l.dono))}</div>` : '';
     let acoes = '', anot, form = '';
+    const dis = st.verComo ? ' disabled title="Visualização somente leitura"' : '';
     if (geral) {
       anot = l.anot ? `<span class="anot-texto">${esc(l.anot)}</span><span class="quando">${dataHoraBR(l.anotEm)}</span>` : '<span class="muted">—</span>';
     } else {
       if (l.concluido) {
-        acoes = l.origem === 'lista' ? `<button class="btn" data-acao="desfazer">Desfazer</button>` : '';
+        acoes = l.origem === 'lista' ? `<button class="btn" data-acao="desfazer"${dis}>Desfazer</button>` : '';
       } else {
-        acoes = `<button class="btn feito" data-acao="concluir">Concluído</button>`;
-        if (podeEnviar()) acoes += `<button class="btn" data-acao="enviar">Enviar para outra pessoa</button>`;
-        if (l.origem === 'lista' && podeDevolver()) acoes += `<button class="btn" data-acao="devolver">Devolver</button>`;
+        acoes = `<button class="btn feito" data-acao="concluir"${dis}>Concluído</button>`;
+        if (podeEnviar()) acoes += `<button class="btn" data-acao="enviar"${dis}>Enviar para outra pessoa</button>`;
+        if (l.origem === 'lista' && podeDevolver()) acoes += `<button class="btn" data-acao="devolver"${dis}>Devolver</button>`;
       }
       if (st.anotando === l.chave) {
         anot = `<form class="anotar-form" data-form="anotar">
@@ -336,9 +352,9 @@
           <button class="btn" type="button" data-acao="cancelar-nota">Cancelar</button></div>
         </form>`;
       } else if (l.anot) {
-        anot = `<button class="anot-texto" data-acao="anotar" title="Editar anotação">${esc(l.anot)}</button><span class="quando">${dataHoraBR(l.anotEm)}</span>`;
+        anot = `<button class="anot-texto" data-acao="anotar"${dis ? dis : ' title="Editar anotação"'}>${esc(l.anot)}</button><span class="quando">${dataHoraBR(l.anotEm)}</span>`;
       } else {
-        anot = `<button class="btn discreto" data-acao="anotar">+ Anotar</button>`;
+        anot = `<button class="btn discreto" data-acao="anotar"${dis}>+ Anotar</button>`;
       }
       if (st.devolvendo === l.chave) {
         const sugerido = l.resp || R.atribuir(l, l.s, st.config || {}).pessoa || '';
@@ -379,7 +395,7 @@
       v.innerHTML = `<div class="vazio"><h2>O painel ainda não foi configurado</h2><p>${st.perfil === 'gestor' ? 'Abra a aba Gestão para cadastrar as pessoas e as regras de distribuição.' : 'Aguarde o gestor cadastrar as pessoas e as regras de distribuição.'}</p></div>`;
       return;
     }
-    const todas = geral ? linhasGeral(f.pessoa) : filaDe(st.pessoa);
+    const todas = geral ? linhasGeral(f.pessoa) : filaDe(pessoaAtiva());
     const abertas = todas.filter(l => !l.concluido);
     const conta = t => abertas.filter(l => l.tipo === t).length;
     const novos = geral ? 0 : abertas.filter(l => l.novo).length;
@@ -488,7 +504,7 @@
   }
 
   const itemDe = l => { const item = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u', 'resp']) if (l[k] != null) item[k] = l[k]; return item; };
-  const acharLinha = chave => filaDe(st.pessoa).find(l => l.chave === chave);
+  const acharLinha = chave => filaDe(pessoaAtiva()).find(l => l.chave === chave);
 
   async function enviarProcesso(l, para, motivo) {
     const agora = Date.now();
@@ -540,11 +556,19 @@
     (alvo || $('#env-para')).focus();
   }
 
+  function sairVerComo() {
+    st.verComo = ''; st.anotando = null; st.devolvendo = null; st.modal = null;
+    if (!abasDisponiveis().includes(st.aba)) st.aba = abasDisponiveis()[0];
+    render();
+  }
+
   // ---------- eventos ----------
   async function aoClicarFila(ev) {
     const alvo = ev.target.closest('[data-acao]');
     if (!alvo) return;
     const acao = alvo.dataset.acao;
+    if (acao === 'sair-ver-como') { sairVerComo(); return; }
+    if (st.verComo && ['concluir', 'desfazer', 'devolver', 'enviar', 'anotar', 'apagar-nota'].includes(acao)) { toast('Visualização somente leitura.'); return; }
     const modo = st.aba;
     const f = st.vis[modo];
     const li = alvo.closest('.linha');
@@ -576,16 +600,17 @@
       } else if (acao === 'mais') {
         f.limite += LIMITE_NORMAL; render();
       } else if (acao === 'baixar') {
-        const base = modo === 'geral' ? linhasGeral(f.pessoa) : filaDe(st.pessoa);
+        const base = modo === 'geral' ? linhasGeral(f.pessoa) : filaDe(pessoaAtiva());
         const linhas = base.filter(l => f.concl || !l.concluido);
         const hoje = new Date().toISOString().slice(0, 10);
-        baixar(`fila-${modo === 'geral' ? 'geral' : st.pessoa}-${hoje}.csv`, R.paraCsv(linhas, nomes(), modo === 'geral'));
+        baixar(`fila-${modo === 'geral' ? 'geral' : pessoaAtiva()}-${hoje}.csv`, R.paraCsv(linhas, nomes(), modo === 'geral'));
       }
     } catch (e) { falha(e); }
   }
 
   async function aoEnviarFormFila(ev) {
     ev.preventDefault();
+    if (st.verComo) return;
     const tipo = ev.target.dataset.form;
     try {
       if (tipo === 'anotar') {
@@ -605,6 +630,7 @@
 
   async function aoEnviarModal(ev) {
     ev.preventDefault();
+    if (st.verComo) return;
     const s = st.modal; if (!s || s.enviando) return;
     const l = acharLinha(s.chave); if (!l) { st.modal = null; render(); return; }
     const para = $('#env-para').value, motivo = $('#env-motivo').value.trim();
@@ -618,6 +644,11 @@
 
   function ligarEventos() {
     $('#btn-sair').addEventListener('click', sair);
+    $('#avisos').addEventListener('click', e => { if (e.target.closest('[data-acao="sair-ver-como"]')) sairVerComo(); });
+    $('#ver-como').addEventListener('change', e => {
+      st.anotando = null; st.devolvendo = null; st.modal = null;
+      if (e.target.value) { st.verComo = e.target.value; st.aba = 'fila'; render(); } else sairVerComo();
+    });
     $('#abas').addEventListener('click', e => {
       const b = e.target.closest('.aba'); if (!b) return;
       st.aba = b.dataset.aba; guardar('fila.aba.' + st.email, st.aba);

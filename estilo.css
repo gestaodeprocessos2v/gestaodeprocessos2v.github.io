@@ -261,3 +261,6 @@ body { margin: 0; }
   .pessoa-cfg, .acesso-cfg { grid-template-columns: 1fr 1fr; }
 }
 .marca-nome[hidden]{display:none}
+.topo .ver-como { background: var(--band-2); color: var(--band-ink); border: 0; border-radius: var(--r); padding: 8px 10px; font: inherit; font-weight: 600; max-width: 100%; }
+.ver-como[hidden] { display: none; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
