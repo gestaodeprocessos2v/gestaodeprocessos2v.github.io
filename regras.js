@@ -276,7 +276,8 @@
 
   const GRUPOS = { urgente: 0, devolvido: 1, prioritaria: 2, normal: 3 };
   const LONGE = 8.64e15;
-  const referencia = x => x.origem === 'lista' ? (x.ch == null ? LONGE : x.ch) : (x.criadaEm == null ? LONGE : x.criadaEm);
+  // Antiguidade = data de chegada do processo; só sem ela (urgência/devolução de processo fora da lista) usa a data de criação.
+  const referencia = x => x.ch != null ? x.ch : (x.origem === 'lista' || x.criadaEm == null ? LONGE : x.criadaEm);
 
   function comparar(a, b) {
     return (GRUPOS[a.tipo] - GRUPOS[b.tipo]) || (referencia(a) - referencia(b)) || String(a.n).localeCompare(String(b.n));
