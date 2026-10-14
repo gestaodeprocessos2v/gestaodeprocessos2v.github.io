@@ -175,7 +175,7 @@
       todas((a, b) => sb.from('filas').select('lista,pessoa,itens,importado_em').order('lista').order('pessoa').range(a, b)),
       todas((a, b) => sb.from('urgencias').select('*').or(`concluida_em.is.null,concluida_em.gte.${desdeConcl}`).order('id').range(a, b)),
       todas((a, b) => sb.from('devolucoes').select('*').or(`concluida_em.is.null,concluida_em.gte.${desdeConcl}`).order('id').range(a, b)),
-      todas((a, b) => sb.from('marcas').select('pessoa,chave,em,devolvido,item').gte('em', desdeMarcas).order('pessoa').order('chave').range(a, b)),
+      todas((a, b) => sb.from('marcas').select('pessoa,chave,em,devolvido,item,desfeito').gte('em', desdeMarcas).order('pessoa').order('chave').range(a, b)),
       todas((a, b) => sb.from('notas').select('pessoa,numero,texto,em').order('pessoa').order('numero').range(a, b)),
       gestor ? todas((a, b) => sb.from('acesso').select('email,nome,perfil,pessoa_id').order('email').range(a, b)) : Promise.resolve([]),
       gestor ? sb.from('acessos_negados').select('email,em').order('em', { ascending: false }).limit(200) : Promise.resolve({ data: [] }),
@@ -197,7 +197,7 @@
     }));
     st.devolucoes = dev.map(r => ({ id: r.id, item: r.item, de: r.de, para: r.para, motivo: r.motivo || '', em: ms(r.em), concluidaEm: ms(r.concluida_em) }));
     st.marcas = {};
-    for (const m of marcas) (st.marcas[m.pessoa] = st.marcas[m.pessoa] || {})[m.chave] = { em: ms(m.em), dev: !!m.devolvido, item: m.item || null };
+    for (const m of marcas) (st.marcas[m.pessoa] = st.marcas[m.pessoa] || {})[m.chave] = { em: ms(m.em), dev: !!m.devolvido, item: m.item || null, desfeito: !!m.desfeito };
     st.notas = {};
     for (const n of notas) (st.notas[n.pessoa] = st.notas[n.pessoa] || {})[n.numero] = { texto: n.texto, em: ms(n.em) };
     st.acessos = acessos;
@@ -223,10 +223,10 @@
       itens,
       urgencias: st.urgencias.filter(u => u.via !== 'lista' && u.responsavel === p && (!u.concluidaEm || u.concluidaEm > umMes)),
       devolucoes: st.devolucoes.filter(d => d.para === p && (!d.concluidaEm || d.concluidaEm > umMes)),
-      marcas: st.marcas[p] || {}, tarefas: st.mapaTarefas, ultimaVisita: st.ultimaVisita,
+      marcas: Object.fromEntries(Object.entries(st.marcas[p] || {}).filter(([, m]) => !m.desfeito)), tarefas: st.mapaTarefas, ultimaVisita: st.ultimaVisita,
     });
     // Concluídos que já saíram da lista continuam aparecendo (só em "Mostrar concluídos"), pelas marcas guardadas.
-    const marcasP = st.marcas[p] || {};
+    const marcasP = Object.fromEntries(Object.entries(st.marcas[p] || {}).filter(([, m]) => !m.desfeito));
     const presentes = new Set(fila.filter(l => l.ch != null).map(l => R.chaveItem({ n: l.n, ch: l.ch })));
     for (const chave of Object.keys(marcasP)) {
       const m = marcasP[chave];
@@ -240,6 +240,15 @@
       fila.push(Object.assign({}, it, { origem: 'lista', tipo: it.tipo || 'normal', chave, concluido: true, devolvido: !!m.dev, novo: false, foraDaLista: true }));
     }
     fila.sort(R.comparar);
+    const todasMarcas = st.marcas[p] || {};
+    for (const l of fila) {
+      const m = l.ch != null ? todasMarcas[R.chaveItem({ n: l.n, ch: l.ch })] : null;
+      const mm = todasMarcas[l.chave] || m;
+      if (l.concluido) {
+        const fonte = l.origem === 'urgencia' ? st.urgencias.find(x => x.id === l.id) : l.origem === 'devolucao' ? st.devolucoes.find(x => x.id === l.id) : null;
+        l.concluidoEm = (fonte && fonte.concluidaEm) || (mm && !mm.desfeito ? mm.em : null) || null;
+      } else if (mm && mm.desfeito) l.concluidoAntes = mm.em;
+    }
     const notas = st.notas[p] || {};
     for (const l of fila) {
       const nota = notas[R.soDigitos(l.n)];
@@ -339,7 +348,8 @@
     if (l.sg) selos.push('<span class="selo sigilo">Sigiloso</span>');
     if (l.fp) selos.push('<span class="selo paralelo" tabindex="0" title="O processo aparece em uma tarefa principal e em pelo menos um fluxo paralelo. Verificar a necessidade de encerrar o(s) fluxo(s) paralelo(s)">Fluxo paralelo</span>');
     if (l.devolvido) selos.push('<span class="selo devolvido">Devolvido ao servidor</span>');
-    if (l.concluido) selos.push('<span class="selo feito">Concluído</span>');
+    if (l.concluido) selos.push(`<span class="selo feito">Concluído${l.concluidoEm ? ' em ' + dataHoraBR(l.concluidoEm) : ''}</span>`);
+    else if (l.concluidoAntes) selos.push(`<span class="selo anterior" title="Esse processo foi concluído e a conclusão foi desfeita">Concluído antes em ${dataHoraBR(l.concluidoAntes)}</span>`);
     if (l.foraDaLista) selos.push('<span class="selo" title="O processo não está mais na lista importada; o registro de conclusão foi mantido">Saiu da lista</span>');
     const d = dias(l.ch);
     let nota = '';
@@ -481,18 +491,19 @@
   const fotoDe = l => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'tipo']) if (l[k] != null) o[k] = l[k]; return o; };
   async function gravarMarca(pessoa, chave, dev, agora, linha) {
     const item = linha ? fotoDe(linha) : null;
-    const reg = { pessoa, chave, em: iso(agora), devolvido: !!dev };
+    const reg = { pessoa, chave, em: iso(agora), devolvido: !!dev, desfeito: false };
     if (item) reg.item = item;
     const { error } = await st.sb.from('marcas').upsert(reg, { onConflict: 'pessoa,chave' });
     if (error) throw error;
-    (st.marcas[pessoa] = st.marcas[pessoa] || {})[chave] = { em: agora, dev: !!dev, item };
+    (st.marcas[pessoa] = st.marcas[pessoa] || {})[chave] = { em: agora, dev: !!dev, item: item || ((st.marcas[pessoa] || {})[chave] || {}).item || null, desfeito: false };
     st.ver++;
   }
 
-  async function apagarMarca(pessoa, chave) {
-    const { error } = await st.sb.from('marcas').delete().eq('pessoa', pessoa).eq('chave', chave);
+  // Desfazer: o processo volta para a fila, mas a marca fica (desfeita) para mostrar "Concluído antes em ..." até concluir de novo.
+  async function desfazerMarca(pessoa, chave) {
+    const { error } = await st.sb.from('marcas').update({ desfeito: true }).eq('pessoa', pessoa).eq('chave', chave);
     if (error) throw error;
-    if (st.marcas[pessoa]) delete st.marcas[pessoa][chave];
+    const m = (st.marcas[pessoa] || {})[chave]; if (m) m.desfeito = true;
     st.ver++;
   }
 
@@ -520,8 +531,8 @@
       const { error } = await st.sb.from(urg ? 'urgencias' : 'devolucoes').update(campos).eq('id', l.id);
       if (error) throw error;
       const r = (urg ? st.urgencias : st.devolucoes).find(x => x.id === l.id); if (r) r.concluidaEm = null;
-      if (l.ch != null) await apagarMarca(p, R.chaveItem({ n: l.n, ch: l.ch }));
-    } else await apagarMarca(p, l.chave);
+      if (l.ch != null) await desfazerMarca(p, R.chaveItem({ n: l.n, ch: l.ch }));
+    } else await desfazerMarca(p, l.chave);
     st.ver++;
   }
 
