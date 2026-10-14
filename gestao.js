@@ -456,7 +456,7 @@
       ${sel(`cfg-v-pessoa-${i}`, v.pessoa || '', 'Pessoa')}
       <input type="text" id="cfg-v-nome-${i}" value="${esc(v.nome || '')}" aria-label="Nome da visão" placeholder="Nome que aparece no filtro" maxlength="40">
       <button class="btn" type="button" data-acao="cfg-remover-visao" data-i="${i}">Remover</button></div>`).join('');
-    const etiquetasH = (c.etiquetasFiltro || []).map((x, i) => `<div class="regra">
+    const etiquetasH = (c.etiquetasFiltro || []).map((x, i) => `<div class="regra so-etiqueta">
       <input type="text" id="cfg-et-${i}" value="${esc(x)}" aria-label="Etiqueta" placeholder="# RPV - 01. Expedir">
       <button class="btn" type="button" data-acao="cfg-remover-etiqueta" data-i="${i}">Remover</button></div>`).join('');
     return `<section class="painel largo">
