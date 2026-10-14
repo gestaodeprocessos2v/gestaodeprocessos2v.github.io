@@ -3,7 +3,22 @@
 Painel da fila de trabalho da 2ª Vara Federal da Paraíba. Página estática (GitHub Pages) com login Google e banco no Supabase.
 
 - Este repositório contém apenas o código da página. Não há dados de processos, nomes nem e-mails aqui.
-- Os dados ficam no Supabase e só são lidos por e-mails cadastrados pelo gestor (regras de acesso no banco).
+- Os dados ficam no Supabase e só são lidos por e-mails cadastrados pelo gestor (regras de acesso no banco, RLS).
 - `config.js` traz só a URL do projeto e a chave pública (publishable), que foi feita para ficar no navegador. Nunca coloque chaves secretas neste repositório.
 
-Arquivos: `index.html`, `estilo.css`, `regras.js` (leitura do CSV e distribuição), `app.js` (login, fila, geral), `gestao.js` (aba Gestão).
+## O que o painel faz
+
+- Distribui os processos do PJe+R (CSV) entre servidores, estagiários e residentes, por setor, dígito do número e exceções de classe ou etiqueta.
+- Abas **Fila** (fila própria), **Geral** (todas as filas) e **Gestão** (só o gestor).
+- Ordem de trabalho: urgentes, devolvidos, prioritárias e demais, por antiguidade na tarefa.
+- Conclusão com desfazer, anotações, devolução (estagiários e residentes), envio para outra pessoa e aviso ao gestor de processo recebido por engano.
+- Visões por pessoa e filtro por etiqueta (Pagamentos), configurados na Gestão.
+
+## Arquivos
+
+- `index.html`: estrutura da página e política de segurança de conteúdo.
+- `estilo.css`: identidade visual do painel.
+- `regras.js`: leitura do CSV, distribuição, montagem e ordem da fila.
+- `app.js`: login, carregamento dos dados, abas Fila e Geral, conclusão, anotação, devolução, envio, visões, filtro de etiqueta e avisos.
+- `gestao.js`: aba Gestão (importação, urgências, resumo, avisos dos servidores, acessos negados, limpeza, tarefas do PJe e configuração).
+- `config.js`: URL do projeto e chave pública.
