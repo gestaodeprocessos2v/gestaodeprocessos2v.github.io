@@ -467,7 +467,7 @@
       ['urgente', 'Urgências', 'Por antiguidade na tarefa'],
       ['devolvido', 'Devolvidos por estagiários e residentes', 'Processos que não conseguiram tratar'],
       ['prioritaria', 'Tarefas prioritárias', 'Por antiguidade na tarefa'],
-      ['normal', 'Fila por antiguidade', 'Do mais antigo para o mais recente na tarefa'],
+      ['normal', 'Fila por antiguidade', geral ? 'Por antiguidade na tarefa' : 'Do mais antigo para o mais recente na tarefa'],
     ];
     for (const [tipo, titulo, dica] of grupos) {
       let ls = visiveis.filter(l => l.tipo === tipo);
