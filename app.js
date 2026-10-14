@@ -471,6 +471,8 @@
     ];
     for (const [tipo, titulo, dica] of grupos) {
       let ls = visiveis.filter(l => l.tipo === tipo);
+      // concluídos (quando exibidos) ficam juntos no topo da seção, na mesma ordem de antiguidade; ao desfazer, voltam para o meio dos pendentes
+      ls = [...ls.filter(l => l.concluido), ...ls.filter(l => !l.concluido)];
       if (!ls.length) continue;
       const total = ls.length;
       if (tipo === 'normal' && ls.length > f.limite) ls = ls.slice(0, f.limite);
