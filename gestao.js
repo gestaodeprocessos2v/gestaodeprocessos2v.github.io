@@ -424,6 +424,14 @@
       ${sel(`cfg-r-resp-${i}`, r.responsavel || '', 'Responsável')}
       <select id="cfg-r-setor-${i}" aria-label="Vale para"><option value="">Todos os setores</option>${SETORES.map(([id, n]) => `<option value="${id}"${(r.setores || [])[0] === id ? ' selected' : ''}>Só ${n}</option>`).join('')}</select>
       <button class="btn" type="button" data-acao="cfg-remover-regra" data-i="${i}">Remover</button></div>`).join('');
+    const visoesH = (c.visoes || []).map((v, i) => `<div class="regra">
+      <select id="cfg-v-tipo-${i}" aria-label="Filtrar por"><option value="setor"${v.tipo === 'setor' ? ' selected' : ''}>Setor</option><option value="classe"${v.tipo === 'classe' ? ' selected' : ''}>Só as classes</option><option value="semclasse"${v.tipo === 'semclasse' ? ' selected' : ''}>Todas menos as classes</option></select>
+      ${v.tipo === 'setor'
+        ? `<select id="cfg-v-valor-${i}" aria-label="Setor">${SETORES.map(([id, n]) => `<option value="${id}"${v.valor === id ? ' selected' : ''}>${n}</option>`).join('')}</select>`
+        : `<input type="text" id="cfg-v-valor-${i}" value="${esc(v.valor || '')}" aria-label="Siglas das classes" placeholder="Siglas separadas por |">`}
+      ${sel(`cfg-v-pessoa-${i}`, v.pessoa || '', 'Pessoa')}
+      <input type="text" id="cfg-v-nome-${i}" value="${esc(v.nome || '')}" aria-label="Nome da visão" placeholder="Nome que aparece no filtro" maxlength="40">
+      <button class="btn" type="button" data-acao="cfg-remover-visao" data-i="${i}">Remover</button></div>`).join('');
     return `<section class="painel largo">
       <h2>Configuração</h2>
       <p>As mudanças valem para todos assim que você salvar. Urgência e prioridade de cada tarefa ficam na tabela “Tarefas do PJe”. Quem não tiver e-mail cadastrado recebe processos, mas não consegue entrar no painel.</p>
@@ -438,6 +446,10 @@
       ${outros.length ? '<div class="acesso-cfg cab-cfg"><span>Nome</span><span>Perfil</span><span>E-mail Google</span><span></span></div>' : ''}
       ${outrosH}
       <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-outro">Adicionar acesso</button></div>
+      <h3>Visões por pessoa (filtros opcionais)</h3>
+      <p class="small muted">Para quem trabalha em mais de um setor ou tipo de processo: a pessoa ganha um filtro na própria fila, ao lado da busca. Ele só muda o que aparece na tela; a distribuição continua igual. O painel sempre abre completo, sem filtro. A opção “Painel completo” existe automaticamente.</p>
+      ${visoesH}
+      <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-visao">Adicionar visão</button></div>
       <h3>Exceções por classe ou etiqueta</h3>
       <p class="small muted">Valem antes da divisão do setor, na ordem da lista (a primeira que casar decide). Classe: use a sigla do PJe+R (ex.: ACPCiv|ACIA); etiqueta: o texto completo (ex.: $ Ação civil pública).</p>
       ${regrasH}
@@ -478,6 +490,12 @@
       const resp = val(`cfg-r-resp-${i}`); if (resp != null) r.responsavel = resp;
       const s = val(`cfg-r-setor-${i}`); if (s != null) r.setores = s ? [s] : [];
     });
+    (c.visoes || []).forEach((v, i) => {
+      const tipo = val(`cfg-v-tipo-${i}`); if (tipo) v.tipo = tipo;
+      const valor = val(`cfg-v-valor-${i}`); if (valor != null) v.valor = valor.trim();
+      const pessoa = val(`cfg-v-pessoa-${i}`); if (pessoa != null) v.pessoa = pessoa;
+      const nome = val(`cfg-v-nome-${i}`); if (nome != null) v.nome = nome.trim();
+    });
     c.setores = c.setores || {};
     for (const [id] of SETORES) {
       const modo = val(`cfg-s-${id}-modo`); if (!modo) continue;
@@ -494,6 +512,7 @@
   async function salvarConfiguracao() {
     const c = st.rascunho, outros = st.rascOutros || [];
     c.regrasClasse = (c.regrasClasse || []).filter(r => r.padrao && r.responsavel);
+    c.visoes = (c.visoes || []).filter(v => v.pessoa && v.nome && v.valor);
     const desejados = [];
     const vistos = new Set();
     const checa = (nome, email, rotulo) => {
@@ -573,6 +592,8 @@
       else if (acao === 'cfg-add-outro') { st.rascOutros = (st.rascOutros || []).concat({ nome: '', email: '', perfil: 'magistrado' }); render(); }
       else if (acao === 'cfg-remover-outro') { st.rascOutros.splice(Number(alvo.dataset.i), 1); render(); }
       else if (acao === 'cfg-add-regra') { c.regrasClasse = (c.regrasClasse || []).concat({ campo: 'classe', padrao: '', responsavel: '', setores: [] }); render(); }
+      else if (acao === 'cfg-add-visao') { c.visoes = (c.visoes || []).concat({ pessoa: '', nome: '', tipo: 'setor', valor: 'triagem' }); render(); }
+      else if (acao === 'cfg-remover-visao') { c.visoes.splice(Number(alvo.dataset.i), 1); render(); }
       else if (acao === 'cfg-remover-regra') { c.regrasClasse.splice(Number(alvo.dataset.i), 1); render(); }
       else if (acao === 'cfg-descartar') { st.rascunho = null; st.rascOutros = null; render(); toast('Alterações descartadas.'); }
       else if (acao === 'cfg-salvar') await salvarConfiguracao();
@@ -590,6 +611,13 @@
     else if (id === 'urg-setor') sugerirResponsavel();
     else if (id === 'urg-resp' || id === 'urg-motivo') st.novaUrgencia = Object.assign(st.novaUrgencia || {}, { responsavel: $('#urg-resp').value, motivo: $('#urg-motivo').value });
     else if (/^cfg-s-.*-modo$/.test(id)) { lerRascunho(); render(); }
+    else if (/^cfg-v-tipo-\d+$/.test(id)) {
+      lerRascunho();
+      const v = st.rascunho.visoes[Number(id.split('-').pop())];
+      if (v.tipo === 'setor' && !SETORES.some(([s]) => s === v.valor)) v.valor = 'triagem';
+      else if (v.tipo !== 'setor' && SETORES.some(([s]) => s === v.valor)) v.valor = '';
+      render();
+    }
   });
   let tfBuscaTimer = null;
   v.addEventListener('input', e => {

@@ -31,8 +31,8 @@
     ver: 0, cache: { ver: -1, m: {} },
     aba: 'fila', verComo: '',
     vis: {
-      fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '' },
-      geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '' },
+      fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '' },
+      geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '' },
     },
     anotando: null, notaRascunho: '', devolvendo: null, devMotivo: '', modal: null,
     ultimaVisita: 0, importacao: null, gravando: false, confirmarRemocao: null,
@@ -259,6 +259,18 @@
     return fila;
   }
 
+  // Visões (filtros opcionais por pessoa, configurados na Gestão). O painel sempre abre sem filtro; nada é lembrado.
+  const visoesDe = p => ((st.config && st.config.visoes) || []).filter(v => p && v.pessoa === p && v.nome && v.valor);
+  const idVisao = v => v.pessoa + '|' + v.nome;
+  const pessoaDaVisao = modo => (modo === 'geral' ? st.vis.geral.pessoa : pessoaAtiva()) || '';
+  function visaoAtiva(modo) { const f = st.vis[modo]; return f.visao ? visoesDe(pessoaDaVisao(modo)).find(v => idVisao(v) === f.visao) || null : null; }
+  function passaVisao(v, l) {
+    if (v.tipo === 'setor') return l.s === v.valor;
+    const casa = R.casaPadrao(l.c, v.valor);
+    return v.tipo === 'classe' ? casa : !casa;
+  }
+  const aplicarVisao = (modo, ls) => { const v = visaoAtiva(modo); return v ? ls.filter(l => passaVisao(v, l)) : ls; };
+
   function linhasGeral(pessoa) {
     const ids = pessoa ? [pessoa] : pessoas().map(p => p.id);
     const out = [];
@@ -423,7 +435,7 @@
       v.innerHTML = `<div class="vazio"><h2>O painel ainda não foi configurado</h2><p>${st.perfil === 'gestor' ? 'Abra a aba Gestão para cadastrar as pessoas e as regras de distribuição.' : 'Aguarde o gestor cadastrar as pessoas e as regras de distribuição.'}</p></div>`;
       return;
     }
-    const todas = geral ? linhasGeral(f.pessoa) : filaDe(pessoaAtiva());
+    const todas = aplicarVisao(modo, geral ? linhasGeral(f.pessoa) : filaDe(pessoaAtiva()));
     const abertas = todas.filter(l => !l.concluido);
     const conta = t => abertas.filter(l => l.tipo === t).length;
     const novos = geral ? 0 : abertas.filter(l => l.novo).length;
@@ -454,6 +466,7 @@
     <div class="filtros">
       <input type="search" id="busca" placeholder="Buscar por número, classe, tarefa, cargo ou anotação" value="${esc(f.busca)}" aria-label="Buscar">
       ${geral && st.perfil !== 'visitante' ? `<select id="filtro-pessoa" aria-label="Filtrar por servidor">${opcoesPessoas(f.pessoa, 'Todos os servidores')}</select>` : ''}
+      ${(() => { const vs = visoesDe(pessoaDaVisao(modo)); return vs.length ? `<select id="filtro-visao" aria-label="Mostrar"><option value="">Painel completo</option>${vs.map(v => `<option value="${esc(idVisao(v))}"${idVisao(v) === f.visao ? ' selected' : ''}>${esc(v.nome)}</option>`).join('')}</select>` : ''; })()}
       <select id="filtro-tarefa" aria-label="Filtrar por tarefa"><option value="">Todas as tarefas</option>${tarefas.map(t => `<option${t === f.tarefa ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>
       <label class="small"><input type="checkbox" id="mostrar-concluidos"${f.concl ? ' checked' : ''}> Mostrar concluídos</label>
       <div class="direita"><button class="btn" data-acao="baixar">Baixar CSV</button></div>
@@ -657,7 +670,7 @@
       } else if (acao === 'mais') {
         f.limite += LIMITE_NORMAL; render();
       } else if (acao === 'baixar') {
-        const base = modo === 'geral' ? linhasGeral(f.pessoa) : filaDe(pessoaAtiva());
+        const base = aplicarVisao(modo, modo === 'geral' ? linhasGeral(f.pessoa) : filaDe(pessoaAtiva()));
         const linhas = base.filter(l => f.concl || !l.concluido);
         const hoje = new Date().toISOString().slice(0, 10);
         baixar(`fila-${modo === 'geral' ? 'geral' : pessoaAtiva()}-${hoje}.csv`, R.paraCsv(linhas, nomes(), modo === 'geral'));
@@ -730,7 +743,8 @@
       v.addEventListener('change', e => {
         const f = st.vis[modo];
         if (e.target.id === 'filtro-tarefa') { f.tarefa = e.target.value; render(); }
-        if (e.target.id === 'filtro-pessoa') { f.pessoa = e.target.value; f.tarefa = ''; f.limite = LIMITE_NORMAL; render(); }
+        if (e.target.id === 'filtro-visao') { f.visao = e.target.value; f.tarefa = ''; f.limite = LIMITE_NORMAL; render(); }
+        if (e.target.id === 'filtro-pessoa') { f.pessoa = e.target.value; f.visao = ''; f.tarefa = ''; f.limite = LIMITE_NORMAL; render(); }
         if (e.target.id === 'mostrar-concluidos') { f.concl = e.target.checked; render(); }
       });
     }
