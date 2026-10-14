@@ -228,6 +228,11 @@
       for (const k of ['c', 't', 'cg', 'ch', 'sg']) if (it[k] != null) item[k] = it[k];
       if (r.pessoa) item.resp = r.pessoa;
       if (linha.etiquetaUrgente && temEtiqueta(it.e, linha.etiquetaUrgente)) item.u = true;
+      // Só as etiquetas escolhidas na configuração, e só em tarefas de Pagamentos, são gravadas (filtro "Etiqueta").
+      if (s === 'pagamentos' && it.e) {
+        const et = ((config && config.etiquetasFiltro) || []).filter(x => x && temEtiqueta(it.e, x));
+        if (et.length) item.et = et;
+      }
       porSetor[s] = (porSetor[s] || 0) + 1;
       const pessoa = pessoaFixa || r.pessoa;
       if (!pessoa) { semResponsavel.push(Object.assign(item, { motivo: r.motivo })); continue; }

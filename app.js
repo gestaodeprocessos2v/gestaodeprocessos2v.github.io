@@ -31,8 +31,8 @@
     ver: 0, cache: { ver: -1, m: {} },
     aba: 'fila', verComo: '',
     vis: {
-      fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '' },
-      geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '' },
+      fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '' },
+      geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '' },
     },
     anotando: null, notaRascunho: '', devolvendo: null, devMotivo: '', modal: null,
     ultimaVisita: 0, importacao: null, gravando: false, confirmarRemocao: null,
@@ -446,11 +446,14 @@
     const conta = t => abertas.filter(l => l.tipo === t).length;
     const novos = geral ? 0 : abertas.filter(l => l.novo).length;
     const tarefas = [...new Set(todas.map(l => l.t).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    const etiquetas = ((st.config.etiquetasFiltro) || []).filter(x => todas.some(l => (l.et || []).includes(x)));
+    if (f.etiqueta && !etiquetas.includes(f.etiqueta)) f.etiqueta = '';
     const busca = R.normTexto(f.busca);
     const buscaDig = R.soDigitos(f.busca);
     const visiveis = todas.filter(l => {
       if (l.concluido && !f.concl) return false;
       if (f.tarefa && l.t !== f.tarefa) return false;
+      if (f.etiqueta && !(l.et || []).includes(f.etiqueta)) return false;
       if (!busca) return true;
       if (buscaDig.length >= 4 && R.soDigitos(l.n).includes(buscaDig)) return true;
       return R.normTexto([l.n, l.c, l.t, l.cg, l.motivo, l.anot, geral ? nomeDe(l.dono) : ''].join(' ')).includes(busca);
@@ -474,6 +477,7 @@
       ${geral && st.perfil !== 'visitante' ? `<select id="filtro-pessoa" aria-label="Filtrar por servidor">${opcoesPessoas(f.pessoa, 'Todos os servidores')}</select>` : ''}
       ${(() => { const vs = visoesDe(pessoaDaVisao(modo)); return vs.length ? `<select id="filtro-visao" aria-label="Mostrar"><option value="">Painel completo</option>${vs.map(v => `<option value="${esc(idVisao(v))}"${idVisao(v) === f.visao ? ' selected' : ''}>${esc(v.nome)}</option>`).join('')}</select>` : ''; })()}
       <select id="filtro-tarefa" aria-label="Filtrar por tarefa"><option value="">Todas as tarefas</option>${tarefas.map(t => `<option${t === f.tarefa ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>
+      ${etiquetas.length ? `<select id="filtro-etiqueta" aria-label="Filtrar por etiqueta"><option value="">Todas as etiquetas</option>${etiquetas.map(x => `<option value="${esc(x)}"${x === f.etiqueta ? ' selected' : ''}>${esc(x)} (${todas.filter(l => !l.concluido && (l.et || []).includes(x)).length})</option>`).join('')}</select>` : ''}
       <label class="small"><input type="checkbox" id="mostrar-concluidos"${f.concl ? ' checked' : ''}> Mostrar concluídos</label>
       <div class="direita"><button class="btn" data-acao="baixar">Baixar CSV</button></div>
     </div>`;
@@ -572,7 +576,7 @@
     st.ver++;
   }
 
-  const itemDe = l => { const item = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u', 'resp']) if (l[k] != null) item[k] = l[k]; return item; };
+  const itemDe = l => { const item = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u', 'et', 'resp']) if (l[k] != null) item[k] = l[k]; return item; };
   const acharLinha = chave => filaDe(pessoaAtiva()).find(l => l.chave === chave);
 
   const DEST_GESTOR = '__gestor';
@@ -700,7 +704,7 @@
       } else if (acao === 'mais') {
         f.limite += LIMITE_NORMAL; render();
       } else if (acao === 'baixar') {
-        const base = aplicarVisao(modo, modo === 'geral' ? linhasGeral(f.pessoa) : filaDe(pessoaAtiva()));
+        const base = aplicarVisao(modo, modo === 'geral' ? linhasGeral(f.pessoa) : filaDe(pessoaAtiva())).filter(l => !f.etiqueta || (l.et || []).includes(f.etiqueta));
         const linhas = base.filter(l => f.concl || !l.concluido);
         const hoje = new Date().toISOString().slice(0, 10);
         baixar(`fila-${modo === 'geral' ? 'geral' : pessoaAtiva()}-${hoje}.csv`, R.paraCsv(linhas, nomes(), modo === 'geral'));
@@ -776,8 +780,9 @@
       v.addEventListener('change', e => {
         const f = st.vis[modo];
         if (e.target.id === 'filtro-tarefa') { f.tarefa = e.target.value; render(); }
-        if (e.target.id === 'filtro-visao') { f.visao = e.target.value; f.tarefa = ''; f.limite = LIMITE_NORMAL; render(); }
-        if (e.target.id === 'filtro-pessoa') { f.pessoa = e.target.value; f.visao = ''; f.tarefa = ''; f.limite = LIMITE_NORMAL; render(); }
+        if (e.target.id === 'filtro-etiqueta') { f.etiqueta = e.target.value; f.limite = LIMITE_NORMAL; render(); }
+        if (e.target.id === 'filtro-visao') { f.visao = e.target.value; f.tarefa = ''; f.etiqueta = ''; f.limite = LIMITE_NORMAL; render(); }
+        if (e.target.id === 'filtro-pessoa') { f.pessoa = e.target.value; f.visao = ''; f.tarefa = ''; f.etiqueta = ''; f.limite = LIMITE_NORMAL; render(); }
         if (e.target.id === 'mostrar-concluidos') { f.concl = e.target.checked; render(); }
       });
     }

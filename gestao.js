@@ -135,7 +135,7 @@
     render();
   }
 
-  const itemMin = it => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u']) if (it[k] != null) o[k] = it[k]; return o; };
+  const itemMin = it => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u', 'et']) if (it[k] != null) o[k] = it[k]; return o; };
 
   // As urgentes da lista seguem a lista: saem quando o processo sai do relatório novo. Só ficam até o servidor concluir
   // as urgências incluídas à mão (gestor) e as enviadas para outra pessoa. Aqui some o que antigas versões gravaram como "da lista".
@@ -456,6 +456,9 @@
       ${sel(`cfg-v-pessoa-${i}`, v.pessoa || '', 'Pessoa')}
       <input type="text" id="cfg-v-nome-${i}" value="${esc(v.nome || '')}" aria-label="Nome da visão" placeholder="Nome que aparece no filtro" maxlength="40">
       <button class="btn" type="button" data-acao="cfg-remover-visao" data-i="${i}">Remover</button></div>`).join('');
+    const etiquetasH = (c.etiquetasFiltro || []).map((x, i) => `<div class="regra">
+      <input type="text" id="cfg-et-${i}" value="${esc(x)}" aria-label="Etiqueta" placeholder="# RPV - 01. Expedir">
+      <button class="btn" type="button" data-acao="cfg-remover-etiqueta" data-i="${i}">Remover</button></div>`).join('');
     return `<section class="painel largo">
       <h2>Configuração</h2>
       <p>As mudanças valem para todos assim que você salvar. Urgência e prioridade de cada tarefa ficam na tabela “Tarefas do PJe”. Quem não tiver e-mail cadastrado recebe processos, mas não consegue entrar no painel.</p>
@@ -474,6 +477,10 @@
       <p class="small muted">Para quem trabalha em mais de um setor ou tipo de processo: a pessoa ganha um filtro na própria fila, ao lado da busca. Ele só muda o que aparece na tela; a distribuição continua igual. O painel sempre abre completo, sem filtro. A opção “Painel completo” existe automaticamente.</p>
       ${visoesH}
       <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-visao">Adicionar visão</button></div>
+      <h3>Etiquetas para filtro (Pagamentos)</h3>
+      <p class="small muted">Só as etiquetas listadas aqui são guardadas, e apenas nos processos de tarefas de Pagamentos. Elas viram o filtro “Etiqueta” na fila e no painel geral. Escreva exatamente como no PJe (ex.: # RPV - 01. Expedir). Depois de incluir ou mudar uma etiqueta, envie o CSV completo de novo para ela passar a valer.</p>
+      ${etiquetasH}
+      <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-etiqueta">Adicionar etiqueta</button></div>
       <h3>Exceções por classe ou etiqueta</h3>
       <p class="small muted">Valem antes da divisão do setor, na ordem da lista (a primeira que casar decide). Classe: use a sigla do PJe+R (ex.: ACPCiv|ACIA); etiqueta: o texto completo (ex.: $ Ação civil pública).</p>
       ${regrasH}
@@ -514,6 +521,7 @@
       const resp = val(`cfg-r-resp-${i}`); if (resp != null) r.responsavel = resp;
       const s = val(`cfg-r-setor-${i}`); if (s != null) r.setores = s ? [s] : [];
     });
+    (c.etiquetasFiltro || []).forEach((x, i) => { const v = val(`cfg-et-${i}`); if (v != null) c.etiquetasFiltro[i] = v.trim(); });
     (c.visoes || []).forEach((v, i) => {
       const tipo = val(`cfg-v-tipo-${i}`); if (tipo) v.tipo = tipo;
       const valor = val(`cfg-v-valor-${i}`); if (valor != null) v.valor = valor.trim();
@@ -537,6 +545,7 @@
     const c = st.rascunho, outros = st.rascOutros || [];
     c.regrasClasse = (c.regrasClasse || []).filter(r => r.padrao && r.responsavel);
     c.visoes = (c.visoes || []).filter(v => v.pessoa && v.nome && v.valor);
+    c.etiquetasFiltro = [...new Set((c.etiquetasFiltro || []).filter(Boolean))];
     const desejados = [];
     const vistos = new Set();
     const checa = (nome, email, rotulo) => {
@@ -622,6 +631,8 @@
       else if (acao === 'cfg-remover-outro') { st.rascOutros.splice(Number(alvo.dataset.i), 1); render(); }
       else if (acao === 'cfg-add-regra') { c.regrasClasse = (c.regrasClasse || []).concat({ campo: 'classe', padrao: '', responsavel: '', setores: [] }); render(); }
       else if (acao === 'cfg-add-visao') { c.visoes = (c.visoes || []).concat({ pessoa: '', nome: '', tipo: 'setor', valor: 'triagem' }); render(); }
+      else if (acao === 'cfg-add-etiqueta') { c.etiquetasFiltro = (c.etiquetasFiltro || []).concat(''); render(); }
+      else if (acao === 'cfg-remover-etiqueta') { c.etiquetasFiltro.splice(Number(alvo.dataset.i), 1); render(); }
       else if (acao === 'cfg-remover-visao') { c.visoes.splice(Number(alvo.dataset.i), 1); render(); }
       else if (acao === 'cfg-remover-regra') { c.regrasClasse.splice(Number(alvo.dataset.i), 1); render(); }
       else if (acao === 'cfg-descartar') { st.rascunho = null; st.rascOutros = null; render(); toast('Alterações descartadas.'); }
