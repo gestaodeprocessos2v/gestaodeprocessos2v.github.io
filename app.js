@@ -340,7 +340,7 @@
       anot = l.anot ? `<span class="anot-texto">${esc(l.anot)}</span><span class="quando">${dataHoraBR(l.anotEm)}</span>` : '<span class="muted">—</span>';
     } else {
       if (l.concluido) {
-        acoes = l.origem === 'lista' ? `<button class="btn" data-acao="desfazer"${dis}>Desfazer</button>` : '';
+        acoes = `<button class="btn" data-acao="desfazer"${dis}>Desfazer</button>`;
       } else {
         acoes = `<button class="btn feito" data-acao="concluir"${dis}>Marcar como concluído</button>`;
         if (podeEnviar()) acoes += `<button class="btn" data-acao="enviar"${dis}>Enviar para outra pessoa</button>`;
@@ -490,6 +490,20 @@
     st.ver++;
   }
 
+  // Desfaz a conclusão: apaga a marca da lista ou reabre a urgência/devolução.
+  async function desfazerLinha(l) {
+    const p = st.pessoa;
+    if (l.origem !== 'lista') {
+      const urg = l.origem === 'urgencia';
+      const campos = urg ? { concluida_em: null, concluida_por: null } : { concluida_em: null };
+      const { error } = await st.sb.from(urg ? 'urgencias' : 'devolucoes').update(campos).eq('id', l.id);
+      if (error) throw error;
+      const r = (urg ? st.urgencias : st.devolucoes).find(x => x.id === l.id); if (r) r.concluidaEm = null;
+      if (l.ch != null) await apagarMarca(p, R.chaveItem({ n: l.n, ch: l.ch }));
+    } else await apagarMarca(p, l.chave);
+    st.ver++;
+  }
+
   async function gravarNota(numero, texto, pessoa) {
     const chave = R.soDigitos(numero);
     if (texto) {
@@ -591,7 +605,7 @@
       } else if (acao === 'concluir' && linha) {
         await concluirLinha(linha); toast('Marcado como concluído.'); render();
       } else if (acao === 'desfazer' && linha) {
-        await apagarMarca(st.pessoa, linha.chave); render();
+        await desfazerLinha(linha); toast('Conclusão desfeita.'); render();
       } else if (acao === 'devolver' && linha) {
         st.devolvendo = linha.chave; st.devMotivo = ''; st.anotando = null; render();
         const m = $('#dev-motivo'); if (m) m.focus();
