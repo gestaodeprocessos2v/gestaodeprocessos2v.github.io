@@ -275,3 +275,5 @@ button.tile:focus-visible { outline: 2px solid currentColor; outline-offset: 2px
 @media (max-width: 720px) { .grupo-cab .topo-link { margin-left: auto; } }
 
 .selo.anterior { background: var(--sunken); color: var(--muted); border: 1px dashed var(--muted); }
+
+.aba .contagem { margin-left: 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 0 7px; border-radius: 999px; background: var(--urg); color: #fff; }

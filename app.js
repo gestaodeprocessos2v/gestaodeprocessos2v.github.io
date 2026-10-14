@@ -27,7 +27,7 @@
     tarefas: [], mapaTarefas: new Map(), tarefasEm: null, rascTarefas: null, tarefasAlteradas: false,
     filtroTabela: { busca: '', painel: '' },
     resumo: null,
-    filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
+    filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [], avisos: [],
     ver: 0, cache: { ver: -1, m: {} },
     aba: 'fila', verComo: '',
     vis: {
@@ -124,7 +124,7 @@
   function reiniciarEstado() {
     Object.assign(st, {
       email: '', perfil: '', nome: '', pessoa: '', config: null, rascunho: null, tarefas: [], mapaTarefas: new Map(), rascTarefas: null,
-      tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
+      tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [], avisos: [],
       anotando: null, devolvendo: null, modal: null, importacao: null,
     });
     st.ver++;
@@ -170,7 +170,7 @@
     const sb = st.sb;
     const desdeConcl = iso(Date.now() - 35 * DIA), desdeMarcas = iso(Date.now() - 95 * DIA);
     const gestor = st.perfil === 'gestor';
-    const [cfg, filas, urg, dev, marcas, notas, acessos, negados] = await Promise.all([
+    const [cfg, filas, urg, dev, marcas, notas, acessos, negados, avisos] = await Promise.all([
       sb.from('config').select('chave,valor,atualizado_em'),
       todas((a, b) => sb.from('filas').select('lista,pessoa,itens,importado_em').order('lista').order('pessoa').range(a, b)),
       todas((a, b) => sb.from('urgencias').select('*').or(`concluida_em.is.null,concluida_em.gte.${desdeConcl}`).order('id').range(a, b)),
@@ -179,6 +179,7 @@
       todas((a, b) => sb.from('notas').select('pessoa,numero,texto,em').order('pessoa').order('numero').range(a, b)),
       gestor ? todas((a, b) => sb.from('acesso').select('email,nome,perfil,pessoa_id').order('email').range(a, b)) : Promise.resolve([]),
       gestor ? sb.from('acessos_negados').select('email,em').order('em', { ascending: false }).limit(200) : Promise.resolve({ data: [] }),
+      gestor ? todas((a, b) => sb.from('avisos_gestor').select('*').or(`resolvido_em.is.null,resolvido_em.gte.${desdeConcl}`).order('id').range(a, b)) : Promise.resolve([]),
     ]);
     if (cfg.error) throw cfg.error;
     if (negados.error) throw negados.error;
@@ -202,6 +203,7 @@
     for (const n of notas) (st.notas[n.pessoa] = st.notas[n.pessoa] || {})[n.numero] = { texto: n.texto, em: ms(n.em) };
     st.acessos = acessos;
     st.negados = (negados.data || []).map(r => ({ email: r.email, em: ms(r.em) }));
+    st.avisos = avisos.map(r => ({ id: r.id, numero: r.numero, item: r.item || {}, de: r.de, motivo: r.motivo || '', em: ms(r.em), resolvidoEm: ms(r.resolvido_em), resolvidoPor: r.resolvido_por }));
     if (!st.rascOutros) st.rascOutros = null;
     st.ver++;
   }
@@ -317,15 +319,19 @@
     const nav = $('#abas');
     nav.hidden = abas.length < 2;
     const rot = { fila: 'Fila', geral: 'Geral', gestao: 'Gestão' };
-    const h = abas.map(a => `<button class="aba" role="tab" id="aba-${a}" aria-selected="${a === st.aba}" data-aba="${a}">${rot[a]}</button>`).join('');
+    const nAvisos = st.perfil === 'gestor' ? st.avisos.filter(x => !x.resolvidoEm).length : 0;
+    const h = abas.map(a => `<button class="aba" role="tab" id="aba-${a}" aria-selected="${a === st.aba}" data-aba="${a}">${rot[a]}${a === 'gestao' && nAvisos ? ` <span class="contagem">${nAvisos}</span>` : ''}</button>`).join('');
     if (nav.dataset.h !== h) { nav.innerHTML = h; nav.dataset.h = h; }
     for (const b of nav.querySelectorAll('.aba')) b.setAttribute('aria-selected', String(b.dataset.aba === st.aba));
   }
 
   function renderAvisos() {
+    const abertos = st.perfil === 'gestor' ? st.avisos.filter(x => !x.resolvidoEm).length : 0;
     $('#avisos').innerHTML = st.estado === 'ok' && st.verComo
       ? `<div class="aviso novo"><b>Visualização somente leitura.</b> Você está vendo a fila de ${esc(nomeDe(st.verComo))} como ela vê. Nada é gravado. <button class="btn" type="button" data-acao="sair-ver-como">Voltar à minha visão</button></div>`
-      : '';
+      : st.estado === 'ok' && abertos
+        ? `<div class="aviso novo"><b>${abertos} ${abertos === 1 ? 'processo enviado' : 'processos enviados'} por servidores para você verificar.</b> <button class="btn" type="button" data-acao="abrir-avisos">Ver na aba Gestão</button></div>`
+        : '';
   }
 
   function renderEstado() {
@@ -569,7 +575,31 @@
   const itemDe = l => { const item = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u', 'resp']) if (l[k] != null) item[k] = l[k]; return item; };
   const acharLinha = chave => filaDe(pessoaAtiva()).find(l => l.chave === chave);
 
+  const DEST_GESTOR = '__gestor';
+
+  // Processo recebido por engano: vai para o gestor verificar (aba Gestão), não para a fila de outra pessoa.
+  async function avisarGestor(l, motivo) {
+    const agora = Date.now();
+    const { error } = await st.sb.from('avisos_gestor').insert({ numero: R.soDigitos(l.n), item: itemDe(l), de: st.pessoa, motivo: motivo || null });
+    if (error) throw error;
+    try {
+      await concluirLinha(l);
+      const antiga = ((st.notas[st.pessoa] || {})[R.soDigitos(l.n)] || {}).texto || '';
+      const nova = `Avisado ao gestor em ${dataHoraBR(agora)}${motivo ? ' — ' + motivo : ''}`;
+      let texto = antiga ? antiga + '\n' + nova : nova;
+      if (texto.length > 2000) texto = texto.slice(-2000);
+      await gravarNota(l.n, texto, st.pessoa);
+    } catch (e) {
+      console.error(e);
+      toast('O aviso foi enviado, mas não consegui concluir na sua fila. Marque como concluído.');
+      return false;
+    }
+    toast('Aviso enviado ao gestor.');
+    return true;
+  }
+
   async function enviarProcesso(l, para, motivo) {
+    if (para === DEST_GESTOR) return avisarGestor(l, motivo);
     const agora = Date.now();
     const { error } = await st.sb.from('urgencias').insert({
       numero: R.soDigitos(l.n), responsavel: para, origem: 'envio', remetente: st.pessoa,
@@ -610,9 +640,9 @@
     m.innerHTML = `<div class="modal-fundo" data-acao="fechar-modal-fundo"><form class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-titulo" data-form="enviar">
       <h2 id="modal-titulo">Enviar para outra pessoa</h2>
       <div class="corpo">
-        <p>O processo <b class="mono">${esc(l.n)}</b> sairá da sua fila, como concluído, e entrará como <b>urgência</b> na fila da pessoa escolhida. Na sua anotação ficará registrado para quem foi enviado, com a data e a hora do envio.</p>
-        <label class="campo"><span>Enviar para</span><select id="env-para" required>${opcoesPessoas(s.para, 'Escolha a pessoa', st.pessoa)}</select></label>
-        <label class="campo"><span>Motivo (opcional)</span><input type="text" id="env-motivo" maxlength="300" placeholder="Ex.: assunto da sua área, pedido do juiz" value="${esc(s.motivo)}"></label>
+        <p>O processo <b class="mono">${esc(l.n)}</b> sairá da sua fila, como concluído, e entrará como <b>urgência</b> na fila da pessoa escolhida. Na sua anotação ficará registrado para quem foi enviado, com a data e a hora do envio. Se o processo veio errado para você, escolha <b>Gestor</b> e explique o que está errado.</p>
+        <label class="campo"><span>Enviar para</span><select id="env-para" required>${opcoesPessoas(s.para, 'Escolha a pessoa', st.pessoa).replace(/^(<option value="">[^<]*<\/option>)/, `$1<option value="${DEST_GESTOR}"${s.para === DEST_GESTOR ? ' selected' : ''}>Gestor — processo veio errado</option>`)}</select></label>
+        <label class="campo"><span>Motivo (opcional)</span><input type="text" id="env-motivo" maxlength="300" placeholder="Ex.: assunto da sua área, pedido do juiz; para o gestor, explique o que está errado" value="${esc(s.motivo)}"></label>
         <div class="linha-botoes"><button class="btn primario" type="submit" ${s.enviando ? 'disabled' : ''}>${s.enviando ? 'Enviando…' : 'Confirmar envio'}</button><button class="btn" type="button" data-acao="fechar-modal">Cancelar</button></div>
       </div></form></div>`;
     const alvo = antes && document.getElementById(antes);
@@ -714,7 +744,10 @@
 
   function ligarEventos() {
     $('#btn-sair').addEventListener('click', sair);
-    $('#avisos').addEventListener('click', e => { if (e.target.closest('[data-acao="sair-ver-como"]')) sairVerComo(); });
+    $('#avisos').addEventListener('click', e => {
+      if (e.target.closest('[data-acao="sair-ver-como"]')) sairVerComo();
+      else if (e.target.closest('[data-acao="abrir-avisos"]')) { st.aba = 'gestao'; guardar('fila.aba.' + st.email, st.aba); render(); window.scrollTo({ top: 0 }); }
+    });
     $('#ver-como').addEventListener('change', e => {
       st.anotando = null; st.devolvendo = null; st.modal = null;
       if (e.target.value) { st.verComo = e.target.value; st.aba = 'fila'; render(); } else sairVerComo();

@@ -3,7 +3,7 @@
   'use strict';
   const P = window.PAINEL;
   if (!P || !P.render) return;
-  const { st, R, SETORES, TIPOS, ROTULO_TIPO, PERFIS, DIA, esc, dataBR, dataHoraBR, toast, falha, todas, iso, ms, pessoas, nomeDe, opcoesPessoas, opcoesTipo, baixar } = P;
+  const { st, R, SETORES, NOME_SETOR, TIPOS, ROTULO_TIPO, PERFIS, DIA, esc, dataBR, dataHoraBR, toast, falha, todas, iso, ms, pessoas, nomeDe, opcoesPessoas, opcoesTipo, baixar } = P;
   const $ = sel => document.querySelector(sel);
   const render = () => P.render();
   const PERFIS_OUTROS = ['gestor', 'magistrado', 'diretor', 'visitante'];
@@ -35,6 +35,7 @@
     prepararRascunho();
     const foco = document.activeElement && document.activeElement.id;
     v.innerHTML = `<div class="paineis">
+      ${painelAvisos()}
       ${painelImportar()}
       ${painelUrgencia()}
       ${painelResumo()}
@@ -45,6 +46,27 @@
     </div>`;
     if (foco) { const el = document.getElementById(foco); if (el && el.tagName !== 'BUTTON') el.focus(); }
   };
+
+  // ---------- avisos dos servidores (processo recebido por engano) ----------
+  function painelAvisos() {
+    const abertos = st.avisos.filter(x => !x.resolvidoEm).sort((a, b) => (a.em || 0) - (b.em || 0));
+    const recentes = st.avisos.filter(x => x.resolvidoEm).sort((a, b) => b.resolvidoEm - a.resolvidoEm).slice(0, 8);
+    if (!abertos.length && !recentes.length) return '';
+    const linha = x => {
+      const it = x.item || {};
+      return `<tr><td class="mono">${esc(R.formatarCNJ(x.numero))}</td><td>${esc(nomeDe(x.de))}</td>
+      <td>${esc(it.c || '—')}</td><td>${esc(it.t || '—')}</td><td>${esc(NOME_SETOR[it.s] || '—')}</td>
+      <td>${esc(x.motivo || '')}</td><td>${x.resolvidoEm ? 'Resolvido ' + dataBR(x.resolvidoEm) : 'Enviado ' + dataHoraBR(x.em)}</td>
+      <td>${x.resolvidoEm ? '' : `<button class="btn" data-acao="resolver-aviso" data-id="${esc(x.id)}">Resolvido</button>`}</td></tr>`;
+    };
+    const cab = '<thead><tr><th>Processo</th><th>Enviado por</th><th>Classe</th><th>Tarefa</th><th>Setor</th><th>O que está errado</th><th>Quando</th><th></th></tr></thead>';
+    return `<section class="painel largo">
+      <h2>Avisos dos servidores <span class="muted mono">${abertos.length}</span></h2>
+      <p>Processos que um servidor recebeu por engano. Confira a regra de distribuição ou a planilha de tarefas e marque como resolvido. Depois de corrigir, envie a lista nova: o processo segue para a pessoa certa.</p>
+      <div class="tabela-wrap"><table>${cab}<tbody>${abertos.map(linha).join('') || '<tr><td colspan="8" class="muted">Nenhum aviso aberto.</td></tr>'}</tbody></table></div>
+      ${recentes.length ? `<h3>Resolvidos recentemente</h3><div class="tabela-wrap"><table>${cab}<tbody>${recentes.map(linha).join('')}</tbody></table></div>` : ''}
+    </section>`;
+  }
 
   // ---------- importação ----------
   function painelImportar() {
@@ -293,6 +315,8 @@
     if (b.error) throw b.error;
     const c = await sb.from('marcas').delete({ count: 'exact' }).lt('em', corte90);
     if (c.error) throw c.error;
+    const d = await sb.from('avisos_gestor').delete({ count: 'exact' }).lt('resolvido_em', corte30);
+    if (d.error) throw d.error;
     toast(`Apagados: ${(a.count || 0) + (b.count || 0)} urgências/devoluções e ${c.count || 0} marcas antigas.`);
     await P.carregar(); render();
   }
@@ -566,6 +590,11 @@
     try {
       if (acao.startsWith('tf-')) await acaoTarefas(acao, alvo);
       else if (acao === 'gravar-importacao') await gravarImportacao();
+      else if (acao === 'resolver-aviso') {
+        const { error } = await st.sb.from('avisos_gestor').update({ resolvido_em: iso(Date.now()), resolvido_por: st.email }).eq('id', Number(alvo.dataset.id));
+        if (error) throw error;
+        toast('Aviso marcado como resolvido.'); await P.carregar(); render();
+      }
       else if (acao === 'cancelar-importacao') { st.importacao = null; render(); }
       else if (acao === 'pedir-remocao') { st.confirmarRemocao = Number(alvo.dataset.id); render(); }
       else if (acao === 'remover-urgencia') {
