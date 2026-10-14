@@ -464,7 +464,7 @@
       v.innerHTML = h; return;
     }
     const grupos = [
-      ['urgente', 'Urgências', geral ? 'Até o responsável marcar como concluído' : 'Até você marcar como concluído'],
+      ['urgente', 'Urgências', 'Por antiguidade na tarefa'],
       ['devolvido', 'Devolvidos por estagiários e residentes', 'Processos que não conseguiram tratar'],
       ['prioritaria', 'Tarefas prioritárias', 'Por antiguidade na tarefa'],
       ['normal', 'Fila por antiguidade', 'Do mais antigo para o mais recente na tarefa'],
