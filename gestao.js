@@ -74,7 +74,7 @@
     const semTabela = !st.tarefas.length ? `<div class="aviso erro">Cadastre a tabela de tarefas (painel “Tarefas do PJe”) antes de enviar o relatório: é ela que diz o setor de cada processo.</div>` : '';
     return `<section class="painel">
       <h2>Enviar relatório do PJe+R</h2>
-      <p>Envie a lista completa de processos. O setor de cada processo vem da tarefa em que ele está, pela tabela de tarefas; processos de outros setores são ignorados. A atualização diária só aproveita tarefas urgentes ou de “Zerar”. Urgências ficam na fila até serem concluídas; as prioritárias são refeitas a cada nova lista.</p>
+      <p>Envie a lista completa de processos. O setor de cada processo vem da tarefa em que ele está, pela tabela de tarefas; processos de outros setores são ignorados. A atualização diária só aproveita tarefas urgentes ou de “Zerar”. As urgências e as prioritárias seguem o relatório: quem não está na lista nova sai da fila. Só as urgências incluídas aqui na Gestão e as enviadas entre servidores ficam até serem concluídas.</p>
       ${semTabela}
       <div class="opcoes" role="radiogroup" aria-label="Tipo de envio">
         <label><input type="radio" name="tipo-imp" id="tipo-semanal" value="semanal"${imp.tipo !== 'diario' ? ' checked' : ''}> Lista completa (semanal)</label>
@@ -115,32 +115,11 @@
 
   const itemMin = it => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u']) if (it[k] != null) o[k] = it[k]; return o; };
 
-  // Urgentes da lista passam a ser urgências abertas: ficam até serem concluídas, mesmo que saiam das listas seguintes.
-  // Não recria a que já foi concluída para o mesmo processo e a mesma data de chegada na tarefa.
-  async function registrarUrgencias(entradas) {
-    const sb = st.sb;
-    const abertas = await todas((a, b) => sb.from('urgencias').select('numero,responsavel').is('concluida_em', null).order('id').range(a, b));
-    const marcas = await todas((a, b) => sb.from('marcas').select('pessoa,chave').gte('em', iso(Date.now() - 95 * DIA)).order('pessoa').order('chave').range(a, b));
-    const jaAberta = new Set(abertas.map(u => u.responsavel + '|' + u.numero));
-    const concluidas = new Set(marcas.map(m => m.pessoa + '|' + m.chave));
-    const novas = [];
-    for (const [p, itens] of entradas) {
-      for (const it of itens) {
-        if (R.tipoItem(it, st.mapaTarefas) !== 'urgente') continue;
-        const numero = R.soDigitos(it.n);
-        if (numero.length !== 20 || jaAberta.has(p + '|' + numero) || concluidas.has(p + '|' + R.chaveItem(it))) continue;
-        jaAberta.add(p + '|' + numero);
-        novas.push({ numero, responsavel: p, origem: 'lista', item: itemMin(it), criada_por: st.email });
-      }
-    }
-    for (let i = 0; i < novas.length; i += 400) {
-      const lote = novas.slice(i, i + 400);
-      const { error } = await sb.from('urgencias').insert(lote);
-      if (!error) continue;
-      if (error.code !== '23505') throw error;
-      for (const u of lote) { const r = await sb.from('urgencias').insert(u); if (r.error && r.error.code !== '23505') throw r.error; }
-    }
-    return novas.length;
+  // As urgentes da lista seguem a lista: saem quando o processo sai do relatório novo. Só ficam até o servidor concluir
+  // as urgências incluídas à mão (gestor) e as enviadas para outra pessoa. Aqui some o que antigas versões gravaram como "da lista".
+  async function limparUrgenciasDaLista() {
+    const { error } = await st.sb.from('urgencias').delete().eq('origem', 'lista');
+    if (error) throw error;
   }
 
   async function gravarImportacao() {
@@ -187,7 +166,7 @@
           if (error) throw error;
         }
       }
-      const novas = await registrarUrgencias(gravar);
+      await limparUrgenciasDaLista();
       const total = gravar.reduce((s, [, x]) => s + x.length, 0);
       const info = { em: agora, total, porPessoa: Object.fromEntries(gravar.map(([p, x]) => [p, x.length])) };
       if (fixa && imp.tipo === 'semanal') fixos[fixa] = { em: agora, total };
@@ -195,7 +174,7 @@
       else resumo.diaria = info;
       const { error } = await sb.from('config').upsert({ chave: 'resumo', valor: resumo, atualizado_em: I, atualizado_por: st.email }, { onConflict: 'chave' });
       if (error) throw error;
-      toast((imp.tipo === 'diario' ? 'Atualização diária gravada.' : 'Lista completa gravada.') + (novas ? ` ${novas} urgência${novas === 1 ? '' : 's'} nova${novas === 1 ? '' : 's'}.` : ''));
+      toast(imp.tipo === 'diario' ? 'Atualização diária gravada.' : 'Lista completa gravada.');
       st.importacao = { tipo: imp.tipo, pessoaFixa: imp.pessoaFixa };
       await P.carregar();
     } catch (e) { falha(e); }
@@ -271,7 +250,7 @@
     const conta = (lista, p) => st.filas.filter(r => r.lista === lista && r.pessoa === p).reduce((s, r) => s + (r.itens || []).length, 0);
     const linhas = pessoas().map(p => `<tr><td>${esc(p.nome)}${p.tipo && p.tipo !== 'servidor' ? ` <span class="muted small">(${esc((ROTULO_TIPO[p.tipo] || p.tipo).toLowerCase())})</span>` : ''}${(resumo.fixos || {})[p.id] ? ' <span class="muted small">(lista própria)</span>' : ''}</td>
       <td class="n">${conta('semanal', p.id)}</td><td class="n">${conta('diaria', p.id)}</td>
-      <td class="n">${st.urgencias.filter(u => u.responsavel === p.id && !u.concluidaEm).length}</td>
+      <td class="n">${P.filaDe(p.id).filter(l => l.tipo === 'urgente' && !l.concluido).length}</td>
       <td class="n">${st.devolucoes.filter(d => d.para === p.id && !d.concluidaEm).length}</td></tr>`).join('');
     const envios = [];
     if (resumo.semanal) envios.push(['Lista completa', 'Semanal', resumo.semanal.em, resumo.semanal.total, '']);

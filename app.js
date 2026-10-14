@@ -221,7 +221,7 @@
     const umMes = Date.now() - 30 * DIA;
     const fila = R.montarFila({
       itens,
-      urgencias: st.urgencias.filter(u => u.responsavel === p && (!u.concluidaEm || u.concluidaEm > umMes)),
+      urgencias: st.urgencias.filter(u => u.via !== 'lista' && u.responsavel === p && (!u.concluidaEm || u.concluidaEm > umMes)),
       devolucoes: st.devolucoes.filter(d => d.para === p && (!d.concluidaEm || d.concluidaEm > umMes)),
       marcas: st.marcas[p] || {}, tarefas: st.mapaTarefas, ultimaVisita: st.ultimaVisita,
     });
