@@ -175,7 +175,7 @@
       todas((a, b) => sb.from('filas').select('lista,pessoa,itens,importado_em').order('lista').order('pessoa').range(a, b)),
       todas((a, b) => sb.from('urgencias').select('*').or(`concluida_em.is.null,concluida_em.gte.${desdeConcl}`).order('id').range(a, b)),
       todas((a, b) => sb.from('devolucoes').select('*').or(`concluida_em.is.null,concluida_em.gte.${desdeConcl}`).order('id').range(a, b)),
-      todas((a, b) => sb.from('marcas').select('pessoa,chave,em,devolvido').gte('em', desdeMarcas).order('pessoa').order('chave').range(a, b)),
+      todas((a, b) => sb.from('marcas').select('pessoa,chave,em,devolvido,item').gte('em', desdeMarcas).order('pessoa').order('chave').range(a, b)),
       todas((a, b) => sb.from('notas').select('pessoa,numero,texto,em').order('pessoa').order('numero').range(a, b)),
       gestor ? todas((a, b) => sb.from('acesso').select('email,nome,perfil,pessoa_id').order('email').range(a, b)) : Promise.resolve([]),
       gestor ? sb.from('acessos_negados').select('email,em').order('em', { ascending: false }).limit(200) : Promise.resolve({ data: [] }),
@@ -197,7 +197,7 @@
     }));
     st.devolucoes = dev.map(r => ({ id: r.id, item: r.item, de: r.de, para: r.para, motivo: r.motivo || '', em: ms(r.em), concluidaEm: ms(r.concluida_em) }));
     st.marcas = {};
-    for (const m of marcas) (st.marcas[m.pessoa] = st.marcas[m.pessoa] || {})[m.chave] = { em: ms(m.em), dev: !!m.devolvido };
+    for (const m of marcas) (st.marcas[m.pessoa] = st.marcas[m.pessoa] || {})[m.chave] = { em: ms(m.em), dev: !!m.devolvido, item: m.item || null };
     st.notas = {};
     for (const n of notas) (st.notas[n.pessoa] = st.notas[n.pessoa] || {})[n.numero] = { texto: n.texto, em: ms(n.em) };
     st.acessos = acessos;
@@ -225,6 +225,21 @@
       devolucoes: st.devolucoes.filter(d => d.para === p && (!d.concluidaEm || d.concluidaEm > umMes)),
       marcas: st.marcas[p] || {}, tarefas: st.mapaTarefas, ultimaVisita: st.ultimaVisita,
     });
+    // Concluídos que já saíram da lista continuam aparecendo (só em "Mostrar concluídos"), pelas marcas guardadas.
+    const marcasP = st.marcas[p] || {};
+    const presentes = new Set(fila.filter(l => l.ch != null).map(l => R.chaveItem({ n: l.n, ch: l.ch })));
+    for (const chave of Object.keys(marcasP)) {
+      const m = marcasP[chave];
+      if (presentes.has(chave) || fila.some(l => l.chave === chave)) continue;
+      let it = m.item;
+      if (!it) { // marca antiga, sem dados guardados: só dá para recuperar número e chegada pela chave
+        const [dig, ch] = chave.split('|');
+        if (!dig || dig.length !== 20) continue;
+        it = { n: R.formatarCNJ(dig) }; if (ch) it.ch = Number(ch);
+      }
+      fila.push(Object.assign({}, it, { origem: 'lista', tipo: it.tipo || 'normal', chave, concluido: true, devolvido: !!m.dev, novo: false, foraDaLista: true }));
+    }
+    fila.sort(R.comparar);
     const notas = st.notas[p] || {};
     for (const l of fila) {
       const nota = notas[R.soDigitos(l.n)];
@@ -325,6 +340,7 @@
     if (l.fp) selos.push('<span class="selo paralelo" tabindex="0" title="O processo aparece em uma tarefa principal e em pelo menos um fluxo paralelo. Verificar a necessidade de encerrar o(s) fluxo(s) paralelo(s)">Fluxo paralelo</span>');
     if (l.devolvido) selos.push('<span class="selo devolvido">Devolvido ao servidor</span>');
     if (l.concluido) selos.push('<span class="selo feito">Concluído</span>');
+    if (l.foraDaLista) selos.push('<span class="selo" title="O processo não está mais na lista importada; o registro de conclusão foi mantido">Saiu da lista</span>');
     const d = dias(l.ch);
     let nota = '';
     if (l.origem === 'urgencia') {
@@ -461,10 +477,15 @@
   }
 
   // ---------- gravações da fila ----------
-  async function gravarMarca(pessoa, chave, dev, agora) {
-    const { error } = await st.sb.from('marcas').upsert({ pessoa, chave, em: iso(agora), devolvido: !!dev }, { onConflict: 'pessoa,chave' });
+  // Guarda junto os dados do processo: assim o concluído continua aparecendo (em "Mostrar concluídos") mesmo que saia da lista nova.
+  const fotoDe = l => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'tipo']) if (l[k] != null) o[k] = l[k]; return o; };
+  async function gravarMarca(pessoa, chave, dev, agora, linha) {
+    const item = linha ? fotoDe(linha) : null;
+    const reg = { pessoa, chave, em: iso(agora), devolvido: !!dev };
+    if (item) reg.item = item;
+    const { error } = await st.sb.from('marcas').upsert(reg, { onConflict: 'pessoa,chave' });
     if (error) throw error;
-    (st.marcas[pessoa] = st.marcas[pessoa] || {})[chave] = { em: agora, dev: !!dev };
+    (st.marcas[pessoa] = st.marcas[pessoa] || {})[chave] = { em: agora, dev: !!dev, item };
     st.ver++;
   }
 
@@ -478,7 +499,7 @@
   // Conclui na fila de quem está logado: marca da lista (número + chegada) ou fecha a urgência/devolução.
   async function concluirLinha(l) {
     const agora = Date.now(), p = st.pessoa;
-    if (l.origem === 'lista') { await gravarMarca(p, l.chave, false, agora); return; }
+    if (l.origem === 'lista') { await gravarMarca(p, l.chave, false, agora, l); return; }
     const urg = l.origem === 'urgencia';
     const campos = urg ? { concluida_em: iso(agora), concluida_por: p } : { concluida_em: iso(agora) };
     const { error } = await st.sb.from(urg ? 'urgencias' : 'devolucoes').update(campos).eq('id', l.id);
@@ -486,7 +507,7 @@
     const lista = urg ? st.urgencias : st.devolucoes;
     const r = lista.find(x => x.id === l.id); if (r) r.concluidaEm = agora;
     // evita que o mesmo processo volte como item comum da lista (mesmo número e mesma chegada)
-    if (l.ch != null) await gravarMarca(p, R.chaveItem({ n: l.n, ch: l.ch }), false, agora);
+    if (l.ch != null) await gravarMarca(p, R.chaveItem({ n: l.n, ch: l.ch }), false, agora, l);
     st.ver++;
   }
 
@@ -550,7 +571,7 @@
     const agora = Date.now();
     const { error } = await st.sb.from('devolucoes').insert({ item: itemDe(l), de: st.pessoa, para, motivo: motivo || null });
     if (error) throw error;
-    await gravarMarca(st.pessoa, l.chave, true, agora);
+    await gravarMarca(st.pessoa, l.chave, true, agora, l);
   }
 
   // ---------- janela de envio ----------
