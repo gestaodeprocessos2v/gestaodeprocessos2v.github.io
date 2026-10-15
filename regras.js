@@ -2,7 +2,7 @@
 (function (root) {
   const semAcento = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '');
   const chaveCab = s => semAcento(s).toLowerCase().replace(/[^a-z0-9]/g, '');
-  const normTexto = s => semAcento(s).toLowerCase().replace(/\s+/g, ' ').trim();
+  const normTexto = s => semAcento(s).toLowerCase().replace(/[\u2013\u2014]/g, '-').replace(/\s+/g, ' ').trim();
   const soDigitos = s => String(s == null ? '' : s).replace(/\D/g, '');
 
   // Cabeçalho do PJe+R (nome interno ou formatado) -> campo curto. Só o que o painel usa.
@@ -241,6 +241,36 @@
     return { porPessoa, semResponsavel, ignorados, porSetor };
   }
 
+  // Filas do diretor e do gestor: escolhidas só por etiqueta, em qualquer tarefa ou setor (independem da tabela de tarefas).
+  // Um item por processo (o de chegada mais antiga). Diretor: guarda só as etiquetas da lista dele ("ed") e "u" se alguma é urgente.
+  const ETIQUETA_GESTOR_PADRAO = 'Alberto - Acompanhar';
+  const GESTOR_ID = '__gestor';
+  function prepararEspeciais(itens, config) {
+    const cfg = config || {};
+    const dirEt = (cfg.etiquetasDiretor || []).filter(x => x && x.e);
+    const temDiretor = (cfg.pessoas || []).some(p => p.tipo === 'diretor');
+    const etGestor = cfg.etiquetaGestor == null ? ETIQUETA_GESTOR_PADRAO : cfg.etiquetaGestor;
+    const dir = new Map(), ges = new Map();
+    const guardar = (m, it, ed, urg) => {
+      const k = soDigitos(it.n);
+      const ja = m.get(k);
+      if (!ja) { const o = { n: it.n }; for (const c of ['c', 't', 'cg', 'ch', 'sg']) if (it[c] != null) o[c] = it[c]; if (ed) o.ed = [...ed]; if (urg) o.u = true; m.set(k, o); return; }
+      if (ed) for (const e of ed) if (!ja.ed.includes(e)) ja.ed.push(e);
+      if (urg) ja.u = true;
+      const antes = it.ch != null && (ja.ch == null || it.ch < ja.ch);
+      if (antes) { for (const c of ['c', 't', 'cg', 'ch']) if (it[c] != null) ja[c] = it[c]; if (it.sg) ja.sg = true; }
+    };
+    for (const it of itens) {
+      if (!it.e) continue;
+      if (temDiretor && dirEt.length) {
+        const achadas = dirEt.filter(x => temEtiqueta(it.e, x.e));
+        if (achadas.length) guardar(dir, it, achadas.map(x => x.e), achadas.some(x => x.u));
+      }
+      if (etGestor && temEtiqueta(it.e, etGestor)) guardar(ges, it, null, false);
+    }
+    return { diretor: [...dir.values()], gestor: [...ges.values()] };
+  }
+
   function filtrarDiario(itens, tabela) {
     const mapa = mapaTarefas(tabela);
     return itens.filter(it => tipoItem(it, mapa) !== 'normal');
@@ -376,7 +406,7 @@
 
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem,
-    atribuir, pessoasDoSetor, prepararLista, filtrarDiario, mesclarDiario, fatiar, podarMarcas, montarFila, comparar, chaveItem,
+    atribuir, pessoasDoSetor, prepararLista, prepararEspeciais, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, filtrarDiario, mesclarDiario, fatiar, podarMarcas, montarFila, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
