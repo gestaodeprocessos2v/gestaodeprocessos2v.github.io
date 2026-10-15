@@ -10,8 +10,9 @@ Painel da fila de trabalho da 2ª Vara Federal da Paraíba. Página estática (G
 
 - Distribui os processos do PJe+R (CSV) entre servidores, estagiários e residentes, por setor, dígito do número e exceções de classe ou etiqueta.
 - Abas **Fila** (fila própria), **Geral** (todas as filas) e **Gestão** (só o gestor).
+- Fila própria do **Diretor de Secretaria** (por etiquetas, só urgências e fila por antiguidade) e do **Gestor** (por etiqueta, no topo da Gestão), em paralelo às dos servidores.
 - Ordem de trabalho: urgentes, devolvidos, prioritárias e demais, por antiguidade na tarefa.
-- Conclusão com desfazer, anotações, devolução (estagiários e residentes), envio para outra pessoa e aviso ao gestor de processo recebido por engano.
+- Conclusão com desfazer, anotações, devolução (estagiários, residentes e diretor), envio para outra pessoa (inclusive ao Gestor, que recebe como urgência).
 - Visões por pessoa e filtro por etiqueta (Pagamentos), configurados na Gestão.
 
 ## Arquivos
