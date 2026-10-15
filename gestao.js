@@ -6,7 +6,9 @@
   const { st, R, SETORES, NOME_SETOR, TIPOS, ROTULO_TIPO, PERFIS, DIA, esc, dataBR, dataHoraBR, toast, falha, todas, iso, ms, pessoas, nomeDe, opcoesPessoas, opcoesTipo, baixar } = P;
   const $ = sel => document.querySelector(sel);
   const render = () => P.render();
-  const PERFIS_OUTROS = ['gestor', 'magistrado', 'diretor', 'visitante'];
+  const PERFIS_OUTROS = ['gestor', 'magistrado', 'visitante'];
+  const GESTOR_ID = R.GESTOR_ID;
+  const DIRETORIA = 'diretoria';   // destino da urgência do gestor: o diretor de secretaria
   const clonar = o => JSON.parse(JSON.stringify(o));
   const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -35,7 +37,7 @@
     prepararRascunho();
     const foco = document.activeElement && document.activeElement.id;
     v.innerHTML = `<div class="paineis">
-      ${painelAvisos()}
+      ${P.htmlGestorFila()}
       ${painelImportar()}
       ${painelUrgencia()}
       ${painelResumo()}
@@ -46,27 +48,6 @@
     </div>`;
     if (foco) { const el = document.getElementById(foco); if (el && el.tagName !== 'BUTTON') el.focus(); }
   };
-
-  // ---------- avisos dos servidores (processo recebido por engano) ----------
-  function painelAvisos() {
-    const abertos = st.avisos.filter(x => !x.resolvidoEm).sort((a, b) => (a.em || 0) - (b.em || 0));
-    const recentes = st.avisos.filter(x => x.resolvidoEm).sort((a, b) => b.resolvidoEm - a.resolvidoEm).slice(0, 8);
-    if (!abertos.length && !recentes.length) return '';
-    const linha = x => {
-      const it = x.item || {};
-      return `<tr><td class="mono">${esc(R.formatarCNJ(x.numero))}</td><td>${esc(nomeDe(x.de))}</td>
-      <td>${esc(it.c || '—')}</td><td>${esc(it.t || '—')}</td><td>${esc(NOME_SETOR[it.s] || '—')}</td>
-      <td>${esc(x.motivo || '')}</td><td>${x.resolvidoEm ? 'Resolvido ' + dataBR(x.resolvidoEm) : 'Enviado ' + dataHoraBR(x.em)}</td>
-      <td>${x.resolvidoEm ? '' : `<button class="btn" data-acao="resolver-aviso" data-id="${esc(x.id)}">Resolvido</button>`}</td></tr>`;
-    };
-    const cab = '<thead><tr><th>Processo</th><th>Enviado por</th><th>Classe</th><th>Tarefa</th><th>Setor</th><th>O que está errado</th><th>Quando</th><th></th></tr></thead>';
-    return `<section class="painel largo">
-      <h2>Avisos dos servidores <span class="muted mono">${abertos.length}</span></h2>
-      <p>Processos que um servidor recebeu por engano. Confira a regra de distribuição ou a planilha de tarefas e marque como resolvido. Depois de corrigir, envie a lista nova: o processo segue para a pessoa certa.</p>
-      <div class="tabela-wrap"><table>${cab}<tbody>${abertos.map(linha).join('') || '<tr><td colspan="8" class="muted">Nenhum aviso aberto.</td></tr>'}</tbody></table></div>
-      ${recentes.length ? `<h3>Resolvidos recentemente</h3><div class="tabela-wrap"><table>${cab}<tbody>${recentes.map(linha).join('')}</tbody></table></div>` : ''}
-    </section>`;
-  }
 
   // ---------- importação ----------
   function painelImportar() {
@@ -87,8 +68,9 @@
         <div class="small muted">Ignorados: ${r.ignorados.foraDaVara} em tarefas de outros setores${r.ignorados.semEtiqueta ? ` e ${r.ignorados.semEtiqueta} sem a etiqueta exigida pela tarefa` : ''}.${imp.semData ? ` ${imp.semData} sem data de chegada vão para o fim da fila.` : ''}</div>
         <div class="tabela-wrap"><table><thead><tr><th>Pessoa</th><th>Processos</th><th>Urgentes</th><th>Prioritários</th></tr></thead><tbody>${linhas || '<tr><td colspan="4">Nenhum processo para gravar.</td></tr>'}</tbody></table></div>
         ${sem}
+        ${especiaisPrevia(imp)}
         <div class="linha-botoes">
-          <button class="btn primario" data-acao="gravar-importacao" ${st.gravando || !Object.keys(r.porPessoa).length ? 'disabled' : ''}>${st.gravando ? 'Gravando…' : imp.tipo === 'diario' ? 'Gravar atualização diária' : 'Gravar e substituir a lista'}</button>
+          <button class="btn primario" data-acao="gravar-importacao" ${st.gravando || (!Object.keys(r.porPessoa).length && !temEspeciais(imp)) ? 'disabled' : ''}>${st.gravando ? 'Gravando…' : imp.tipo === 'diario' ? 'Gravar atualização diária' : 'Gravar e substituir a lista'}</button>
           <button class="btn" data-acao="cancelar-importacao">Cancelar</button>
         </div>
       </div>`;
@@ -96,7 +78,7 @@
     const semTabela = !st.tarefas.length ? `<div class="aviso erro">Cadastre a tabela de tarefas (painel “Tarefas do PJe”) antes de enviar o relatório: é ela que diz o setor de cada processo.</div>` : '';
     return `<section class="painel">
       <h2>Enviar relatório do PJe+R</h2>
-      <p>Envie a lista completa de processos. O setor de cada processo vem da tarefa em que ele está, pela tabela de tarefas; processos de outros setores são ignorados. A atualização diária só aproveita tarefas urgentes ou de “Zerar”. As urgências e as prioritárias seguem o relatório: quem não está na lista nova sai da fila. Só as urgências incluídas aqui na Gestão e as enviadas entre servidores ficam até serem concluídas.</p>
+      <p>Envie a lista completa de processos. O setor de cada processo vem da tarefa em que ele está, pela tabela de tarefas; processos de outros setores são ignorados nas filas dos servidores. A atualização diária só aproveita tarefas urgentes ou de “Zerar”. As urgências e as prioritárias seguem o relatório: quem não está na lista nova sai da fila. Só as urgências incluídas aqui na Gestão e as enviadas entre pessoas ficam até serem concluídas. As filas do diretor e do gestor são escolhidas só por etiqueta, em qualquer tarefa, e são refeitas por qualquer um dos dois tipos de envio.</p>
       ${semTabela}
       <div class="opcoes" role="radiogroup" aria-label="Tipo de envio">
         <label><input type="radio" name="tipo-imp" id="tipo-semanal" value="semanal"${imp.tipo !== 'diario' ? ' checked' : ''}> Lista completa (semanal)</label>
@@ -106,6 +88,16 @@
       <label class="campo"><span>Arquivo CSV</span><input type="file" id="imp-arquivo" accept=".csv,text/csv,text/plain"></label>
       ${previa}
     </section>`;
+  }
+
+  const temEspeciais = imp => !!imp.especiais && (imp.especiais.diretor.length > 0 || imp.especiais.gestor.length > 0);
+  function especiaisPrevia(imp) {
+    const e = imp.especiais; if (!e || imp.pessoaFixa) return '';
+    const diretores = pessoas().filter(p => p.tipo === 'diretor');
+    const linhas = [];
+    if (diretores.length) linhas.push(`Diretor de Secretaria: <b class="mono">${e.diretor.length}</b> processos, ${e.diretor.filter(i => i.u).length} urgentes (por etiqueta)`);
+    linhas.push(`Gestor: <b class="mono">${e.gestor.length}</b> processos (etiqueta “${esc(st.config.etiquetaGestor == null ? R.ETIQUETA_GESTOR_PADRAO : st.config.etiquetaGestor)}”)`);
+    return `<div class="small">${linhas.join(' · ')}</div>`;
   }
 
   async function lerArquivo(arquivo) {
@@ -128,6 +120,7 @@
       Object.assign(st.importacao, {
         arquivo: arquivo.name, lidos: lido.itens.length, filtrados: base.length, semData: lido.semData,
         resultado: R.prepararLista(base, st.mapaTarefas, st.config, pessoaFixa || null),
+        especiais: pessoaFixa ? null : R.prepararEspeciais(lido.itens, st.config),
       });
     } catch (e) {
       st.importacao.erro = e.message || 'Não consegui ler o arquivo.';
@@ -153,10 +146,11 @@
     try {
       const resumo = clonar(st.resumo || {}); resumo.fixos = resumo.fixos || {};
       const fixos = resumo.fixos;
-      const existentes = [...new Set(st.filas.map(r => r.pessoa))];
+      const idsEspeciais = new Set([GESTOR_ID, ...pessoas().filter(p => p.tipo === 'diretor').map(p => p.id)]);
+      const existentes = [...new Set(st.filas.map(r => r.pessoa))].filter(p => !idsEspeciais.has(p));
       // pessoas afetadas: na lista "para uma pessoa", só ela; nas demais, todas menos as que têm lista própria
-      const alvo = new Set(fixa ? [fixa] : [...existentes, ...Object.keys(porPessoa)].filter(p => !fixos[p]));
-      const gravar = Object.entries(porPessoa).filter(([p]) => fixa || !fixos[p]);
+      const alvo = new Set(fixa ? [fixa] : [...existentes, ...Object.keys(porPessoa)].filter(p => !fixos[p] && !idsEspeciais.has(p)));
+      const gravar = Object.entries(porPessoa).filter(([p]) => (fixa || !fixos[p]) && !idsEspeciais.has(p));
       const doPessoa = (lista, p) => (st.filas.find(r => r.lista === lista && r.pessoa === p) || {}).itens || [];
       let rows;
       if (imp.tipo === 'semanal') {
@@ -188,6 +182,18 @@
           if (error) throw error;
         }
       }
+      // Filas do diretor e do gestor (por etiqueta): qualquer tipo de envio refaz a lista inteira e descarta a atualização diária anterior.
+      if (imp.especiais && !fixa) {
+        const dest = [[GESTOR_ID, imp.especiais.gestor], ...pessoas().filter(p => p.tipo === 'diretor').map(p => [p.id, imp.especiais.diretor])];
+        for (const [pessoa, itens] of dest) {
+          const vistos = new Map([...doPessoa('semanal', pessoa), ...doPessoa('diaria', pessoa)].map(i => [R.chaveItem(i), i.vistoEm]));
+          const marcados = itens.map(it => Object.assign({}, it, { vistoEm: vistos.get(R.chaveItem(it)) || agora }));
+          const { error: e1 } = await sb.from('filas').upsert({ lista: 'semanal', pessoa, itens: marcados, importado_em: I }, { onConflict: 'lista,pessoa' });
+          if (e1) throw e1;
+          const { error: e2 } = await sb.from('filas').delete().eq('lista', 'diaria').eq('pessoa', pessoa);
+          if (e2) throw e2;
+        }
+      }
       await limparUrgenciasDaLista();
       const total = gravar.reduce((s, [, x]) => s + x.length, 0);
       const info = { em: agora, total, porPessoa: Object.fromEntries(gravar.map(([p, x]) => [p, x.length])) };
@@ -214,16 +220,16 @@
       <td>${st.confirmarRemocao === u.id ? `<button class="btn perigo" data-acao="remover-urgencia" data-id="${esc(u.id)}">Confirmar</button>` : `<button class="btn" data-acao="pedir-remocao" data-id="${esc(u.id)}">Remover</button>`}</td></tr>`;
     const ur = st.novaUrgencia || {};
     const setorUrg = ur.setor || 'secretaria';
-    const doSetor = R.pessoasDoSetor(setorUrg, st.config || {});
+    const doSetor = pessoasDoDestino(setorUrg);
     const respOpc = doSetor.length
       ? `<option value="">Escolha</option>` + doSetor.map(id => `<option value="${esc(id)}"${id === ur.responsavel ? ' selected' : ''}>${esc(nomeDe(id))}</option>`).join('')
-      : `<option value="">Nenhuma pessoa atende este setor — ajuste a configuração</option>`;
+      : `<option value="">${setorUrg === DIRETORIA ? 'Cadastre o Diretor de Secretaria na configuração' : 'Nenhuma pessoa atende este setor — ajuste a configuração'}</option>`;
     return `<section class="painel">
       <h2>Incluir urgência</h2>
-      <p>A urgência vai para o topo da fila do responsável e fica lá até ele marcar como concluída.</p>
+      <p>A urgência vai para o topo da fila do responsável (servidor ou Diretor de Secretaria) e fica lá até ele marcar como concluída.</p>
       <form id="form-urgencia" class="campos">
         <label class="campo"><span>Número do processo</span><input type="text" id="urg-numero" class="mono" inputmode="numeric" placeholder="0000000-00.0000.0.00.0000" value="${esc(ur.numero || '')}" required></label>
-        <label class="campo"><span>Setor</span><select id="urg-setor" data-desenhado="${esc(setorUrg)}">${SETORES.map(([id, n]) => `<option value="${id}"${id === setorUrg ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label class="campo"><span>Setor</span><select id="urg-setor" data-desenhado="${esc(setorUrg)}">${SETORES.map(([id, n]) => `<option value="${id}"${id === setorUrg ? ' selected' : ''}>${n}</option>`).join('')}<option value="${DIRETORIA}"${setorUrg === DIRETORIA ? ' selected' : ''}>Diretor de Secretaria</option></select></label>
         <label class="campo"><span>Responsável</span><select id="urg-resp" required>${respOpc}</select></label>
         <label class="campo"><span>Motivo</span><input type="text" id="urg-motivo" maxlength="300" placeholder="Ex.: e-mail da procuradoria, pedido do juiz" value="${esc(ur.motivo || '')}"></label>
         <div class="linha-botoes"><button class="btn primario" type="submit">Incluir urgência</button></div>
@@ -235,16 +241,19 @@
     </section>`;
   }
 
+  // Quem pode receber urgência em cada destino: pessoas do setor (pelas regras) ou o diretor de secretaria.
+  const pessoasDoDestino = setor => setor === DIRETORIA ? pessoas().filter(p => p.tipo === 'diretor').map(p => p.id) : R.pessoasDoSetor(setor, st.config || {});
+
   async function aoIncluirUrgencia(ev) {
     ev.preventDefault();
     const numero = R.soDigitos($('#urg-numero').value);
     const responsavel = $('#urg-resp').value, setor = $('#urg-setor').value;
     if (numero.length !== 20) { toast('O número do processo deve ter 20 dígitos (padrão CNJ).'); return; }
     if (!responsavel) { toast('Escolha o responsável.'); return; }
-    if (!R.pessoasDoSetor(setor, st.config || {}).includes(responsavel)) { toast('Esse responsável não atende o setor escolhido.'); return; }
+    if (!pessoasDoDestino(setor).includes(responsavel)) { toast('Esse responsável não atende o setor escolhido.'); return; }
     try {
       const { error } = await st.sb.from('urgencias').insert({
-        numero, responsavel, origem: 'gestor', motivo: $('#urg-motivo').value.trim() || null, item: { s: setor }, criada_por: st.email,
+        numero, responsavel, origem: 'gestor', motivo: $('#urg-motivo').value.trim() || null, item: setor === DIRETORIA ? {} : { s: setor }, criada_por: st.email,
       });
       if (error) { if (error.code === '23505') { toast('Esse processo já está como urgência aberta para essa pessoa.'); return; } throw error; }
       st.novaUrgencia = { setor }; toast('Urgência incluída para ' + nomeDe(responsavel) + '.');
@@ -254,11 +263,11 @@
 
   function sugerirResponsavel() {
     const numero = $('#urg-numero').value, setor = $('#urg-setor').value;
-    const doSetor = R.pessoasDoSetor(setor, st.config || {});
+    const doSetor = pessoasDoDestino(setor);
     let responsavel = $('#urg-resp').value;
     if (!doSetor.includes(responsavel)) responsavel = doSetor.length === 1 ? doSetor[0] : '';
     st.novaUrgencia = { numero, setor, motivo: $('#urg-motivo').value, responsavel };
-    if (R.soDigitos(numero).length >= 7) {
+    if (R.soDigitos(numero).length >= 7 && setor !== DIRETORIA) {
       const r = R.atribuir({ n: numero }, setor, st.config || {});
       if (r.pessoa && doSetor.includes(r.pessoa)) st.novaUrgencia.responsavel = r.pessoa;
     }
@@ -270,7 +279,8 @@
   function painelResumo() {
     const resumo = st.resumo || {};
     const conta = (lista, p) => st.filas.filter(r => r.lista === lista && r.pessoa === p).reduce((s, r) => s + (r.itens || []).length, 0);
-    const linhas = pessoas().map(p => `<tr><td>${esc(p.nome)}${p.tipo && p.tipo !== 'servidor' ? ` <span class="muted small">(${esc((ROTULO_TIPO[p.tipo] || p.tipo).toLowerCase())})</span>` : ''}${(resumo.fixos || {})[p.id] ? ' <span class="muted small">(lista própria)</span>' : ''}</td>
+    const lista = [...pessoas(), { id: GESTOR_ID, nome: 'Gestor', tipo: 'gestor' }];
+    const linhas = lista.map(p => `<tr><td>${esc(p.nome)}${p.tipo && p.tipo !== 'servidor' ? ` <span class="muted small">(${esc((ROTULO_TIPO[p.tipo] || (p.tipo === 'gestor' ? 'fila própria, por etiqueta' : p.tipo)).toLowerCase())})</span>` : ''}${(resumo.fixos || {})[p.id] ? ' <span class="muted small">(lista própria)</span>' : ''}</td>
       <td class="n">${conta('semanal', p.id)}</td><td class="n">${conta('diaria', p.id)}</td>
       <td class="n">${P.filaDe(p.id).filter(l => l.tipo === 'urgente' && !l.concluido).length}</td>
       <td class="n">${st.devolucoes.filter(d => d.para === p.id && !d.concluidaEm).length}</td></tr>`).join('');
@@ -315,8 +325,6 @@
     if (b.error) throw b.error;
     const c = await sb.from('marcas').delete({ count: 'exact' }).lt('em', corte90);
     if (c.error) throw c.error;
-    const d = await sb.from('avisos_gestor').delete({ count: 'exact' }).lt('resolvido_em', corte30);
-    if (d.error) throw d.error;
     toast(`Apagados: ${(a.count || 0) + (b.count || 0)} urgências/devoluções e ${c.count || 0} marcas antigas.`);
     await P.carregar(); render();
   }
@@ -459,6 +467,10 @@
     const etiquetasH = (c.etiquetasFiltro || []).map((x, i) => `<div class="regra so-etiqueta">
       <input type="text" id="cfg-et-${i}" value="${esc(x)}" aria-label="Etiqueta" placeholder="# RPV - 01. Expedir">
       <button class="btn" type="button" data-acao="cfg-remover-etiqueta" data-i="${i}">Remover</button></div>`).join('');
+    const etDirH = (c.etiquetasDiretor || []).map((x, i) => `<div class="regra dir-etiqueta">
+      <input type="text" id="cfg-ed-${i}" value="${esc(x.e)}" aria-label="Etiqueta" placeholder="Etiqueta exatamente como no PJe">
+      <label class="small"><input type="checkbox" id="cfg-edu-${i}"${x.u ? ' checked' : ''}> Urgente</label>
+      <button class="btn" type="button" data-acao="cfg-remover-etdir" data-i="${i}">Remover</button></div>`).join('');
     return `<section class="painel largo">
       <h2>Configuração</h2>
       <p>As mudanças valem para todos assim que você salvar. Urgência e prioridade de cada tarefa ficam na tabela “Tarefas do PJe”. Quem não tiver e-mail cadastrado recebe processos, mas não consegue entrar no painel.</p>
@@ -481,6 +493,13 @@
       <p class="small muted">Só as etiquetas listadas aqui são guardadas, e apenas nos processos de tarefas de Pagamentos. Elas viram o filtro “Etiqueta” na fila e no painel geral. Escreva exatamente como no PJe (ex.: # RPV - 01. Expedir). Depois de incluir ou mudar uma etiqueta, envie o CSV completo de novo para ela passar a valer.</p>
       ${etiquetasH}
       <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-etiqueta">Adicionar etiqueta</button></div>
+      <h3>Fila do Diretor de Secretaria (por etiqueta)</h3>
+      <p class="small muted">Entra na fila do diretor todo processo que tiver pelo menos uma destas etiquetas, em qualquer tarefa ou setor, uma vez só, com a tarefa de chegada mais antiga. Cada processo mostra apenas as etiquetas desta lista que ele tem. As marcadas como “Urgente” colocam o processo em Urgências. Os processos saem da fila quando deixam de ter a etiqueta no CSV novo. Depois de mudar a lista, envie o CSV de novo. Cadastre o diretor em “Pessoas com fila”, com o perfil Diretor de Secretaria.</p>
+      ${etDirH}
+      <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-etdir">Adicionar etiqueta</button></div>
+      <h3>Fila do gestor (por etiqueta)</h3>
+      <p class="small muted">A fila do gestor, no topo desta aba, mostra os processos com esta etiqueta e os que servidores e o diretor enviarem para o gestor. Deixe em branco para usar só os envios.</p>
+      <div class="regra so-etiqueta"><input type="text" id="cfg-etg" value="${esc(c.etiquetaGestor == null ? R.ETIQUETA_GESTOR_PADRAO : c.etiquetaGestor)}" aria-label="Etiqueta da fila do gestor" placeholder="${esc(R.ETIQUETA_GESTOR_PADRAO)}"></div>
       <h3>Exceções por classe ou etiqueta</h3>
       <p class="small muted">Valem antes da divisão do setor, na ordem da lista (a primeira que casar decide). Classe: use a sigla do PJe+R (ex.: ACPCiv|ACIA); etiqueta: o texto completo (ex.: $ Ação civil pública).</p>
       ${regrasH}
@@ -521,6 +540,8 @@
       const resp = val(`cfg-r-resp-${i}`); if (resp != null) r.responsavel = resp;
       const s = val(`cfg-r-setor-${i}`); if (s != null) r.setores = s ? [s] : [];
     });
+    (c.etiquetasDiretor || []).forEach((x, i) => { const e = val(`cfg-ed-${i}`); if (e != null) x.e = e.trim(); const u = document.getElementById(`cfg-edu-${i}`); if (u) x.u = u.checked; });
+    const etg = val('cfg-etg'); if (etg != null) c.etiquetaGestor = etg.trim();
     (c.etiquetasFiltro || []).forEach((x, i) => { const v = val(`cfg-et-${i}`); if (v != null) c.etiquetasFiltro[i] = v.trim(); });
     (c.visoes || []).forEach((v, i) => {
       const tipo = val(`cfg-v-tipo-${i}`); if (tipo) v.tipo = tipo;
@@ -546,6 +567,9 @@
     c.regrasClasse = (c.regrasClasse || []).filter(r => r.padrao && r.responsavel);
     c.visoes = (c.visoes || []).filter(v => v.pessoa && v.nome && v.valor);
     c.etiquetasFiltro = [...new Set((c.etiquetasFiltro || []).filter(Boolean))];
+    const vistosEd = new Set();
+    c.etiquetasDiretor = (c.etiquetasDiretor || []).filter(x => { const k = R.normTexto(x.e); if (!k || vistosEd.has(k)) return false; vistosEd.add(k); return true; }).map(x => ({ e: x.e, u: !!x.u }));
+    if (c.etiquetaGestor == null) c.etiquetaGestor = R.ETIQUETA_GESTOR_PADRAO;
     const desejados = [];
     const vistos = new Set();
     const checa = (nome, email, rotulo) => {
@@ -599,11 +623,6 @@
     try {
       if (acao.startsWith('tf-')) await acaoTarefas(acao, alvo);
       else if (acao === 'gravar-importacao') await gravarImportacao();
-      else if (acao === 'resolver-aviso') {
-        const { error } = await st.sb.from('avisos_gestor').update({ resolvido_em: iso(Date.now()), resolvido_por: st.email }).eq('id', Number(alvo.dataset.id));
-        if (error) throw error;
-        toast('Aviso marcado como resolvido.'); await P.carregar(); render();
-      }
       else if (acao === 'cancelar-importacao') { st.importacao = null; render(); }
       else if (acao === 'pedir-remocao') { st.confirmarRemocao = Number(alvo.dataset.id); render(); }
       else if (acao === 'remover-urgencia') {
@@ -631,6 +650,8 @@
       else if (acao === 'cfg-remover-outro') { st.rascOutros.splice(Number(alvo.dataset.i), 1); render(); }
       else if (acao === 'cfg-add-regra') { c.regrasClasse = (c.regrasClasse || []).concat({ campo: 'classe', padrao: '', responsavel: '', setores: [] }); render(); }
       else if (acao === 'cfg-add-visao') { c.visoes = (c.visoes || []).concat({ pessoa: '', nome: '', tipo: 'setor', valor: 'triagem' }); render(); }
+      else if (acao === 'cfg-add-etdir') { c.etiquetasDiretor = (c.etiquetasDiretor || []).concat({ e: '', u: false }); render(); }
+      else if (acao === 'cfg-remover-etdir') { c.etiquetasDiretor.splice(Number(alvo.dataset.i), 1); render(); }
       else if (acao === 'cfg-add-etiqueta') { c.etiquetasFiltro = (c.etiquetasFiltro || []).concat(''); render(); }
       else if (acao === 'cfg-remover-etiqueta') { c.etiquetasFiltro.splice(Number(alvo.dataset.i), 1); render(); }
       else if (acao === 'cfg-remover-visao') { c.visoes.splice(Number(alvo.dataset.i), 1); render(); }

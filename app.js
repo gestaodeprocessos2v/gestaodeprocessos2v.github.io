@@ -10,13 +10,14 @@
   ];
   const NOME_SETOR = Object.fromEntries(SETORES);
   // Tipos de pessoa com fila própria. Estagiários e residentes podem devolver; servidores podem enviar.
-  const TIPOS = [['servidor', 'Servidores', 'Servidor'], ['estagiario', 'Estagiários', 'Estagiário'], ['residente', 'Residentes', 'Residente']];
+  const TIPOS = [['servidor', 'Servidores', 'Servidor'], ['estagiario', 'Estagiários', 'Estagiário'], ['residente', 'Residentes', 'Residente'], ['diretor', 'Diretor de Secretaria', 'Diretor de Secretaria']];
+  const GESTOR_ID = R.GESTOR_ID;
   const ROTULO_TIPO = Object.fromEntries(TIPOS.map(t => [t[0], t[2]]));
   const PERFIS = {
     gestor: 'Gestor', servidor: 'Servidor', estagiario: 'Estagiário', residente: 'Residente',
-    magistrado: 'Magistrado', diretor: 'Diretor de Secretaria', visitante: 'Visitante',
+    magistrado: 'Magistrado(a)', diretor: 'Diretor de Secretaria', visitante: 'Visitante',
   };
-  const COM_FILA = ['servidor', 'estagiario', 'residente'];
+  const COM_FILA = ['servidor', 'estagiario', 'residente', 'diretor'];
   const DIA = 86400000;
   const LIMITE_NORMAL = 300;
 
@@ -27,13 +28,15 @@
     tarefas: [], mapaTarefas: new Map(), tarefasEm: null, rascTarefas: null, tarefasAlteradas: false,
     filtroTabela: { busca: '', painel: '' },
     resumo: null,
-    filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [], avisos: [],
+    filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
     ver: 0, cache: { ver: -1, m: {} },
     aba: 'fila', verComo: '',
     vis: {
       fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '' },
       geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '' },
+      gestor: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '' },
     },
+    gOculta: false, gBase: 0, duAberta: false, novaUrgDir: { numero: '', setor: 'secretaria', responsavel: '', motivo: '' },
     anotando: null, notaRascunho: '', devolvendo: null, devMotivo: '', modal: null,
     ultimaVisita: 0, importacao: null, gravando: false, confirmarRemocao: null,
     novaUrgencia: null, novaPessoa: '', rascOutros: null,
@@ -57,20 +60,28 @@
   }
 
   const pessoas = () => (st.config && st.config.pessoas) || [];
-  const nomes = () => Object.fromEntries(pessoas().map(p => [p.id, p.nome]));
+  const nomes = () => Object.assign({ [GESTOR_ID]: 'Gestor' }, Object.fromEntries(pessoas().map(p => [p.id, p.nome])));
   const nomeDe = id => nomes()[id] || id || '—';
-  const tipoDe = id => (pessoas().find(p => p.id === id) || {}).tipo;
+  const tipoDe = id => id === GESTOR_ID ? 'gestor' : (pessoas().find(p => p.id === id) || {}).tipo;
+  // Diretor e gestor têm fila própria, escolhida só por etiquetas, em paralelo com a dos servidores.
+  const ehEspecial = id => id === GESTOR_ID || tipoDe(id) === 'diretor';
   const temFila = () => COM_FILA.includes(st.perfil);
   // "Ver como": o gestor abre, só para leitura, a fila de outra pessoa.
   const pessoaAtiva = () => st.verComo || st.pessoa;
   const tipoAtivo = () => st.verComo ? tipoDe(st.verComo) : st.perfil;
-  const podeDevolver = () => tipoAtivo() === 'estagiario' || tipoAtivo() === 'residente';
-  const podeEnviar = () => tipoAtivo() === 'servidor';
+  const podeEnviar = modo => modo === 'gestor' || tipoAtivo() === 'servidor' || tipoAtivo() === 'diretor';
+  // Estagiário e residente devolvem processos da lista; o diretor devolve urgências recebidas.
+  const podeDevolver = l => (['estagiario', 'residente'].includes(tipoAtivo()) && l.origem === 'lista') || (tipoAtivo() === 'diretor' && l.origem === 'urgencia');
+  const donoDe = modo => (modo === 'gestor' ? st.pessoa : pessoaAtiva());
   const opcoesTipo = sel => TIPOS.map(([id, , rot]) => `<option value="${id}"${(sel || 'servidor') === id ? ' selected' : ''}>${rot}</option>`).join('');
 
-  function opcoesPessoas(sel, vazio, excluir) {
+  // O diretor só entra nas listas em que o chamador pede (inc.diretor); o gestor, só com inc.gestor.
+  function opcoesPessoas(sel, vazio, excluir, inc) {
+    inc = inc || {};
     let h = vazio != null ? `<option value="">${esc(vazio)}</option>` : '';
+    if (inc.gestor && excluir !== GESTOR_ID) h += `<option value="${GESTOR_ID}"${sel === GESTOR_ID ? ' selected' : ''}>Gestor</option>`;
     for (const [tipo, plural] of TIPOS) {
+      if (tipo === 'diretor' && !inc.diretor) continue;
       const ps = pessoas().filter(p => (p.tipo || 'servidor') === tipo && p.id !== excluir);
       if (!ps.length) continue;
       h += `<optgroup label="${plural}">` + ps.map(p => `<option value="${esc(p.id)}"${p.id === sel ? ' selected' : ''}>${esc(p.nome)}</option>`).join('') + '</optgroup>';
@@ -124,7 +135,7 @@
   function reiniciarEstado() {
     Object.assign(st, {
       email: '', perfil: '', nome: '', pessoa: '', config: null, rascunho: null, tarefas: [], mapaTarefas: new Map(), rascTarefas: null,
-      tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [], avisos: [],
+      tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
       anotando: null, devolvendo: null, modal: null, importacao: null,
     });
     st.ver++;
@@ -144,7 +155,7 @@
       const { data, error } = await st.sb.from('acesso').select('nome,perfil,pessoa_id').eq('email', st.email).maybeSingle();
       if (error) throw error;
       if (!data) { st.estado = 'negado'; render(); registrarNegado(st.email); return; }
-      st.nome = data.nome; st.perfil = data.perfil; st.pessoa = data.pessoa_id || '';
+      st.nome = data.nome; st.perfil = data.perfil; st.pessoa = data.perfil === 'gestor' ? GESTOR_ID : (data.pessoa_id || '');
       const visto = Number(ler('fila.visita.' + st.email));
       st.ultimaVisita = visto || Date.now() - DIA;
       guardar('fila.visita.' + st.email, String(Date.now()));
@@ -170,7 +181,7 @@
     const sb = st.sb;
     const desdeConcl = iso(Date.now() - 35 * DIA), desdeMarcas = iso(Date.now() - 95 * DIA);
     const gestor = st.perfil === 'gestor';
-    const [cfg, filas, urg, dev, marcas, notas, acessos, negados, avisos] = await Promise.all([
+    const [cfg, filas, urg, dev, marcas, notas, acessos, negados] = await Promise.all([
       sb.from('config').select('chave,valor,atualizado_em'),
       todas((a, b) => sb.from('filas').select('lista,pessoa,itens,importado_em').order('lista').order('pessoa').range(a, b)),
       todas((a, b) => sb.from('urgencias').select('*').or(`concluida_em.is.null,concluida_em.gte.${desdeConcl}`).order('id').range(a, b)),
@@ -179,7 +190,6 @@
       todas((a, b) => sb.from('notas').select('pessoa,numero,texto,em').order('pessoa').order('numero').range(a, b)),
       gestor ? todas((a, b) => sb.from('acesso').select('email,nome,perfil,pessoa_id').order('email').range(a, b)) : Promise.resolve([]),
       gestor ? sb.from('acessos_negados').select('email,em').order('em', { ascending: false }).limit(200) : Promise.resolve({ data: [] }),
-      gestor ? todas((a, b) => sb.from('avisos_gestor').select('*').or(`resolvido_em.is.null,resolvido_em.gte.${desdeConcl}`).order('id').range(a, b)) : Promise.resolve([]),
     ]);
     if (cfg.error) throw cfg.error;
     if (negados.error) throw negados.error;
@@ -203,7 +213,6 @@
     for (const n of notas) (st.notas[n.pessoa] = st.notas[n.pessoa] || {})[n.numero] = { texto: n.texto, em: ms(n.em) };
     st.acessos = acessos;
     st.negados = (negados.data || []).map(r => ({ email: r.email, em: ms(r.em) }));
-    st.avisos = avisos.map(r => ({ id: r.id, numero: r.numero, item: r.item || {}, de: r.de, motivo: r.motivo || '', em: ms(r.em), resolvidoEm: ms(r.resolvido_em), resolvidoPor: r.resolvido_por }));
     if (!st.rascOutros) st.rascOutros = null;
     st.ver++;
   }
@@ -225,7 +234,7 @@
       itens,
       urgencias: st.urgencias.filter(u => u.via !== 'lista' && u.responsavel === p && (!u.concluidaEm || u.concluidaEm > umMes)),
       devolucoes: st.devolucoes.filter(d => d.para === p && (!d.concluidaEm || d.concluidaEm > umMes)),
-      marcas: Object.fromEntries(Object.entries(st.marcas[p] || {}).filter(([, m]) => !m.desfeito)), tarefas: st.mapaTarefas, ultimaVisita: st.ultimaVisita,
+      marcas: Object.fromEntries(Object.entries(st.marcas[p] || {}).filter(([, m]) => !m.desfeito)), tarefas: ehEspecial(p) ? new Map() : st.mapaTarefas, ultimaVisita: st.ultimaVisita,
     });
     // Concluídos que já saíram da lista continuam aparecendo (só em "Mostrar concluídos"), pelas marcas guardadas.
     const marcasP = Object.fromEntries(Object.entries(st.marcas[p] || {}).filter(([, m]) => !m.desfeito));
@@ -274,7 +283,7 @@
   const aplicarVisao = (modo, ls) => { const v = visaoAtiva(modo); return v ? ls.filter(l => passaVisao(v, l)) : ls; };
 
   function linhasGeral(pessoa) {
-    const ids = pessoa ? [pessoa] : pessoas().map(p => p.id);
+    const ids = pessoa ? [pessoa] : pessoas().filter(p => p.tipo !== 'diretor').map(p => p.id);
     const out = [];
     for (const id of ids) for (const l of filaDe(id)) out.push(l);
     // Todos os servidores: ordem geral (grupo e antiguidade), independente do servidor.
@@ -297,9 +306,18 @@
     for (const a of ['fila', 'geral', 'gestao']) if (a !== st.aba) $('#v-' + a).innerHTML = '';
     if (st.aba === 'fila') renderLista('fila');
     else if (st.aba === 'geral') renderLista('geral');
-    else if (window.PAINEL.renderGestao) window.PAINEL.renderGestao();
+    else if (window.PAINEL.renderGestao) {
+      const foco = document.activeElement && document.activeElement.id;
+      const pos = foco === 'busca' ? document.activeElement.selectionStart : null;
+      window.PAINEL.renderGestao();
+      if (foco === 'busca') { const b = $('#busca'); if (b) { b.focus(); if (pos != null) b.setSelectionRange(pos, pos); } }
+      if (foco === 'nota-texto' || foco === 'dev-motivo') { const m = document.getElementById(foco); if (m) { m.focus(); m.setSelectionRange(m.value.length, m.value.length); } }
+    }
     renderModal();
   }
+
+  // Urgências abertas na fila do gestor (processos que servidores, diretor ou o próprio gestor enviaram a ele).
+  const urgenciasDoGestor = () => st.perfil === 'gestor' ? filaDe(GESTOR_ID).filter(l => l.origem === 'urgencia' && !l.concluido).length : 0;
 
   function renderTopo() {
     const ok = st.estado === 'ok';
@@ -310,7 +328,7 @@
     const mostrarSel = ok && st.perfil === 'gestor' && pessoas().length > 0;
     sel.hidden = !mostrarSel;
     if (mostrarSel) {
-      const h = opcoesPessoas(st.verComo, 'Ver a fila como…');
+      const h = opcoesPessoas(st.verComo, 'Ver a fila como…', null, { diretor: true });
       if (sel.dataset.h !== h) { sel.innerHTML = h; sel.dataset.h = h; }
       sel.value = st.verComo;
     }
@@ -319,18 +337,18 @@
     const nav = $('#abas');
     nav.hidden = abas.length < 2;
     const rot = { fila: 'Fila', geral: 'Geral', gestao: 'Gestão' };
-    const nAvisos = st.perfil === 'gestor' ? st.avisos.filter(x => !x.resolvidoEm).length : 0;
+    const nAvisos = urgenciasDoGestor();
     const h = abas.map(a => `<button class="aba" role="tab" id="aba-${a}" aria-selected="${a === st.aba}" data-aba="${a}">${rot[a]}${a === 'gestao' && nAvisos ? ` <span class="contagem">${nAvisos}</span>` : ''}</button>`).join('');
     if (nav.dataset.h !== h) { nav.innerHTML = h; nav.dataset.h = h; }
     for (const b of nav.querySelectorAll('.aba')) b.setAttribute('aria-selected', String(b.dataset.aba === st.aba));
   }
 
   function renderAvisos() {
-    const abertos = st.perfil === 'gestor' ? st.avisos.filter(x => !x.resolvidoEm).length : 0;
+    const abertos = urgenciasDoGestor();
     $('#avisos').innerHTML = st.estado === 'ok' && st.verComo
       ? `<div class="aviso novo"><b>Visualização somente leitura.</b> Você está vendo a fila de ${esc(nomeDe(st.verComo))} como ela vê. Nada é gravado. <button class="btn" type="button" data-acao="sair-ver-como">Voltar à minha visão</button></div>`
       : st.estado === 'ok' && abertos
-        ? `<div class="aviso novo"><b>${abertos} ${abertos === 1 ? 'processo enviado' : 'processos enviados'} por servidores para você verificar.</b> <button class="btn" type="button" data-acao="abrir-avisos">Ver na aba Gestão</button></div>`
+        ? `<div class="aviso novo"><b>${abertos} ${abertos === 1 ? 'processo enviado' : 'processos enviados'} para você verificar.</b> <button class="btn" type="button" data-acao="abrir-avisos">Ver na aba Gestão</button></div>`
         : '';
   }
 
@@ -378,8 +396,10 @@
     }
     if (l.origem === 'devolucao') nota = `<div class="nota"><b>Devolvido por ${esc(nomeDe(l.de))}</b> em ${dataHoraBR(l.criadaEm)}${l.motivo ? ': ' + esc(l.motivo) : ''}</div>`;
     const resp = geral ? `<div class="sub sub-resp">Responsável: ${esc(nomeDe(l.dono))}</div>` : '';
+    // Fila do diretor: mostra só as etiquetas da lista dele que o processo tem.
+    const etqHTML = l.ed && l.ed.length ? `<div class="etiquetas" aria-label="Etiquetas do filtro">${l.ed.map(x => `<span class="chip">${esc(x)}</span>`).join('')}</div>` : '';
     let acoes = '', anot, form = '';
-    const dis = st.verComo ? ' disabled title="Visualização somente leitura"' : '';
+    const dis = st.verComo && modo !== 'gestor' ? ' disabled title="Visualização somente leitura"' : '';
     if (geral) {
       anot = l.anot ? `<span class="anot-texto">${esc(l.anot)}</span><span class="quando">${dataHoraBR(l.anotEm)}</span>` : '<span class="muted">—</span>';
     } else {
@@ -387,8 +407,8 @@
         acoes = `<button class="btn" data-acao="desfazer"${dis}>Desfazer</button>`;
       } else {
         acoes = `<button class="btn feito" data-acao="concluir"${dis}>Marcar como concluído</button>`;
-        if (podeEnviar()) acoes += `<button class="btn" data-acao="enviar"${dis}>Enviar para outra pessoa</button>`;
-        if (l.origem === 'lista' && podeDevolver()) acoes += `<button class="btn" data-acao="devolver"${dis}>Devolver</button>`;
+        if (podeEnviar(modo)) acoes += `<button class="btn" data-acao="enviar"${dis}>Enviar para outra pessoa</button>`;
+        if (podeDevolver(l) && modo !== 'gestor') acoes += `<button class="btn" data-acao="devolver"${dis}>Devolver</button>`;
       }
       if (st.anotando === l.chave) {
         anot = `<form class="anotar-form" data-form="anotar">
@@ -403,13 +423,14 @@
         anot = `<button class="btn discreto" data-acao="anotar"${dis}>+ Anotar</button>`;
       }
       if (st.devolvendo === l.chave) {
-        const sugerido = l.resp || R.atribuir(l, l.s, st.config || {}).pessoa || '';
+        const doDiretor = tipoAtivo() === 'diretor';
+        const sugerido = doDiretor ? (l.via === 'envio' && l.de ? l.de : GESTOR_ID) : (l.resp || R.atribuir(l, l.s, st.config || {}).pessoa || '');
         form = `<form class="devolver-form" data-form="devolver">
           <label class="small" for="dev-motivo">Motivo</label>
           <input type="text" id="dev-motivo" placeholder="Ex.: precisa de despacho, não sei elaborar o ofício" maxlength="300" value="${esc(st.devMotivo || '')}">
           <label class="small" for="dev-para">Para</label>
-          <select id="dev-para">${opcoesPessoas(sugerido, 'Escolha o servidor')}</select>
-          <button class="btn primario" type="submit">Devolver ao servidor</button>
+          <select id="dev-para">${opcoesPessoas(sugerido, 'Escolha quem recebe', null, { gestor: doDiretor })}</select>
+          <button class="btn primario" type="submit">${doDiretor ? 'Devolver' : 'Devolver ao servidor'}</button>
           <button class="btn" type="button" data-acao="cancelar-devolucao">Cancelar</button>
         </form>`;
       }
@@ -419,7 +440,7 @@
       <div class="c-num">
         <button class="num" data-acao="copiar" data-n="${esc(l.n)}" title="Copiar número">${numeroHTML(l.n)}</button>
         ${selos.length ? `<div class="selos">${selos.join('')}</div>` : ''}
-        ${nota}${resp}
+        ${nota}${resp}${etqHTML}
       </div>
       <div class="c-classe"><span class="rot-m">Classe</span>${esc(l.c || '—')}</div>
       <div class="c-tarefa"><span class="rot-m">Tarefa</span>${esc(l.t || '—')}</div>
@@ -432,6 +453,37 @@
   }
 
   const CABECALHO_LINHAS = `<li class="linha cab" aria-hidden="true"><div></div><div>Número do processo</div><div>Classe</div><div>Tarefa</div><div>Cargo judicial</div><div>Data de chegada</div><div>Anotação</div><div>Ações</div></li>`;
+
+  // Seções da lista (Urgências, Devolvidos, Prioritárias, Fila). Concluídos, quando exibidos, ficam juntos no topo de cada seção.
+  function htmlGrupos(modo, visiveis, f) {
+    const geral = modo === 'geral';
+    let h = '';
+    const grupos = [
+      ['urgente', 'Urgências', 'Por antiguidade na tarefa'],
+      ['devolvido', 'Devolvidos', 'Processos devolvidos para você'],
+      ['prioritaria', 'Tarefas prioritárias', 'Por antiguidade na tarefa'],
+      ['normal', 'Fila por antiguidade', geral ? 'Por antiguidade na tarefa' : 'Do mais antigo para o mais recente na tarefa'],
+    ];
+    for (const [tipo, titulo, dica] of grupos) {
+      let ls = visiveis.filter(l => l.tipo === tipo);
+      ls = [...ls.filter(l => l.concluido), ...ls.filter(l => !l.concluido)];
+      if (!ls.length) continue;
+      const total = ls.length;
+      if (tipo === 'normal' && ls.length > f.limite) ls = ls.slice(0, f.limite);
+      h += `<section class="grupo g-${tipo}" id="grupo-${modo}-${tipo}" tabindex="-1"><div class="grupo-cab"><span class="ponto"></span><h2>${titulo}</h2><span class="contagem">${total}</span><p>${dica}</p><button type="button" class="btn discreto topo-link" data-acao="topo">↑ Voltar ao topo</button></div><ol class="linhas">${CABECALHO_LINHAS}${ls.map(l => linhaHTML(l, modo)).join('')}</ol>`;
+      if (ls.length < total) h += `<button class="btn mais" data-acao="mais">Mostrar mais ${Math.min(LIMITE_NORMAL, total - ls.length)} de ${total - ls.length} restantes</button>`;
+      h += '</section>';
+    }
+    return h;
+  }
+
+  // Filtro de etiqueta: fila do diretor usa as etiquetas dele ("ed"); as demais, as de Pagamentos ("et").
+  function etConfig(modo) {
+    const alvo = modo === 'geral' ? st.vis.geral.pessoa : donoDe(modo);
+    const dir = !!alvo && tipoDe(alvo) === 'diretor';
+    const cfg = st.config || {};
+    return { campo: dir ? 'ed' : 'et', lista: dir ? (cfg.etiquetasDiretor || []).map(x => x.e).filter(Boolean) : (cfg.etiquetasFiltro || []), especial: !!alvo && ehEspecial(alvo) };
+  }
 
   function renderLista(modo) {
     const v = $('#v-' + modo);
@@ -446,14 +498,15 @@
     const conta = t => abertas.filter(l => l.tipo === t).length;
     const novos = geral ? 0 : abertas.filter(l => l.novo).length;
     const tarefas = [...new Set(todas.map(l => l.t).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    const etiquetas = ((st.config.etiquetasFiltro) || []).filter(x => todas.some(l => (l.et || []).includes(x)));
+    const { campo: campoEt, lista: listaEt, especial } = etConfig(modo);
+    const etiquetas = listaEt.filter(x => todas.some(l => (l[campoEt] || []).includes(x)));
     if (f.etiqueta && !etiquetas.includes(f.etiqueta)) f.etiqueta = '';
     const busca = R.normTexto(f.busca);
     const buscaDig = R.soDigitos(f.busca);
     const visiveis = todas.filter(l => {
       if (l.concluido && !f.concl) return false;
       if (f.tarefa && l.t !== f.tarefa) return false;
-      if (f.etiqueta && !(l.et || []).includes(f.etiqueta)) return false;
+      if (f.etiqueta && !(l[campoEt] || []).includes(f.etiqueta)) return false;
       if (!busca) return true;
       if (buscaDig.length >= 4 && R.soDigitos(l.n).includes(buscaDig)) return true;
       return R.normTexto([l.n, l.c, l.t, l.cg, l.motivo, l.anot, geral ? nomeDe(l.dono) : ''].join(' ')).includes(busca);
@@ -464,20 +517,21 @@
 
     let h = '';
     if (novos) h += `<div class="aviso novo"><b>${novos} ${novos === 1 ? 'processo novo' : 'processos novos'}</b> em urgências ou tarefas prioritárias desde a sua última visita (${dataHoraBR(st.ultimaVisita)}).</div>`;
+    if (modo === 'fila' && st.perfil === 'diretor' && !st.verComo) h += htmlUrgenciaDiretor();
     h += `<div class="contagens">
       <button type="button" class="tile urgente" data-acao="ir" data-tipo="urgente" title="Ir para esta lista"><span>Urgentes</span><b>${conta('urgente')}</b></button>
-      <button type="button" class="tile devolvido" data-acao="ir" data-tipo="devolvido" title="Ir para esta lista"><span>Devolvidos</span><b>${conta('devolvido')}</b></button>
-      <button type="button" class="tile prioritaria" data-acao="ir" data-tipo="prioritaria" title="Ir para esta lista"><span>Prioritárias</span><b>${conta('prioritaria')}</b></button>
+      ${especial ? '' : `<button type="button" class="tile devolvido" data-acao="ir" data-tipo="devolvido" title="Ir para esta lista"><span>Devolvidos</span><b>${conta('devolvido')}</b></button>
+      <button type="button" class="tile prioritaria" data-acao="ir" data-tipo="prioritaria" title="Ir para esta lista"><span>Prioritárias</span><b>${conta('prioritaria')}</b></button>`}
       <button type="button" class="tile" data-acao="ir" data-tipo="normal" title="Ir para esta lista"><span>Na fila</span><b>${conta('normal')}</b></button>
       <div class="tile concluido"><span>Concluídos</span><b>${concluidos}</b></div>
     </div>
     <p class="atualizacao">Lista completa: ${ultimaLista ? dataHoraBR(ultimaLista) : 'ainda não enviada'} · Atualização diária: ${ultimoDiario ? dataHoraBR(ultimoDiario) : 'ainda não enviada'} · Clique no número para copiar.</p>
     <div class="filtros">
       <input type="search" id="busca" placeholder="Buscar por número, classe, tarefa, cargo ou anotação" value="${esc(f.busca)}" aria-label="Buscar">
-      ${geral && st.perfil !== 'visitante' ? `<select id="filtro-pessoa" aria-label="Filtrar por servidor">${opcoesPessoas(f.pessoa, 'Todos os servidores')}</select>` : ''}
+      ${geral && st.perfil !== 'visitante' ? `<select id="filtro-pessoa" aria-label="Filtrar por servidor">${opcoesPessoas(f.pessoa, 'Todos os servidores', null, { diretor: true })}</select>` : ''}
       ${(() => { const vs = visoesDe(pessoaDaVisao(modo)); return vs.length ? `<select id="filtro-visao" aria-label="Mostrar"><option value="">Painel completo</option>${vs.map(v => `<option value="${esc(idVisao(v))}"${idVisao(v) === f.visao ? ' selected' : ''}>${esc(v.nome)}</option>`).join('')}</select>` : ''; })()}
       <select id="filtro-tarefa" aria-label="Filtrar por tarefa"><option value="">Todas as tarefas</option>${tarefas.map(t => `<option${t === f.tarefa ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>
-      ${etiquetas.length ? `<select id="filtro-etiqueta" aria-label="Filtrar por etiqueta"><option value="">Todas as etiquetas</option>${etiquetas.map(x => `<option value="${esc(x)}"${x === f.etiqueta ? ' selected' : ''}>${esc(x)} (${todas.filter(l => !l.concluido && (l.et || []).includes(x)).length})</option>`).join('')}</select>` : ''}
+      ${etiquetas.length ? `<select id="filtro-etiqueta" aria-label="Filtrar por etiqueta"><option value="">Todas as etiquetas</option>${etiquetas.map(x => `<option value="${esc(x)}"${x === f.etiqueta ? ' selected' : ''}>${esc(x)} (${todas.filter(l => !l.concluido && (l[campoEt] || []).includes(x)).length})</option>`).join('')}</select>` : ''}
       <label class="small"><input type="checkbox" id="mostrar-concluidos"${f.concl ? ' checked' : ''}> Mostrar concluídos</label>
       <div class="direita"><button class="btn" data-acao="baixar">Baixar CSV</button></div>
     </div>`;
@@ -486,34 +540,90 @@
       h += `<div class="vazio"><h2>Nenhum processo ${geral ? 'no painel' : 'na sua fila'}</h2><p>A fila é preenchida quando o gestor envia o relatório do PJe+R. Urgências e devoluções aparecem aqui assim que forem incluídas.</p></div>`;
       v.innerHTML = h; return;
     }
-    const grupos = [
-      ['urgente', 'Urgências', 'Por antiguidade na tarefa'],
-      ['devolvido', 'Devolvidos por estagiários e residentes', 'Processos que não conseguiram tratar'],
-      ['prioritaria', 'Tarefas prioritárias', 'Por antiguidade na tarefa'],
-      ['normal', 'Fila por antiguidade', geral ? 'Por antiguidade na tarefa' : 'Do mais antigo para o mais recente na tarefa'],
-    ];
-    for (const [tipo, titulo, dica] of grupos) {
-      let ls = visiveis.filter(l => l.tipo === tipo);
-      // concluídos (quando exibidos) ficam juntos no topo da seção, na mesma ordem de antiguidade; ao desfazer, voltam para o meio dos pendentes
-      ls = [...ls.filter(l => l.concluido), ...ls.filter(l => !l.concluido)];
-      if (!ls.length) continue;
-      const total = ls.length;
-      if (tipo === 'normal' && ls.length > f.limite) ls = ls.slice(0, f.limite);
-      h += `<section class="grupo g-${tipo}" id="grupo-${modo}-${tipo}" tabindex="-1"><div class="grupo-cab"><span class="ponto"></span><h2>${titulo}</h2><span class="contagem">${total}</span><p>${dica}</p><button type="button" class="btn discreto topo-link" data-acao="topo">↑ Voltar ao topo</button></div><ol class="linhas">${CABECALHO_LINHAS}${ls.map(l => linhaHTML(l, modo)).join('')}</ol>`;
-      if (ls.length < total) h += `<button class="btn mais" data-acao="mais">Mostrar mais ${Math.min(LIMITE_NORMAL, total - ls.length)} de ${total - ls.length} restantes</button>`;
-      h += '</section>';
-    }
+    h += htmlGrupos(modo, visiveis, f);
     if (!visiveis.length) h += `<div class="vazio"><h2>Nenhum processo com esse filtro</h2><p>Limpe a busca ou escolha outra tarefa.</p></div>`;
     const foco = document.activeElement && document.activeElement.id;
     const pos = foco === 'busca' ? document.activeElement.selectionStart : null;
     v.innerHTML = h;
     if (foco === 'busca') { const b = $('#busca'); b.focus(); if (pos != null) b.setSelectionRange(pos, pos); }
-    if (foco === 'dev-motivo' || foco === 'nota-texto') { const m = document.getElementById(foco); if (m) { m.focus(); m.setSelectionRange(m.value.length, m.value.length); } }
+    if (['dev-motivo', 'nota-texto', 'du-numero', 'du-motivo'].includes(foco)) { const m = document.getElementById(foco); if (m) { m.focus(); m.setSelectionRange(m.value.length, m.value.length); } }
+  }
+
+  // ---------- diretor: incluir urgência para outra pessoa (mesmo formato do quadro do gestor) ----------
+  function htmlUrgenciaDiretor() {
+    const u = st.novaUrgDir, setor = u.setor || 'secretaria';
+    const paraGestor = setor === GESTOR_ID;
+    const doSetor = paraGestor ? [] : R.pessoasDoSetor(setor, st.config || {});
+    const respOpc = doSetor.length
+      ? `<option value="">Escolha</option>` + doSetor.map(id => `<option value="${esc(id)}"${id === u.responsavel ? ' selected' : ''}>${esc(nomeDe(id))}</option>`).join('')
+      : `<option value="">Nenhuma pessoa atende este setor</option>`;
+    const form = st.duAberta ? `<form class="campos" data-form="urgencia-diretor">
+        <p class="small muted">A urgência vai para o topo da fila do responsável e fica lá até ele marcar como concluída.</p>
+        <label class="campo"><span>Número do processo</span><input type="text" id="du-numero" class="mono" inputmode="numeric" placeholder="0000000-00.0000.0.00.0000" value="${esc(u.numero)}" required></label>
+        <label class="campo"><span>Setor</span><select id="du-setor">${SETORES.map(([id, n]) => `<option value="${id}"${id === setor ? ' selected' : ''}>${n}</option>`).join('')}<option value="${GESTOR_ID}"${paraGestor ? ' selected' : ''}>Gestor</option></select></label>
+        ${paraGestor ? '' : `<label class="campo"><span>Responsável</span><select id="du-resp" required>${respOpc}</select></label>`}
+        <label class="campo"><span>Motivo</span><input type="text" id="du-motivo" maxlength="300" placeholder="Ex.: pedido do juiz, assunto da sua área" value="${esc(u.motivo)}"></label>
+        <div class="linha-botoes"><button class="btn primario" type="submit">Incluir urgência</button><button class="btn" type="button" data-acao="du-abrir">Fechar</button></div>
+      </form>` : '';
+    return `<section class="painel incluir-urg-dir"><div class="linha-botoes"><b>Incluir urgência para outra pessoa</b>${st.duAberta ? '' : '<button class="btn" type="button" data-acao="du-abrir">Incluir urgência</button>'}</div>${form}</section>`;
+  }
+
+  function sugerirDu() {
+    const u = st.novaUrgDir;
+    const doSetor = u.setor === GESTOR_ID ? [] : R.pessoasDoSetor(u.setor, st.config || {});
+    if (!doSetor.includes(u.responsavel)) u.responsavel = doSetor.length === 1 ? doSetor[0] : '';
+    if (R.soDigitos(u.numero).length >= 7 && doSetor.length) {
+      const x = R.atribuir({ n: u.numero }, u.setor, st.config || {});
+      if (x.pessoa && doSetor.includes(x.pessoa)) u.responsavel = x.pessoa;
+    }
+  }
+
+  async function incluirUrgenciaDiretor() {
+    const u = st.novaUrgDir, numero = R.soDigitos(u.numero), setor = u.setor || 'secretaria';
+    const responsavel = setor === GESTOR_ID ? GESTOR_ID : u.responsavel;
+    if (numero.length !== 20) { toast('O número do processo deve ter 20 dígitos (padrão CNJ).'); return; }
+    if (!responsavel) { toast('Escolha o responsável.'); return; }
+    if (setor !== GESTOR_ID && !R.pessoasDoSetor(setor, st.config || {}).includes(responsavel)) { toast('Esse responsável não atende o setor escolhido.'); return; }
+    const { error } = await st.sb.from('urgencias').insert({
+      numero, responsavel, origem: 'envio', remetente: st.pessoa, motivo: (u.motivo || '').trim() || null,
+      item: setor === GESTOR_ID ? {} : { s: setor }, criada_por: st.email,
+    });
+    if (error) { if (error.code === '23505') { toast('Esse processo já está como urgência aberta para essa pessoa.'); return; } throw error; }
+    st.novaUrgDir = { numero: '', setor, responsavel: '', motivo: '' };
+    toast('Urgência incluída para ' + nomeDe(responsavel) + '.');
+    await carregar(); render();
+  }
+
+  // ---------- gestor: fila própria no topo da aba Gestão ----------
+  function htmlGestorFila() {
+    if (st.perfil !== 'gestor' || !st.config) return '';
+    const f = st.vis.gestor;
+    const todas = filaDe(GESTOR_ID);
+    const abertas = todas.filter(l => !l.concluido);
+    const nUrg = abertas.filter(l => l.tipo === 'urgente').length, nFila = abertas.length - nUrg;
+    const etiqueta = st.config.etiquetaGestor == null ? R.ETIQUETA_GESTOR_PADRAO : st.config.etiquetaGestor;
+    const novo = st.gOculta && nUrg > st.gBase;
+    const cab = `<div class="gestor-cab"><h2>Fila do gestor</h2><span class="contagem">${nUrg} ${nUrg === 1 ? 'urgência' : 'urgências'} · ${nFila} na fila</span>${novo ? '<span class="selo urgente">Novo processo enviado</span>' : ''}<button class="btn" type="button" data-acao="gestor-ocultar">${st.gOculta ? 'Mostrar' : 'Ocultar'}</button></div>`;
+    if (st.gOculta) return `<div class="gestor-fila oculta" id="gestor-fila">${cab}</div>`;
+    const busca = R.normTexto(f.busca), buscaDig = R.soDigitos(f.busca);
+    const visiveis = todas.filter(l => {
+      if (l.concluido && !f.concl) return false;
+      if (!busca) return true;
+      if (buscaDig.length >= 4 && R.soDigitos(l.n).includes(buscaDig)) return true;
+      return R.normTexto([l.n, l.c, l.t, l.cg, l.motivo, l.anot].join(' ')).includes(busca);
+    });
+    let h = `<div class="gestor-fila" id="gestor-fila">${cab}
+      <p class="small muted">Processos com a etiqueta “${esc(etiqueta)}” e os que servidores, o diretor ou você enviaram para o gestor. Por antiguidade na tarefa.</p>
+      <div class="filtros dentro"><input type="search" id="busca" placeholder="Buscar por número, classe, tarefa, cargo ou anotação" value="${esc(f.busca)}" aria-label="Buscar na fila do gestor">
+      <label class="small"><input type="checkbox" id="mostrar-concluidos"${f.concl ? ' checked' : ''}> Mostrar concluídos</label></div>`;
+    h += todas.length ? htmlGrupos('gestor', visiveis, f) : '<div class="vazio"><p>Nenhum processo na fila do gestor.</p></div>';
+    if (todas.length && !visiveis.length) h += '<div class="vazio"><p>Nenhum processo com esse filtro.</p></div>';
+    return h + '</div>';
   }
 
   // ---------- gravações da fila ----------
   // Guarda junto os dados do processo: assim o concluído continua aparecendo (em "Mostrar concluídos") mesmo que saia da lista nova.
-  const fotoDe = l => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'tipo']) if (l[k] != null) o[k] = l[k]; return o; };
+  const fotoDe = l => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'tipo', 'ed']) if (l[k] != null) o[k] = l[k]; return o; };
   async function gravarMarca(pessoa, chave, dev, agora, linha) {
     const item = linha ? fotoDe(linha) : null;
     const reg = { pessoa, chave, em: iso(agora), devolvido: !!dev, desfeito: false };
@@ -577,33 +687,9 @@
   }
 
   const itemDe = l => { const item = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u', 'et', 'resp']) if (l[k] != null) item[k] = l[k]; return item; };
-  const acharLinha = chave => filaDe(pessoaAtiva()).find(l => l.chave === chave);
-
-  const DEST_GESTOR = '__gestor';
-
-  // Processo recebido por engano: vai para o gestor verificar (aba Gestão), não para a fila de outra pessoa.
-  async function avisarGestor(l, motivo) {
-    const agora = Date.now();
-    const { error } = await st.sb.from('avisos_gestor').insert({ numero: R.soDigitos(l.n), item: itemDe(l), de: st.pessoa, motivo: motivo || null });
-    if (error) throw error;
-    try {
-      await concluirLinha(l);
-      const antiga = ((st.notas[st.pessoa] || {})[R.soDigitos(l.n)] || {}).texto || '';
-      const nova = `Avisado ao gestor em ${dataHoraBR(agora)}${motivo ? ' — ' + motivo : ''}`;
-      let texto = antiga ? antiga + '\n' + nova : nova;
-      if (texto.length > 2000) texto = texto.slice(-2000);
-      await gravarNota(l.n, texto, st.pessoa);
-    } catch (e) {
-      console.error(e);
-      toast('O aviso foi enviado, mas não consegui concluir na sua fila. Marque como concluído.');
-      return false;
-    }
-    toast('Aviso enviado ao gestor.');
-    return true;
-  }
+  const acharLinha = (chave, pessoa) => filaDe(pessoa || pessoaAtiva()).find(l => l.chave === chave);
 
   async function enviarProcesso(l, para, motivo) {
-    if (para === DEST_GESTOR) return avisarGestor(l, motivo);
     const agora = Date.now();
     const { error } = await st.sb.from('urgencias').insert({
       numero: R.soDigitos(l.n), responsavel: para, origem: 'envio', remetente: st.pessoa,
@@ -629,6 +715,23 @@
 
   async function devolverProcesso(l, para, motivo) {
     const agora = Date.now();
+    if (tipoAtivo() === 'diretor') {
+      // O diretor devolve a urgência que recebeu: ao servidor (devolvido) ou ao gestor (urgência na fila do gestor).
+      if (para === GESTOR_ID) {
+        const { error } = await st.sb.from('urgencias').insert({ numero: R.soDigitos(l.n), responsavel: para, origem: 'envio', remetente: st.pessoa, motivo: motivo || null, item: itemDe(l), criada_por: st.email });
+        if (error && error.code !== '23505') throw error;
+      } else {
+        const { error } = await st.sb.from('devolucoes').insert({ item: itemDe(l), de: st.pessoa, para, motivo: motivo || null });
+        if (error) throw error;
+      }
+      await concluirLinha(l);
+      const antiga = ((st.notas[st.pessoa] || {})[R.soDigitos(l.n)] || {}).texto || '';
+      const nova = `Devolvido para ${nomeDe(para)} em ${dataHoraBR(agora)}${motivo ? ' — ' + motivo : ''}`;
+      let texto = antiga ? antiga + '\n' + nova : nova;
+      if (texto.length > 2000) texto = texto.slice(-2000);
+      await gravarNota(l.n, texto, st.pessoa);
+      return;
+    }
     const { error } = await st.sb.from('devolucoes').insert({ item: itemDe(l), de: st.pessoa, para, motivo: motivo || null });
     if (error) throw error;
     await gravarMarca(st.pessoa, l.chave, true, agora, l);
@@ -638,14 +741,14 @@
   function renderModal() {
     const m = $('#modal'), s = st.modal;
     if (!s) { m.innerHTML = ''; return; }
-    const l = acharLinha(s.chave);
+    const l = acharLinha(s.chave, s.pessoa);
     if (!l) { st.modal = null; m.innerHTML = ''; return; }
     const antes = document.activeElement && document.activeElement.id;
     m.innerHTML = `<div class="modal-fundo" data-acao="fechar-modal-fundo"><form class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-titulo" data-form="enviar">
       <h2 id="modal-titulo">Enviar para outra pessoa</h2>
       <div class="corpo">
         <p>O processo <b class="mono">${esc(l.n)}</b> sairá da sua fila, como concluído, e entrará como <b>urgência</b> na fila da pessoa escolhida. Na sua anotação ficará registrado para quem foi enviado, com a data e a hora do envio. Se o processo veio errado para você, escolha <b>Gestor</b> e explique o que está errado.</p>
-        <label class="campo"><span>Enviar para</span><select id="env-para" required>${opcoesPessoas(s.para, 'Escolha a pessoa', st.pessoa).replace(/^(<option value="">[^<]*<\/option>)/, `$1<option value="${DEST_GESTOR}"${s.para === DEST_GESTOR ? ' selected' : ''}>Gestor — processo veio errado</option>`)}</select></label>
+        <label class="campo"><span>Enviar para</span><select id="env-para" required>${opcoesPessoas(s.para, 'Escolha a pessoa', s.pessoa, { diretor: true, gestor: true })}</select></label>
         <label class="campo"><span>Motivo (opcional)</span><input type="text" id="env-motivo" maxlength="300" placeholder="Ex.: assunto da sua área, pedido do juiz; para o gestor, explique o que está errado" value="${esc(s.motivo)}"></label>
         <div class="linha-botoes"><button class="btn primario" type="submit" ${s.enviando ? 'disabled' : ''}>${s.enviando ? 'Enviando…' : 'Confirmar envio'}</button><button class="btn" type="button" data-acao="fechar-modal">Cancelar</button></div>
       </div></form></div>`;
@@ -660,26 +763,33 @@
   }
 
   // ---------- eventos ----------
-  async function aoClicarFila(ev) {
+  async function aoClicarFila(ev, modoEv) {
     const alvo = ev.target.closest('[data-acao]');
     if (!alvo) return;
     const acao = alvo.dataset.acao;
     if (acao === 'sair-ver-como') { sairVerComo(); return; }
     if (acao === 'topo') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     if (acao === 'ir') {
-      const sec = document.getElementById('grupo-' + st.aba + '-' + alvo.dataset.tipo);
+      const sec = document.getElementById('grupo-' + (modoEv || st.aba) + '-' + alvo.dataset.tipo);
       if (sec) { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); sec.focus({ preventScroll: true }); }
       else toast('Nenhum processo nessa lista.');
       return;
     }
-    if (st.verComo && ['concluir', 'desfazer', 'devolver', 'enviar', 'anotar', 'apagar-nota'].includes(acao)) { toast('Visualização somente leitura.'); return; }
-    const modo = st.aba;
+    const modo = modoEv || st.aba;
+    if (st.verComo && modo !== 'gestor' && ['concluir', 'desfazer', 'devolver', 'enviar', 'anotar', 'apagar-nota', 'du-abrir'].includes(acao)) { toast('Visualização somente leitura.'); return; }
     const f = st.vis[modo];
     const li = alvo.closest('.linha');
     const chave = li && li.dataset.chave;
-    const linha = modo === 'fila' && chave ? acharLinha(chave) : null;
+    const linha = (modo === 'fila' || modo === 'gestor') && chave ? acharLinha(chave, donoDe(modo)) : null;
     try {
-      if (acao === 'copiar') {
+      if (acao === 'du-abrir') {
+        st.duAberta = !st.duAberta; render();
+        if (st.duAberta) { const n = $('#du-numero'); if (n) n.focus(); }
+      } else if (acao === 'gestor-ocultar') {
+        st.gOculta = !st.gOculta;
+        if (st.gOculta) st.gBase = filaDe(GESTOR_ID).filter(l => l.tipo === 'urgente' && !l.concluido).length;
+        render();
+      } else if (acao === 'copiar') {
         const n = alvo.dataset.n;
         try { await navigator.clipboard.writeText(n); toast('Número copiado: ' + n); }
         catch (e) { const r = document.createRange(); r.selectNodeContents(alvo); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Número selecionado. Use Ctrl+C para copiar.'); }
@@ -691,7 +801,7 @@
         st.devolvendo = linha.chave; st.devMotivo = ''; st.anotando = null; render();
         const m = $('#dev-motivo'); if (m) m.focus();
       } else if (acao === 'enviar' && linha) {
-        st.modal = { chave: linha.chave, para: '', motivo: '', enviando: false }; st.anotando = null; st.devolvendo = null; render();
+        st.modal = { chave: linha.chave, pessoa: donoDe(modo), para: '', motivo: '', enviando: false }; st.anotando = null; st.devolvendo = null; render();
       } else if (acao === 'anotar' && linha) {
         st.anotando = linha.chave; st.notaRascunho = linha.anot || ''; st.devolvendo = null; render();
         const t = $('#nota-texto'); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
@@ -704,7 +814,7 @@
       } else if (acao === 'mais') {
         f.limite += LIMITE_NORMAL; render();
       } else if (acao === 'baixar') {
-        const base = aplicarVisao(modo, modo === 'geral' ? linhasGeral(f.pessoa) : filaDe(pessoaAtiva())).filter(l => !f.etiqueta || (l.et || []).includes(f.etiqueta));
+        const base = aplicarVisao(modo, modo === 'geral' ? linhasGeral(f.pessoa) : filaDe(pessoaAtiva())).filter(l => !f.etiqueta || (l[etConfig(modo).campo] || []).includes(f.etiqueta));
         const linhas = base.filter(l => f.concl || !l.concluido);
         const hoje = new Date().toISOString().slice(0, 10);
         baixar(`fila-${modo === 'geral' ? 'geral' : pessoaAtiva()}-${hoje}.csv`, R.paraCsv(linhas, nomes(), modo === 'geral'));
@@ -712,17 +822,18 @@
     } catch (e) { falha(e); }
   }
 
-  async function aoEnviarFormFila(ev) {
+  async function aoEnviarFormFila(ev, modo) {
     ev.preventDefault();
-    if (st.verComo) return;
+    if (st.verComo && modo !== 'gestor') return;
+    if (ev.target.dataset.form === 'urgencia-diretor') { await incluirUrgenciaDiretor(); return; }
     const tipo = ev.target.dataset.form;
     try {
       if (tipo === 'anotar') {
-        const linha = acharLinha(st.anotando); if (!linha) return;
+        const linha = acharLinha(st.anotando, donoDe(modo)); if (!linha) return;
         await gravarNota(linha.n, $('#nota-texto').value.trim(), st.pessoa);
         st.anotando = null; st.notaRascunho = ''; toast('Anotação salva.'); render();
       } else if (tipo === 'devolver') {
-        const linha = acharLinha(st.devolvendo); if (!linha) return;
+        const linha = acharLinha(st.devolvendo, donoDe(modo)); if (!linha) return;
         const para = $('#dev-para').value, motivo = $('#dev-motivo').value.trim();
         if (!para) { toast('Escolha o servidor que vai receber o processo.'); return; }
         await devolverProcesso(linha, para, motivo);
@@ -734,9 +845,9 @@
 
   async function aoEnviarModal(ev) {
     ev.preventDefault();
-    if (st.verComo) return;
     const s = st.modal; if (!s || s.enviando) return;
-    const l = acharLinha(s.chave); if (!l) { st.modal = null; render(); return; }
+    if (st.verComo && s.pessoa !== st.pessoa) return;
+    const l = acharLinha(s.chave, s.pessoa); if (!l) { st.modal = null; render(); return; }
     const para = $('#env-para').value, motivo = $('#env-motivo').value.trim();
     if (!para) { toast('Escolha a pessoa que vai receber o processo.'); return; }
     s.para = para; s.motivo = motivo; s.enviando = true; renderModal();
@@ -767,17 +878,26 @@
       else if (a.dataset.acao === 'sair') sair();
       else if (a.dataset.acao === 'tentar') iniciarSessao();
     });
-    for (const modo of ['fila', 'geral']) {
-      const v = $('#v-' + modo);
-      v.addEventListener('click', aoClicarFila);
-      v.addEventListener('submit', aoEnviarFormFila);
+    for (const [modo, raiz, dentro] of [['fila', '#v-fila', null], ['geral', '#v-geral', null], ['gestor', '#v-gestao', '#gestor-fila']]) {
+      const v = $(raiz);
+      const meu = e => !dentro || !!e.target.closest(dentro);
+      v.addEventListener('click', e => { if (meu(e)) aoClicarFila(e, modo); });
+      v.addEventListener('submit', e => { if (meu(e)) aoEnviarFormFila(e, modo); });
       let t = null;
       v.addEventListener('input', e => {
+        if (!meu(e) && !(modo === 'fila')) return;
         if (e.target.id === 'dev-motivo') st.devMotivo = e.target.value;
         if (e.target.id === 'nota-texto') st.notaRascunho = e.target.value;
-        if (e.target.id === 'busca') { clearTimeout(t); t = setTimeout(() => { const f = st.vis[modo]; f.busca = e.target.value; f.limite = LIMITE_NORMAL; render(); }, 180); }
+        if (e.target.id === 'du-numero') { st.novaUrgDir.numero = e.target.value; sugerirDu(); const r = $('#du-resp'); if (r) r.value = st.novaUrgDir.responsavel || ''; }
+        if (e.target.id === 'du-motivo') st.novaUrgDir.motivo = e.target.value;
+        if (e.target.id === 'busca' && meu(e)) { clearTimeout(t); t = setTimeout(() => { const f = st.vis[modo]; f.busca = e.target.value; f.limite = LIMITE_NORMAL; render(); }, 180); }
       });
       v.addEventListener('change', e => {
+        if (modo === 'fila') {
+          if (e.target.id === 'du-setor') { st.novaUrgDir.setor = e.target.value; st.novaUrgDir.responsavel = ''; sugerirDu(); render(); return; }
+          if (e.target.id === 'du-resp') { st.novaUrgDir.responsavel = e.target.value; return; }
+        }
+        if (!meu(e)) return;
         const f = st.vis[modo];
         if (e.target.id === 'filtro-tarefa') { f.tarefa = e.target.value; render(); }
         if (e.target.id === 'filtro-etiqueta') { f.etiqueta = e.target.value; f.limite = LIMITE_NORMAL; render(); }
@@ -820,7 +940,7 @@
     st.sb.auth.onAuthStateChange((evento) => {
       if (evento === 'SIGNED_OUT' && st.estado === 'ok') setTimeout(() => { reiniciarEstado(); st.estado = 'login'; render(); }, 0);
     });
-    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, atualizar, baixar, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler });
+    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, atualizar, baixar, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial });
     iniciarSessao();
   }
   iniciar();
