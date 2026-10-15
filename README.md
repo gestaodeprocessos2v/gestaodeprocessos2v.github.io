@@ -13,6 +13,7 @@ Painel da fila de trabalho da 2ª Vara Federal da Paraíba. Página estática (G
 - Fila própria do **Diretor de Secretaria** (por etiquetas, só urgências e fila por antiguidade) e do **Gestor** (por etiqueta, no topo da Gestão), em paralelo às dos servidores.
 - Ordem de trabalho: urgentes, devolvidos, prioritárias e demais, por antiguidade na tarefa.
 - Conclusão com desfazer, anotações, devolução (estagiários, residentes e diretor), envio para outra pessoa (inclusive ao Gestor, que recebe como urgência).
+- Processo com anotação e não concluído não some ao importar um CSV novo: fica na fila de quem anotou, no topo da seção, com a marca "Saiu da lista", até ser concluído ou a anotação ser excluída.
 - Visões por pessoa e filtro por etiqueta (Pagamentos), configurados na Gestão.
 
 ## Arquivos
