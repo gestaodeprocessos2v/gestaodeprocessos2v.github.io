@@ -314,8 +314,34 @@
   // Antiguidade = data de chegada do processo; só sem ela (urgência/devolução de processo fora da lista) usa a data de criação.
   const referencia = x => x.ch != null ? x.ch : (x.origem === 'lista' || x.criadaEm == null ? LONGE : x.criadaEm);
 
+  // Em cada seção, os processos com anotação (e ainda não concluídos) vêm primeiro, pela data da anotação (mais antiga primeiro).
+  const comAnotacao = x => (x.anotEm != null && !x.concluido ? 0 : 1);
+
   function comparar(a, b) {
-    return (GRUPOS[a.tipo] - GRUPOS[b.tipo]) || (referencia(a) - referencia(b)) || String(a.n).localeCompare(String(b.n));
+    const g = GRUPOS[a.tipo] - GRUPOS[b.tipo];
+    if (g) return g;
+    const an = comAnotacao(a) - comAnotacao(b);
+    if (an) return an;
+    if (comAnotacao(a) === 0) { const t = a.anotEm - b.anotEm; if (t) return t; }
+    return (referencia(a) - referencia(b)) || String(a.n).localeCompare(String(b.n));
+  }
+
+  // Processos com anotação, ainda não concluídos, que não vieram na lista nova da mesma pessoa: continuam na fila dela
+  // (com a data e a tarefa que tinham) até serem concluídos ou a anotação ser excluída. Marcados com fora:true ("Saiu da lista").
+  // antigos: itens antes da importação; presentes: itens que ficam; notas: {número só com dígitos: {texto}}; marcas: {chave: {desfeito}}.
+  function guardarAnotados(antigos, presentes, notas, marcas) {
+    const nots = notas || {}, mars = marcas || {};
+    const tem = new Set((presentes || []).map(it => soDigitos(it.n)));
+    const por = new Map();
+    for (const it of antigos || []) {
+      const k = soDigitos(it.n);
+      if (tem.has(k) || !(nots[k] && nots[k].texto)) continue;
+      const m = mars[chaveItem(it)];
+      if (m && !m.desfeito) continue;
+      const ja = por.get(k);
+      if (!ja || (it.ch == null ? -1 : it.ch) > (ja.ch == null ? -1 : ja.ch)) por.set(k, it);
+    }
+    return [...por.values()].map(it => Object.assign({}, it, { fora: true }));
   }
 
   // Junta lista semanal + diário + urgências manuais + devoluções numa fila única, sem repetir processo.
@@ -406,7 +432,7 @@
 
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem,
-    atribuir, pessoasDoSetor, prepararLista, prepararEspeciais, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, filtrarDiario, mesclarDiario, fatiar, podarMarcas, montarFila, comparar, chaveItem,
+    atribuir, pessoasDoSetor, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, filtrarDiario, mesclarDiario, fatiar, podarMarcas, montarFila, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

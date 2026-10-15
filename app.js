@@ -228,7 +228,9 @@
     if (c.ver !== st.ver) { c.ver = st.ver; c.m = {}; }
     if (c.m[p]) return c.m[p];
     const itens = [];
-    for (const r of st.filas) if (r.pessoa === p) for (const it of r.itens || []) itens.push(it);
+    const notasP = st.notas[p] || {};
+    // Processo que saiu da lista mas segue na fila por causa da anotação: some assim que a anotação for excluída.
+    for (const r of st.filas) if (r.pessoa === p) for (const it of r.itens || []) if (!it.fora || (notasP[R.soDigitos(it.n)] || {}).texto) itens.push(it);
     const umMes = Date.now() - 30 * DIA;
     const fila = R.montarFila({
       itens,
@@ -250,6 +252,12 @@
       }
       fila.push(Object.assign({}, it, { origem: 'lista', tipo: it.tipo || 'normal', chave, concluido: true, devolvido: !!m.dev, novo: false, foraDaLista: true }));
     }
+    for (const l of fila) {
+      const nota = notasP[R.soDigitos(l.n)];
+      if (nota && nota.texto) { l.anot = nota.texto; l.anotEm = nota.em; }
+      if (l.fora) l.foraDaLista = true;
+      l.dono = p;
+    }
     fila.sort(R.comparar);
     const todasMarcas = st.marcas[p] || {};
     for (const l of fila) {
@@ -259,12 +267,6 @@
         const fonte = l.origem === 'urgencia' ? st.urgencias.find(x => x.id === l.id) : l.origem === 'devolucao' ? st.devolucoes.find(x => x.id === l.id) : null;
         l.concluidoEm = (fonte && fonte.concluidaEm) || (mm && !mm.desfeito ? mm.em : null) || null;
       } else if (mm && mm.desfeito) l.concluidoAntes = mm.em;
-    }
-    const notas = st.notas[p] || {};
-    for (const l of fila) {
-      const nota = notas[R.soDigitos(l.n)];
-      if (nota && nota.texto) { l.anot = nota.texto; l.anotEm = nota.em; }
-      l.dono = p;
     }
     c.m[p] = fila;
     return fila;
@@ -386,7 +388,10 @@
     if (l.devolvido) selos.push('<span class="selo devolvido">Devolvido ao servidor</span>');
     if (l.concluido) selos.push(`<span class="selo feito">Concluído${l.concluidoEm ? ' em ' + dataHoraBR(l.concluidoEm) : ''}</span>`);
     else if (l.concluidoAntes) selos.push(`<span class="selo anterior" title="Esse processo foi concluído e a conclusão foi desfeita">Concluído antes em ${dataHoraBR(l.concluidoAntes)}</span>`);
-    if (l.foraDaLista) selos.push('<span class="selo" title="O processo não está mais na lista importada; o registro de conclusão foi mantido">Saiu da lista</span>');
+    if (l.foraDaLista) {
+      const balao = l.dono === st.pessoa ? 'Esse processo não apareceu mais na sua lista na última atualização.' : `Esse processo não apareceu mais na lista de ${nomeDe(l.dono)} na última atualização.`;
+      selos.push(`<span class="selo fora" tabindex="0" role="note" aria-label="Saiu da lista. ${esc(balao)}" data-balao="${esc(balao)}">Saiu da lista</span>`);
+    }
     const d = dias(l.ch);
     let nota = '';
     if (l.origem === 'urgencia') {

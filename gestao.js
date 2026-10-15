@@ -144,6 +144,7 @@
     const fixa = imp.pessoaFixa || '';
     const porPessoa = imp.resultado.porPessoa;
     try {
+      await P.carregar(); // anotações, conclusões e listas atuais: a regra dos processos anotados depende delas
       const resumo = clonar(st.resumo || {}); resumo.fixos = resumo.fixos || {};
       const fixos = resumo.fixos;
       const idsEspeciais = new Set([GESTOR_ID, ...pessoas().filter(p => p.tipo === 'diretor').map(p => p.id)]);
@@ -152,13 +153,22 @@
       const alvo = new Set(fixa ? [fixa] : [...existentes, ...Object.keys(porPessoa)].filter(p => !fixos[p] && !idsEspeciais.has(p)));
       const gravar = Object.entries(porPessoa).filter(([p]) => (fixa || !fixos[p]) && !idsEspeciais.has(p));
       const doPessoa = (lista, p) => (st.filas.find(r => r.lista === lista && r.pessoa === p) || {}).itens || [];
+      // Processo com anotação e não concluído não some quando sai do arquivo novo: fica (como "Saiu da lista") até ser concluído ou a anotação ser excluída.
+      const anotados = (p, presentes) => R.guardarAnotados([...doPessoa('semanal', p), ...doPessoa('diaria', p)], presentes, st.notas[p], st.marcas[p]);
+      const semFora = (p, itens) => itens.filter(it => !it.fora || ((st.notas[p] || {})[R.soDigitos(it.n)] || {}).texto);
       let rows;
       if (imp.tipo === 'semanal') {
         rows = gravar.map(([p, itens]) => {
           const vistos = new Map([...doPessoa('semanal', p), ...doPessoa('diaria', p)].map(i => [R.chaveItem(i), i.vistoEm]));
           const marcados = itens.map(it => R.tipoItem(it, st.mapaTarefas) !== 'normal' ? Object.assign({}, it, { vistoEm: vistos.get(R.chaveItem(it)) || agora }) : it);
-          return { lista: 'semanal', pessoa: p, itens: marcados, importado_em: I };
+          return { lista: 'semanal', pessoa: p, itens: marcados.concat(anotados(p, itens)), importado_em: I };
         });
+        // quem não recebeu nada no arquivo novo mas tem processo anotado ainda ativo mantém só esses
+        for (const p of alvo) {
+          if (rows.some(r => r.pessoa === p)) continue;
+          const sobra = anotados(p, []);
+          if (sobra.length) rows.push({ lista: 'semanal', pessoa: p, itens: sobra, importado_em: I });
+        }
       } else {
         rows = gravar.map(([p, itens]) => ({ lista: 'diaria', pessoa: p, itens: R.mesclarDiario(doPessoa('diaria', p), itens, agora), importado_em: I }));
       }
@@ -169,16 +179,24 @@
       const gravadas = new Set(rows.map(r => r.pessoa));
       const semNovo = [...alvo].filter(p => !gravadas.has(p));
       if (imp.tipo === 'semanal') {
-        // a lista completa substitui tudo: some o que saiu do PJe e a atualização diária anterior
-        if (semNovo.length) { const { error } = await sb.from('filas').delete().eq('lista', 'semanal').in('pessoa', semNovo); if (error) throw error; }
+        // a lista completa substitui tudo: some o que saiu do PJe e a atualização diária anterior (exceto os processos anotados, que já foram para a lista semanal)
+        const semNovoSem = semNovo.filter(p => !rows.some(r => r.pessoa === p));
+        if (semNovoSem.length) { const { error } = await sb.from('filas').delete().eq('lista', 'semanal').in('pessoa', semNovoSem); if (error) throw error; }
         if (alvo.size) { const { error } = await sb.from('filas').delete().eq('lista', 'diaria').in('pessoa', [...alvo]); if (error) throw error; }
       } else {
         if (semNovo.length) { const { error } = await sb.from('filas').delete().eq('lista', 'diaria').in('pessoa', semNovo); if (error) throw error; }
-        // o relatório diário traz todas as tarefas de "Zerar": as prioritárias antigas da lista completa saem
-        for (const r of st.filas.filter(x => x.lista === 'semanal' && alvo.has(x.pessoa))) {
-          const itens = (r.itens || []).filter(it => R.tipoItem(it, st.mapaTarefas) !== 'prioritaria');
-          if (itens.length === (r.itens || []).length) continue;
-          const { error } = await sb.from('filas').update({ itens }).eq('lista', 'semanal').eq('pessoa', r.pessoa);
+        // o relatório diário traz todas as tarefas de "Zerar": as prioritárias antigas da lista completa saem;
+        // os processos anotados que ficaram sem lugar (prioritária antiga ou item da atualização diária anterior) vão para a lista completa como "Saiu da lista"
+        for (const p of alvo) {
+          const antigaSem = doPessoa('semanal', p);
+          const resto = semFora(p, antigaSem.filter(it => R.tipoItem(it, st.mapaTarefas) !== 'prioritaria'));
+          const novosDia = ((rows.find(r => r.pessoa === p) || {}).itens) || [];
+          const guardados = R.guardarAnotados([...antigaSem, ...doPessoa('diaria', p)], [...resto, ...novosDia], st.notas[p], st.marcas[p]);
+          const novos = resto.concat(guardados);
+          if (JSON.stringify(novos) === JSON.stringify(antigaSem)) continue;
+          if (!novos.length && !antigaSem.length) continue;
+          const orig = st.filas.find(x => x.lista === 'semanal' && x.pessoa === p);
+          const { error } = await sb.from('filas').upsert({ lista: 'semanal', pessoa: p, itens: novos, importado_em: (orig && orig.importado_em) || I }, { onConflict: 'lista,pessoa' });
           if (error) throw error;
         }
       }
@@ -187,7 +205,7 @@
         const dest = [[GESTOR_ID, imp.especiais.gestor], ...pessoas().filter(p => p.tipo === 'diretor').map(p => [p.id, imp.especiais.diretor])];
         for (const [pessoa, itens] of dest) {
           const vistos = new Map([...doPessoa('semanal', pessoa), ...doPessoa('diaria', pessoa)].map(i => [R.chaveItem(i), i.vistoEm]));
-          const marcados = itens.map(it => Object.assign({}, it, { vistoEm: vistos.get(R.chaveItem(it)) || agora }));
+          const marcados = itens.map(it => Object.assign({}, it, { vistoEm: vistos.get(R.chaveItem(it)) || agora })).concat(anotados(pessoa, itens));
           const { error: e1 } = await sb.from('filas').upsert({ lista: 'semanal', pessoa, itens: marcados, importado_em: I }, { onConflict: 'lista,pessoa' });
           if (e1) throw e1;
           const { error: e2 } = await sb.from('filas').delete().eq('lista', 'diaria').eq('pessoa', pessoa);
