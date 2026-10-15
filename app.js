@@ -384,7 +384,10 @@
     if (l.tipo === 'prioritaria') selos.push('<span class="selo prioritaria">Prioritária</span>');
     if (l.novo && !l.concluido) selos.push('<span class="selo novo">Novo</span>');
     if (l.sg) selos.push('<span class="selo sigilo">Sigiloso</span>');
-    if (l.fp) selos.push('<span class="selo paralelo" tabindex="0" title="O processo aparece em uma tarefa principal e em pelo menos um fluxo paralelo. Verificar a necessidade de encerrar o(s) fluxo(s) paralelo(s)">Fluxo paralelo</span>');
+    if (l.fp) {
+      const balaoFp = 'O processo aparece em uma tarefa principal e em pelo menos um fluxo paralelo. Verificar a necessidade de encerrar o(s) fluxo(s) paralelo(s)';
+      selos.push(`<span class="selo paralelo" tabindex="0" role="note" aria-label="Fluxo paralelo. ${esc(balaoFp)}" data-balao="${esc(balaoFp)}">Fluxo paralelo</span>`);
+    }
     if (l.devolvido) selos.push('<span class="selo devolvido">Devolvido ao servidor</span>');
     if (l.concluido) selos.push(`<span class="selo feito">Concluído${l.concluidoEm ? ' em ' + dataHoraBR(l.concluidoEm) : ''}</span>`);
     else if (l.concluidoAntes) selos.push(`<span class="selo anterior" title="Esse processo foi concluído e a conclusão foi desfeita">Concluído antes em ${dataHoraBR(l.concluidoAntes)}</span>`);
