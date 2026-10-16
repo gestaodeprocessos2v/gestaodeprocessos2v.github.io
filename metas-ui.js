@@ -31,24 +31,17 @@
     return `<svg class="spark" viewBox="0 0 ${w} ${h}" role="img" aria-label="Evolução entre as cargas (de ${esc(M.pct(serie[0]))} para ${esc(M.pct(serie[serie.length - 1]))})"><line x1="0" x2="${w}" y1="${y(1).toFixed(1)}" y2="${y(1).toFixed(1)}" class="spark-meta"/><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
   }
 
-  // Meta 3: quantas sentenças homologatórias faltam, agora e até dezembro (contagens digitadas na Gestão no envio).
+  // Meta 3 (total da vara, 1º Grau + JEF): quantas homologatórias faltam hoje e até 19/12 (contagens digitadas na Gestão no envio).
   function estimativaHtml(e) {
-    const est = M.estimativaMeta3(e); if (!est) return '';
-    const NOMES = { '1º Grau': '1º Grau', JEF: 'JEF' };
-    const parte = (valorDe) => M.INSTANCIAS.map(i => { const v = valorDe(i); return v == null ? null : `${NOMES[i]} ${v === 0 ? 'ok' : '+' + v.toLocaleString('pt-BR')}`; }).filter(Boolean).join(' · ');
-    const hoje = i => est.porInstancia[i] ? est.porInstancia[i].falta : null;
-    const ate = i => est.projecao[i] ? est.projecao[i].extra : null;
-    const v = est.vara;
-    const txtHoje = v ? (v.barreira ? 'Meta cumprida pela cláusula de barreira (IC de 8% ou mais).' : v.falta === 0 ? 'Meta cumprida pela vara.' : `<b class="mono">+${v.falta.toLocaleString('pt-BR')}</b> homologatórias`) : '';
-    const detHoje = parte(hoje);
-    const p = est.projecao.vara;
-    const txtAte = p ? `<b class="mono">+${p.extra.toLocaleString('pt-BR')}</b> acima do ritmo atual` : '';
-    const detAte = parte(ate);
+    const est = M.estimativaMeta3(e); if (!est || !est.vara) return '';
+    const v = est.vara, p = est.projecao.vara, n = x => x.toLocaleString('pt-BR');
+    const txtHoje = v.barreira ? 'Meta cumprida pela cláusula de barreira (IC de 8% ou mais).' : v.falta === 0 ? 'Meta cumprida pela vara.' : `faltam <b class="mono">${n(v.falta)}</b> homologatórias`;
     const ajudaHoje = 'Sentenças homologatórias a mais, com as sentenças do ano já proferidas, para o Índice de Conciliação chegar ao índice de 2024/2025 mais 0,5 ponto percentual. Cada homologatória nova conta também como sentença nova.';
-    const ajudaAte = 'Projeção até 31/12 mantendo o ritmo de sentenças do ano e o índice de conciliação atual; mostra quantas homologatórias faltam acima desse ritmo.';
+    const faltaAte = p ? p.exigido - v.h : 0;
+    const ajudaAte = p ? `Projeção até 19/12, mantendo o ritmo de sentenças e o índice de conciliação atuais. A meta exige ${n(p.exigido)} homologatórias no período; já foram ${n(v.h)}. No ritmo atual virão cerca de ${n(p.ritmo - v.h)}, então o esforço extra é de ${n(p.extra)}.` : '';
     return `<div class="meta-est small"><b>Para cumprir a meta</b>
-      ${txtHoje || detHoje ? `<div title="${esc(ajudaHoje)}">Hoje: ${txtHoje}${detHoje ? (txtHoje ? ' ' : '') + `<span class="muted">(${esc(detHoje)})</span>` : ''}</div>` : ''}
-      ${txtAte || detAte ? `<div title="${esc(ajudaAte)}">Até 31/12: ${txtAte}${detAte ? (txtAte ? ' ' : '') + `<span class="muted">(${esc(detAte)})</span>` : ''}</div>` : ''}
+      <div class="balao" tabindex="0" role="note" aria-label="${esc(ajudaHoje)}" data-balao="${esc(ajudaHoje)}">Hoje: ${txtHoje}</div>
+      ${p ? `<div class="balao" tabindex="0" role="note" aria-label="${esc(ajudaAte)}" data-balao="${esc(ajudaAte)}">Projeção até 19/12: faltam <b class="mono">${n(faltaAte)}</b> homologatórias</div>` : ''}
     </div>`;
   }
 

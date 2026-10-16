@@ -210,7 +210,7 @@
   // ---------- estimativa da Meta 3 ----------
   // Cumprimento = IC / (ICa + 0,5 p.p.), IC = homologatórias / sentenças. Contagens vêm do Detalhamento do Portal BI (digitadas na Gestão);
   // o ICa sai do percentual do Resumo: ICa = IC / cumprimento − 0,005. A meta pede IC >= ICa + 0,005; cada homologatória nova também
-  // é uma sentença nova, então x >= (alvo·S − H) / (1 − alvo). A projeção até dezembro mantém o ritmo de sentenças do ano.
+  // é uma sentença nova, então x >= (alvo·S − H) / (1 − alvo). A projeção até 19/12 mantém o ritmo de sentenças do período 20/12–19/12.
   const SEM_NUM = v => (v == null || v === '' || !isFinite(Number(v)) ? null : Number(v));
   function contagensValidas(c) {
     const h = SEM_NUM(c && c.h), s = SEM_NUM(c && c.s);
@@ -220,7 +220,14 @@
     const alvo = ica + 0.005; if (alvo >= 1) return null;
     return Math.max(0, Math.ceil((alvo * s - h) / (1 - alvo) - 1e-9));
   }
-  function diaDoAno(ms) { const d = new Date(ms), ini = new Date(d.getFullYear(), 0, 0); return Math.floor((d - ini) / 86400000); }
+  // Ano judiciário da meta: 20/12 do ano anterior a 19/12 (recesso até 06/01). Devolve {dia, total} da data (ms) dentro desse período, ou null.
+  function periodoJudiciario(ms) {
+    const d = new Date(ms), dia0 = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const ano = d.getFullYear(), ini = new Date(ano - 1, 11, 20), fim = new Date(ano, 11, 19);
+    const dias = (x, y) => Math.round((y - x) / 86400000);
+    if (dia0 > fim) return null;
+    return { dia: dias(ini, dia0) + 1, total: dias(ini, fim) + 1 };
+  }
   // envio: registro de metas_envios (resumo com percentuais e contagens3). Devolve null sem contagens; senão {vara, porInstancia, projecao}.
   function estimativaMeta3(envio) {
     const r = envio && envio.resumo; const c3 = r && r.contagens3; if (!c3) return null;
@@ -235,12 +242,15 @@
     const ks = INSTANCIAS.map(i => contagensValidas(c3[i])), cumpVara = r.vara ? r.vara.m3 : null;
     const vara = ks.every(Boolean) && cumpVara != null ? calc({ h: ks[0].h + ks[1].h, s: ks[0].s + ks[1].s }, cumpVara) : null;
     if (!vara && !Object.keys(porInstancia).length) return null;
-    // projeção: só no ano da carga e depois de 30 dias de dados
-    const t = envio.carga_bi ? Date.parse(envio.carga_bi) : NaN, dia = isNaN(t) ? 0 : diaDoAno(t);
+    // projeção até 19/12: só depois de 30 dias de dados. ritmo = homologatórias projetadas mantendo o IC; exigido = total que a meta pede
+    // no fim do período; extra = exigido − ritmo.
+    const t = envio.carga_bi ? Date.parse(envio.carga_bi) : NaN, per = isNaN(t) ? null : periodoJudiciario(t);
     const projetar = e => {
-      if (!e || dia < 30 || e.barreira || e.cump >= 1) return null;
-      const sFim = e.s * 365 / dia, hTend = e.ic * sFim;
-      return { sFim: Math.round(sFim), extra: faltamHom(hTend, sFim, e.ic, e.ica) };
+      if (!e || !per || per.dia < 30 || e.barreira || e.cump >= 1) return null;
+      const alvo = e.ica + 0.005; if (alvo >= 1) return null;
+      const sFim = e.s * per.total / per.dia, hTend = e.ic * sFim;
+      const ritmo = Math.round(hTend), exigido = Math.max(ritmo, Math.ceil(hTend + (alvo * sFim - hTend) / (1 - alvo) - 1e-9));
+      return { sFim: Math.round(sFim), ritmo, exigido, extra: exigido - ritmo };
     };
     const projecao = { vara: projetar(vara) };
     for (const inst of INSTANCIAS) projecao[inst] = projetar(porInstancia[inst]);
