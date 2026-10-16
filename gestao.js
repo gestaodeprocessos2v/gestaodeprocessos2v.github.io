@@ -71,6 +71,7 @@
       previa = `<div class="previa">
         <div><b>${imp.lidos} linhas lidas</b> em “${esc(imp.arquivo)}”${imp.tipo === 'diario' ? `; ${imp.filtrados} em tarefas urgentes ou de “Zerar”` : ''}.</div>
         <div class="small">Por setor: ${setores || '—'}</div>
+        ${imp.tipo === 'semanal' && !imp.pessoaFixa ? `<div class="small">Outros setores da vara (sem fila de servidor): <b class="mono">${(r.outros || []).length}</b> processos, guardados só para as Metas CNJ.</div>` : ''}
         <div class="small muted">Ignorados: ${r.ignorados.foraDaVara} em tarefas de outros setores${r.ignorados.semEtiqueta ? ` e ${r.ignorados.semEtiqueta} sem a etiqueta exigida pela tarefa` : ''}.${imp.semData ? ` ${imp.semData} sem data de chegada vão para o fim da fila.` : ''}</div>
         <div class="tabela-wrap"><table><thead><tr><th>Pessoa</th><th>Processos</th><th>Urgentes</th><th>Prioritários</th></tr></thead><tbody>${linhas || '<tr><td colspan="4">Nenhum processo para gravar.</td></tr>'}</tbody></table></div>
         ${sem}
@@ -218,8 +219,14 @@
           if (e2) throw e2;
         }
       }
+      // Lista completa para todos: guarda também os processos de tarefas sem fila de servidor, só para a aba Pendentes das Metas CNJ.
+      if (imp.tipo === 'semanal' && !fixa) {
+        const { error: eo } = await sb.from('fora_vara').upsert({ id: 1, itens: imp.resultado.outros || [], importado_em: I, atualizado_por: st.email }, { onConflict: 'id' });
+        if (eo) { console.error(eo); toast('A lista foi gravada, mas não consegui guardar os processos de outros setores (Metas CNJ).'); }
+        else st.metas.foraEm = 0;
+      }
       await limparUrgenciasDaLista();
-      const total = gravar.reduce((s, [, x]) => s + x.length, 0);
+      const total =gravar.reduce((s, [, x]) => s + x.length, 0);
       const info = { em: agora, total, porPessoa: Object.fromEntries(gravar.map(([p, x]) => [p, x.length])) };
       if (fixa && imp.tipo === 'semanal') fixos[fixa] = { em: agora, total };
       else if (imp.tipo === 'semanal') resumo.semanal = info;

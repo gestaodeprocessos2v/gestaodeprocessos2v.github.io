@@ -70,35 +70,56 @@
   async function garantirPendentes() {
     const m = st.metas; if (m.carregando) return;
     const alvo = ultimo() ? ultimo().id : 0;
-    if (m.pendEnvio === alvo && m.pend) return;
+    if (m.pendEnvio === alvo && m.pend) { garantirOutros(); return; }
     m.carregando = true;
     try {
       const { data, error } = await st.sb.from('metas_pendentes').select('envio_id,atualizado_em,itens').eq('id', 1).maybeSingle();
       if (error) throw error;
       m.pend = data ? data.itens || [] : []; m.pendInfo = data ? { envio: data.envio_id, em: data.atualizado_em } : null; m.pendErro = false;
     } catch (e) { console.error(e); m.pend = []; m.pendInfo = null; m.pendErro = true; }
+    await carregarOutros();
     m.pendEnvio = alvo; m.carregando = false;
     if (st.area === 'metas' && st.abaMetas === 'pendentes') render();
   }
 
+  // Processos de tarefas de outros setores da vara (sem fila de servidor), guardados na lista completa. Relê a cada 5 minutos.
+  async function carregarOutros() {
+    const m = st.metas;
+    try {
+      const { data, error } = await st.sb.from('fora_vara').select('itens,importado_em').eq('id', 1).maybeSingle();
+      if (error) throw error;
+      m.outros = data ? data.itens || [] : []; m.outrosEm = data ? Date.parse(data.importado_em) : null; m.outrosErro = false;
+    } catch (e) { console.error(e); m.outros = m.outros || []; m.outrosErro = true; }
+    m.outrosLido = Date.now();
+  }
+  async function garantirOutros() {
+    const m = st.metas;
+    if (m.carregandoOutros || (m.outrosLido && Date.now() - m.outrosLido < 5 * 60000)) return;
+    m.carregandoOutros = true; const antes = m.outrosEm;
+    await carregarOutros(); m.carregandoOutros = false;
+    if (m.outrosEm !== antes && st.area === 'metas' && st.abaMetas === 'pendentes') render();
+  }
+
   // Só quem tem perfil Servidor entra no cruzamento (estagiário, residente, Diretor e Gestor ficam de fora).
   const servidores = () => P.pessoas().filter(p => (p.tipo || 'servidor') === 'servidor').map(p => p.id);
-  // Cruza com as listas atuais dos servidores; refeito quando as filas ou a lista de pendentes mudam.
+  // Cruza com as listas atuais dos servidores e com os outros setores da vara; refeito quando algo muda.
   function cruzar(itens) {
-    const c = st.cacheCruz;
-    if (c && c.ver === st.ver && c.itens === itens) return c.res;
-    const res = M.cruzarPendentes(itens, st.filas, servidores());
-    st.cacheCruz = { ver: st.ver, itens, res };
+    const c = st.cacheCruz, outros = st.metas.outros || null;
+    if (c && c.ver === st.ver && c.itens === itens && c.outros === outros) return c.res;
+    const res = M.cruzarPendentes(itens, st.filas, servidores(), outros);
+    st.cacheCruz = { ver: st.ver, itens, outros, res };
     return res;
   }
-  const SEM_LISTA = '__sem';
-  const nomeLista = it => it.lista ? P.nomeDe(it.lista.pessoa) : '';
+  const SEM_LISTA = '__sem', OUTROS = '__outros';
+  // Setor responsável da tarefa, pela tabela de tarefas (Magistrado, Assessoria, Controle de prazo…).
+  const setorDe = tarefa => { const l = st.mapaTarefas && st.mapaTarefas.get(P.R.normTexto(tarefa)); return (l && (l.setor || l.painel)) || 'Outro setor'; };
+  const nomeLista = it => !it.lista ? '' : it.lista.outro ? setorDe(it.lista.tarefa) : P.nomeDe(it.lista.pessoa);
 
   function pendentesFiltrados() {
     const f = st.fMetas, busca = f.busca.replace(/\D/g, ''), txt = f.busca.trim().toLowerCase(), serv = f.serv || '';
     const tem = (a, b) => (a != null ? 1 : 0) - (b != null ? 1 : 0);
     return cruzar(st.metas.pend || []).filter(it => (!f.meta || (it.m || []).includes(f.meta)) && (!f.inst || it.i === f.inst)
-      && (!serv || (serv === SEM_LISTA ? !it.lista : it.lista && it.lista.pessoa === serv))
+      && (!serv || (serv === SEM_LISTA ? !it.lista : serv === OUTROS ? it.lista && it.lista.outro : it.lista && it.lista.pessoa === serv))
       && (!f.busca.trim() || (busca && it.n.replace(/\D/g, '').includes(busca)) || (it.c || '').toLowerCase().includes(txt)
         || nomeLista(it).toLowerCase().includes(txt) || (it.lista && it.lista.tarefa.toLowerCase().includes(txt))))
       .sort((a, b) => -tem(a.lista, b.lista) || (a.lista ? -tem(a.lista.chegada, b.lista.chegada) || (a.lista.chegada || 0) - (b.lista.chegada || 0) : 0) || a.n.localeCompare(b.n));
@@ -117,14 +138,15 @@
     const quando = doEnvio ? dataHoraBR(Date.parse(doEnvio.carga_bi)) : info ? dataHoraBR(Date.parse(info.em)) : '—';
     const opMetas = M.METAS.filter(m => m.pend).map(m => `<option value="${m.id}"${f.meta === m.id ? ' selected' : ''}>${esc(m.nome)}</option>`).join('');
     const opInst = M.INSTANCIAS.map(i => `<option value="${esc(i)}"${f.inst === i ? ' selected' : ''}>${esc(i)}</option>`).join('');
-    const opServ = [`<option value="">Todos os servidores</option>`, ...servidores().map(id => `<option value="${esc(id)}"${f.serv === id ? ' selected' : ''}>${esc(P.nomeDe(id))}</option>`), `<option value="${SEM_LISTA}"${f.serv === SEM_LISTA ? ' selected' : ''}>Não localizados</option>`].join('');
-    const todos = cruzar(st.metas.pend || []), semLista = todos.filter(it => !it.lista);
-    const alertaSem = semLista.length ? `<div class="aviso novo"><b>${semLista.length.toLocaleString('pt-BR')} ${semLista.length === 1 ? 'processo pendente não foi localizado' : 'processos pendentes não foram localizados'}</b> nas listas dos servidores (aparecem no fim da tabela). Pode ser processo fora das tarefas da vara, de outro setor ou de lista ainda não importada. ${semLista.length <= 12 ? 'Números: ' + semLista.map(it => esc(it.n)).join('; ') + '.' : 'Use o filtro “Não localizados” para ver todos.'}</div>` : '';
-    const linhas = mostrar.map(it => `<tr${it.lista ? '' : ' class="sem-lista"'}><td><button type="button" class="num" data-acao="copiar" data-n="${esc(it.n)}" title="Copiar número">${esc(it.n)}</button></td><td>${it.lista ? esc(nomeLista(it)) : '<span class="muted">Não localizado</span>'}</td><td>${esc(it.lista ? it.lista.tarefa : '')}</td><td class="mono">${esc(chegadaTxt(it))}</td><td>${esc(it.i)}</td><td>${esc((it.c || '').replace(/^\d+\s*-\s*/, ''))}</td><td class="mono">${it.d ? esc(dataBR(Date.parse(it.d + 'T12:00:00'))) : '—'}</td><td>${(it.m || []).map(id => `<span class="chip-meta">${esc(nomeCurto(id))}</span>`).join(' ')}</td></tr>`).join('');
+    const opServ = [`<option value="">Todos os servidores</option>`, ...servidores().map(id => `<option value="${esc(id)}"${f.serv === id ? ' selected' : ''}>${esc(P.nomeDe(id))}</option>`), `<option value="${OUTROS}"${f.serv === OUTROS ? ' selected' : ''}>Outros setores da vara</option>`, `<option value="${SEM_LISTA}"${f.serv === SEM_LISTA ? ' selected' : ''}>Não localizados</option>`].join('');
+    const todos = cruzar(st.metas.pend || []), semLista = todos.filter(it => !it.lista), nOutros = todos.filter(it => it.lista && it.lista.outro).length;
+    const alertaSem = semLista.length ? `<div class="aviso novo"><b>${semLista.length.toLocaleString('pt-BR')} ${semLista.length === 1 ? 'processo pendente não foi localizado' : 'processos pendentes não foram localizados'}</b> nem nas listas dos servidores nem nas dos outros setores da vara (aparecem no fim da tabela). Pode ser processo recém-chegado ou de lista ainda não importada.${st.metas.outrosErro ? ' Não consegui ler a lista dos outros setores agora.' : !st.metas.outrosEm ? ' A lista dos outros setores só passa a existir depois do próximo envio da lista completa (semanal) na Gestão.' : ''} ${semLista.length <= 12 ? 'Números: ' + semLista.map(it => esc(it.n)).join('; ') + '.' : 'Use o filtro “Não localizados” para ver todos.'}</div>` : '';
+    const infoOutros = nOutros ? `<p class="small muted"><b class="mono">${nOutros.toLocaleString('pt-BR')}</b> ${nOutros === 1 ? 'processo está' : 'processos estão'} em tarefas de outros setores da vara (como Assessoria, Magistrado ou Controle de prazo); nesses a coluna mostra o setor no lugar do servidor${st.metas.outrosEm ? ` (lista completa de ${esc(dataHoraBR(st.metas.outrosEm))})` : ''}.</p>` : '';
+    const linhas = mostrar.map(it => `<tr${it.lista ? '' : ' class="sem-lista"'}><td><button type="button" class="num" data-acao="copiar" data-n="${esc(it.n)}" title="Copiar número">${esc(it.n)}</button></td><td>${it.lista ? (it.lista.outro ? `<span class="muted" title="Tarefa de outro setor da vara, sem servidor responsável">${esc(nomeLista(it))}</span>` : esc(nomeLista(it))) : '<span class="muted">Não localizado</span>'}</td><td>${esc(it.lista ? it.lista.tarefa : '')}</td><td class="mono">${esc(chegadaTxt(it))}</td><td>${esc(it.i)}</td><td>${esc((it.c || '').replace(/^\d+\s*-\s*/, ''))}</td><td class="mono">${it.d ? esc(dataBR(Date.parse(it.d + 'T12:00:00'))) : '—'}</td><td>${(it.m || []).map(id => `<span class="chip-meta">${esc(nomeCurto(id))}</span>`).join(' ')}</td></tr>`).join('');
     const aviso = !(st.metas.pend || []).length ? `<div class="vazio"><p>${st.metas.pendErro ? 'Não foi possível carregar a lista agora.' : 'Nenhum processo pendente na última carga.'}</p></div>` : '';
     const diverge = !doEnvio || doEnvio.id !== e.id;
     return `<p class="small muted">Processos da 2ª Vara que ainda faltam julgar em cada meta (carga do Portal BI de ${esc(quando)}), do mais antigo para o mais novo pela data de entrada na tarefa do servidor responsável. Clique no número para copiar.</p>
-      ${alertaSem}
+      ${alertaSem}${infoOutros}
       ${diverge && (st.metas.pend || []).length ? `<div class="aviso novo"><b>Atenção:</b> esta lista é de ${esc(quando)}, e não da carga mais recente dos percentuais (${esc(dataHoraBR(Date.parse(e.carga_bi)))}).${st.perfil === 'gestor' ? ' Envie os dois relatórios da mesma carga na aba Gestão.' : ''}</div>` : ''}
       <div class="filtros">
         <input type="search" id="metas-busca" placeholder="Buscar por número, classe, servidor ou tarefa" aria-label="Buscar por número, classe, servidor ou tarefa" value="${esc(f.busca)}">
@@ -133,13 +155,13 @@
         <select id="metas-filtro-serv" aria-label="Filtrar por servidor">${opServ}</select>
         <span class="direita"><span class="small muted mono">${lista.length.toLocaleString('pt-BR')} ${lista.length === 1 ? 'processo' : 'processos'}</span><button class="btn" type="button" data-acao="metas-csv">Baixar CSV</button></span>
       </div>
-      ${aviso || `<section class="painel largo"><div class="tabela-wrap"><table><thead><tr><th>Número do processo</th><th>Servidor</th><th>Tarefa atual</th><th>Entrada na tarefa</th><th>Instância</th><th>Classe</th><th>1ª distribuição</th><th>Metas pendentes</th></tr></thead><tbody>${linhas || '<tr><td colspan="8">Nenhum processo com esse filtro.</td></tr>'}</tbody></table></div>
+      ${aviso || `<section class="painel largo"><div class="tabela-wrap"><table><thead><tr><th>Número do processo</th><th>Servidor ou setor</th><th>Tarefa atual</th><th>Entrada na tarefa</th><th>Instância</th><th>Classe</th><th>1ª distribuição</th><th>Metas pendentes</th></tr></thead><tbody>${linhas || '<tr><td colspan="8">Nenhum processo com esse filtro.</td></tr>'}</tbody></table></div>
       ${lista.length > mostrar.length ? `<div class="linha-botoes"><button class="btn" type="button" data-acao="metas-mais">Mostrar mais ${Math.min(LIMITE_PASSO, lista.length - mostrar.length)}</button><span class="small muted">Mostrando ${mostrar.length} de ${lista.length}</span></div>` : ''}</section>`}`;
   }
 
   function csvPendentes() {
     const q = v => { const s = String(v == null ? '' : v); return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    const cab = ['Número do Processo', 'Servidor', 'Tarefa atual', 'Entrada na tarefa', 'Instância', 'Classe', '1ª Distribuição', 'Metas pendentes'];
+    const cab = ['Número do Processo', 'Servidor ou setor', 'Tarefa atual', 'Entrada na tarefa', 'Instância', 'Classe', '1ª Distribuição', 'Metas pendentes'];
     const lin = pendentesFiltrados().map(it => [it.n, it.lista ? nomeLista(it) : 'Não localizado', it.lista ? it.lista.tarefa : '', it.lista && it.lista.chegada ? dataBR(it.lista.chegada) : '', it.i, it.c, it.d ? dataBR(Date.parse(it.d + 'T12:00:00')) : '', (it.m || []).map(nomeCurto).join(', ')].map(q).join(';'));
     return '﻿' + [cab.map(q).join(';'), ...lin].join('\r\n');
   }
@@ -215,7 +237,8 @@
     const avisos = avisosEnvio();
     const pronto = r && p && cargaMs() != null && !jaEnviada() && !s.gravando;
     const prevRes = s.erroResumo ? `<div class="aviso erro">${esc(s.erroResumo)}</div>` : r ? `<div class="previa"><div class="small"><b>Resumo:</b> “${esc(r.arquivo)}”, 2ª Vara${r.criadoEm ? `, gerado em ${esc(dataHoraBR(r.criadoEm))}` : ''}.</div>${tabelaPrevia(r)}</div>` : '';
-    const semLista = p ? M.cruzarPendentes(p.dados.itens, st.filas, servidores()).filter(it => !it.lista) : [];
+    if (p && !st.metas.outrosLido && !st.metas.carregandoOutros) { st.metas.carregandoOutros = true; carregarOutros().then(() => { st.metas.carregandoOutros = false; render(); }); }
+    const semLista = p && st.metas.outrosLido ? M.cruzarPendentes(p.dados.itens, st.filas, servidores(), st.metas.outros).filter(it => !it.lista) : [];
     const alertaSem = semLista.length ? `<div class="aviso novo"><b>${semLista.length.toLocaleString('pt-BR')} ${semLista.length === 1 ? 'processo pendente não foi localizado' : 'processos pendentes não foram localizados'}</b> nas listas dos servidores. ${semLista.length <= 12 ? 'Números: ' + semLista.map(it => esc(it.n)).join('; ') + '.' : 'Primeiros: ' + semLista.slice(0, 8).map(it => esc(it.n)).join('; ') + '… A lista completa fica na aba Pendentes (filtro “Não localizados”) depois de gravar.'} Isso não impede a gravação.</div>` : '';
     const prevPend = s.erroPendentes ? `<div class="aviso erro">${esc(s.erroPendentes)}</div>` : p ? `<div class="previa"><div class="small"><b>Pendentes por Meta:</b> “${esc(p.arquivo)}”${p.criadoEm ? `, gerado em ${esc(dataHoraBR(p.criadoEm))}` : ''}.</div>
         <div class="small"><b class="mono">${p.dados.total.toLocaleString('pt-BR')}</b> processos pendentes (${Object.entries(p.dados.porInstancia).map(([i, n]) => `${esc(i)}: <b class="mono">${n.toLocaleString('pt-BR')}</b>`).join(' · ')}). Por meta: ${Object.entries(p.dados.porMeta).filter(([, n]) => n > 0).map(([id, n]) => `${esc(nomeCurto(id))}: <b class="mono">${n.toLocaleString('pt-BR')}</b>`).join(' · ') || 'nenhuma'}.</div></div>` : '';

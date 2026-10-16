@@ -218,10 +218,18 @@
     const mapa = mapaTarefas(tabela);
     const porPessoa = {}, semResponsavel = [], porSetor = {};
     const ignorados = { foraDaVara: 0, semEtiqueta: 0 };
+    // Processos que não entram em fila de servidor (tarefas de outros setores da vara): guardados só para as Metas CNJ.
+    const outros = new Map();
+    const guardarOutro = it => {
+      if (!it.n) return;
+      const k = soDigitos(it.n), ja = outros.get(k);
+      if (!ja) { const o = { n: it.n }; if (it.t) o.t = it.t; if (it.ch != null) o.ch = it.ch; outros.set(k, o); return; }
+      if (it.ch != null && (ja.ch == null || it.ch < ja.ch)) { ja.ch = it.ch; if (it.t) ja.t = it.t; }
+    };
     for (const it of itens) {
       const linha = mapa.get(normTexto(it.t));
-      if (!linha || !linha.painel) { ignorados.foraDaVara++; continue; }
-      if (linha.etiqueta && !temEtiqueta(it.e, linha.etiqueta)) { ignorados.semEtiqueta++; continue; }
+      if (!linha || !linha.painel) { ignorados.foraDaVara++; guardarOutro(it); continue; }
+      if (linha.etiqueta && !temEtiqueta(it.e, linha.etiqueta)) { ignorados.semEtiqueta++; guardarOutro(it); continue; }
       const s = linha.painel;
       const r = atribuir(it, s, config);
       const item = { n: it.n, s };
@@ -238,7 +246,7 @@
       if (!pessoa) { semResponsavel.push(Object.assign(item, { motivo: r.motivo })); continue; }
       (porPessoa[pessoa] = porPessoa[pessoa] || []).push(item);
     }
-    return { porPessoa, semResponsavel, ignorados, porSetor };
+    return { porPessoa, semResponsavel, ignorados, porSetor, outros: [...outros.values()] };
   }
 
   // Filas do diretor e do gestor: escolhidas só por etiqueta, em qualquer tarefa ou setor (independem da tabela de tarefas).

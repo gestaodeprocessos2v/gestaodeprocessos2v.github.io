@@ -225,11 +225,25 @@
     }
     return mapa;
   }
-  // Acrescenta a cada pendente o campo `lista` ({pessoa, tarefa, chegada} ou null). Não altera os itens recebidos.
-  function cruzarPendentes(itens, filas, servidores) {
-    const idx = indexarListas(filas, servidores);
-    return (itens || []).map(it => Object.assign({}, it, { lista: idx.get(soDig(it.n)) || null }));
+  // Processos de tarefas sem fila de servidor (outros setores da vara): Map número -> {tarefa, chegada}; vale a chegada mais antiga.
+  function indexarOutros(outros) {
+    const mapa = new Map();
+    for (const it of outros || []) {
+      const k = soDig(it.n); if (!k) continue;
+      const ja = mapa.get(k), ch = it.ch == null ? null : it.ch;
+      if (!ja || (ch != null && (ja.chegada == null || ch < ja.chegada))) mapa.set(k, { tarefa: it.t || '', chegada: ch });
+    }
+    return mapa;
+  }
+  // Acrescenta a cada pendente o campo `lista`: {pessoa, tarefa, chegada} (servidor), {pessoa: null, outro: true, tarefa, chegada}
+  // (tarefa de outro setor da vara, sem servidor) ou null (não localizado). O servidor sempre vence. Não altera os itens recebidos.
+  function cruzarPendentes(itens, filas, servidores, outros) {
+    const idx = indexarListas(filas, servidores), fora = indexarOutros(outros);
+    return (itens || []).map(it => {
+      const k = soDig(it.n), s = idx.get(k), o = s ? null : fora.get(k);
+      return Object.assign({}, it, { lista: s || (o ? { pessoa: null, outro: true, tarefa: o.tarefa, chegada: o.chegada } : null) });
+    });
   }
 
-  root.Metas = { VARA, INSTANCIAS, METAS, lerXlsx, lerResumo, lerPendentes, conferir, situacao, pct, serialParaData, LIMITE_ATENCAO, indexarListas, cruzarPendentes };
+  root.Metas = { VARA, INSTANCIAS, METAS, lerXlsx, lerResumo, lerPendentes, conferir, situacao, pct, serialParaData, LIMITE_ATENCAO, indexarListas, indexarOutros, cruzarPendentes };
 })(typeof window !== 'undefined' ? window : globalThis);
