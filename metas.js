@@ -207,6 +207,46 @@
   }
   const pct = v => (v == null ? '—' : (v * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%');
 
+  // ---------- estimativa da Meta 3 ----------
+  // Cumprimento = IC / (ICa + 0,5 p.p.), IC = homologatórias / sentenças. Contagens vêm do Detalhamento do Portal BI (digitadas na Gestão);
+  // o ICa sai do percentual do Resumo: ICa = IC / cumprimento − 0,005. A meta pede IC >= ICa + 0,005; cada homologatória nova também
+  // é uma sentença nova, então x >= (alvo·S − H) / (1 − alvo). A projeção até dezembro mantém o ritmo de sentenças do ano.
+  const SEM_NUM = v => (v == null || v === '' || !isFinite(Number(v)) ? null : Number(v));
+  function contagensValidas(c) {
+    const h = SEM_NUM(c && c.h), s = SEM_NUM(c && c.s);
+    return h != null && s != null && Number.isInteger(h) && Number.isInteger(s) && h >= 0 && s > 0 && h <= s ? { h, s } : null;
+  }
+  function faltamHom(h, s, ic, ica) {
+    const alvo = ica + 0.005; if (alvo >= 1) return null;
+    return Math.max(0, Math.ceil((alvo * s - h) / (1 - alvo) - 1e-9));
+  }
+  function diaDoAno(ms) { const d = new Date(ms), ini = new Date(d.getFullYear(), 0, 0); return Math.floor((d - ini) / 86400000); }
+  // envio: registro de metas_envios (resumo com percentuais e contagens3). Devolve null sem contagens; senão {vara, porInstancia, projecao}.
+  function estimativaMeta3(envio) {
+    const r = envio && envio.resumo; const c3 = r && r.contagens3; if (!c3) return null;
+    const calc = (cont, cump) => {
+      const k = contagensValidas(cont); if (!k || cump == null || !(cump > 0)) return null;
+      const ic = k.h / k.s, ica = ic / cump - 0.005;
+      if (ic >= 0.08) return { h: k.h, s: k.s, ic, ica, cump, falta: 0, barreira: true };
+      return { h: k.h, s: k.s, ic, ica, cump, falta: cump >= 1 ? 0 : faltamHom(k.h, k.s, ic, ica) };
+    };
+    const porInstancia = {};
+    for (const inst of INSTANCIAS) { const cump = r.instancias && r.instancias[inst] ? r.instancias[inst].m3 : null; const e = calc(c3[inst], cump); if (e) porInstancia[inst] = e; }
+    const ks = INSTANCIAS.map(i => contagensValidas(c3[i])), cumpVara = r.vara ? r.vara.m3 : null;
+    const vara = ks.every(Boolean) && cumpVara != null ? calc({ h: ks[0].h + ks[1].h, s: ks[0].s + ks[1].s }, cumpVara) : null;
+    if (!vara && !Object.keys(porInstancia).length) return null;
+    // projeção: só no ano da carga e depois de 30 dias de dados
+    const t = envio.carga_bi ? Date.parse(envio.carga_bi) : NaN, dia = isNaN(t) ? 0 : diaDoAno(t);
+    const projetar = e => {
+      if (!e || dia < 30 || e.barreira || e.cump >= 1) return null;
+      const sFim = e.s * 365 / dia, hTend = e.ic * sFim;
+      return { sFim: Math.round(sFim), extra: faltamHom(hTend, sFim, e.ic, e.ica) };
+    };
+    const projecao = { vara: projetar(vara) };
+    for (const inst of INSTANCIAS) projecao[inst] = projetar(porInstancia[inst]);
+    return { vara, porInstancia, projecao };
+  }
+
   // ---------- nome da classe processual ----------
   // "7 - PROCEDIMENTO COMUM CÍVEL" -> "7 - Procedimento Comum Cível". Preposições e artigos ficam em minúsculas (menos no começo do
   // nome); siglas conhecidas e algarismos romanos ficam em maiúsculas. O texto original não é alterado (busca e dados seguem iguais).
@@ -268,5 +308,5 @@
     });
   }
 
-  root.Metas = { VARA, INSTANCIAS, METAS, lerXlsx, lerResumo, lerPendentes, conferir, situacao, pct, serialParaData, LIMITE_ATENCAO, indexarListas, indexarOutros, cruzarPendentes, formatarClasse };
+  root.Metas = { VARA, INSTANCIAS, METAS, lerXlsx, lerResumo, lerPendentes, conferir, situacao, pct, serialParaData, LIMITE_ATENCAO, indexarListas, indexarOutros, cruzarPendentes, formatarClasse, estimativaMeta3, contagensValidas };
 })(typeof window !== 'undefined' ? window : globalThis);

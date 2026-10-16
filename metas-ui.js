@@ -31,6 +31,27 @@
     return `<svg class="spark" viewBox="0 0 ${w} ${h}" role="img" aria-label="Evolução entre as cargas (de ${esc(M.pct(serie[0]))} para ${esc(M.pct(serie[serie.length - 1]))})"><line x1="0" x2="${w}" y1="${y(1).toFixed(1)}" y2="${y(1).toFixed(1)}" class="spark-meta"/><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
   }
 
+  // Meta 3: quantas sentenças homologatórias faltam, agora e até dezembro (contagens digitadas na Gestão no envio).
+  function estimativaHtml(e) {
+    const est = M.estimativaMeta3(e); if (!est) return '';
+    const NOMES = { '1º Grau': '1º Grau', JEF: 'JEF' };
+    const parte = (valorDe) => M.INSTANCIAS.map(i => { const v = valorDe(i); return v == null ? null : `${NOMES[i]} ${v === 0 ? 'ok' : '+' + v.toLocaleString('pt-BR')}`; }).filter(Boolean).join(' · ');
+    const hoje = i => est.porInstancia[i] ? est.porInstancia[i].falta : null;
+    const ate = i => est.projecao[i] ? est.projecao[i].extra : null;
+    const v = est.vara;
+    const txtHoje = v ? (v.barreira ? 'Meta cumprida pela cláusula de barreira (IC de 8% ou mais).' : v.falta === 0 ? 'Meta cumprida pela vara.' : `<b class="mono">+${v.falta.toLocaleString('pt-BR')}</b> homologatórias`) : '';
+    const detHoje = parte(hoje);
+    const p = est.projecao.vara;
+    const txtAte = p ? `<b class="mono">+${p.extra.toLocaleString('pt-BR')}</b> acima do ritmo atual` : '';
+    const detAte = parte(ate);
+    const ajudaHoje = 'Sentenças homologatórias a mais, com as sentenças do ano já proferidas, para o Índice de Conciliação chegar ao índice de 2024/2025 mais 0,5 ponto percentual. Cada homologatória nova conta também como sentença nova.';
+    const ajudaAte = 'Projeção até 31/12 mantendo o ritmo de sentenças do ano e o índice de conciliação atual; mostra quantas homologatórias faltam acima desse ritmo.';
+    return `<div class="meta-est small"><b>Para cumprir a meta</b>
+      ${txtHoje || detHoje ? `<div title="${esc(ajudaHoje)}">Hoje: ${txtHoje}${detHoje ? (txtHoje ? ' ' : '') + `<span class="muted">(${esc(detHoje)})</span>` : ''}</div>` : ''}
+      ${txtAte || detAte ? `<div title="${esc(ajudaAte)}">Até 31/12: ${txtAte}${detAte ? (txtAte ? ' ' : '') + `<span class="muted">(${esc(detAte)})</span>` : ''}</div>` : ''}
+    </div>`;
+  }
+
   function cartao(m, envios) {
     const e = envios[0], v = valorPrincipal(e, m), sit = M.situacao(v);
     const anterior = envios[1] ? valorPrincipal(envios[1], m) : null;
@@ -48,6 +69,7 @@
         ${porInst.length > 1 ? porInst.map(x => `<span>${esc(x.inst)}: <b class="mono">${esc(M.pct(x.v))}</b></span>`).join('') : ''}
         ${pend != null ? `<span>${pend === 0 ? 'Nenhum processo pendente' : `<b class="mono">${pend.toLocaleString('pt-BR')}</b> ${pend === 1 ? 'processo pendente' : 'processos pendentes'}`}</span>` : ''}
       </div>
+      ${m.id === 'm3' ? estimativaHtml(e) : ''}
     </article>`;
   }
 
@@ -197,7 +219,22 @@
   });
 
   // ---------- aba Gestão: envio das planilhas ----------
-  const imp = () => (st.metasImp = st.metasImp || { resumo: null, pendentes: null, erroResumo: '', erroPendentes: '', carga: '', gravando: false, remover: null });
+  const imp = () => (st.metasImp = st.metasImp || { resumo: null, pendentes: null, erroResumo: '', erroPendentes: '', carga: '', gravando: false, remover: null, m3: {} });
+
+  // Meta 3 (opcional): sentenças homologatórias e sentenças de cada instância, lidas no Detalhamento do Portal BI.
+  const CAMPOS_M3 = [['1º Grau', 'g1'], ['JEF', 'jef']];
+  // Devolve {contagens: {inst:{h,s}} só com os pares válidos, erro: texto ou ''}.
+  function lerM3() {
+    const v = imp().m3 || {}, contagens = {}; let erro = '';
+    for (const [inst, k] of CAMPOS_M3) {
+      const h = String(v[k + 'h'] == null ? '' : v[k + 'h']).trim(), s = String(v[k + 's'] == null ? '' : v[k + 's']).trim();
+      if (!h && !s) continue;
+      const par = M.contagensValidas({ h, s });
+      if (par) contagens[inst] = par;
+      else erro = `Meta 3, ${inst}: informe as duas contagens como números inteiros, com as homologatórias menores ou iguais às sentenças (ou deixe os dois campos em branco).`;
+    }
+    return { contagens, erro };
+  }
 
   async function lerPlanilha(papel, arquivo) {
     const s = imp(), campo = papel === 'resumo' ? 'resumo' : 'pendentes', erro = papel === 'resumo' ? 'erroResumo' : 'erroPendentes';
@@ -235,7 +272,9 @@
   P.painelMetasGestao = function () {
     const s = imp(), r = s.resumo, p = s.pendentes;
     const avisos = avisosEnvio();
-    const pronto = r && p && cargaMs() != null && !jaEnviada() && !s.gravando;
+    const m3 = lerM3();
+    const pronto = r && p && cargaMs() != null && !jaEnviada() && !s.gravando && !m3.erro;
+    const campoM3 = (rotulo, id) => `<label class="campo"><span>${rotulo}</span><input type="number" min="0" step="1" inputmode="numeric" id="m3-${id}" value="${esc((s.m3 || {})[id] == null ? '' : (s.m3 || {})[id])}"></label>`;
     const prevRes = s.erroResumo ? `<div class="aviso erro">${esc(s.erroResumo)}</div>` : r ? `<div class="previa"><div class="small"><b>Resumo:</b> “${esc(r.arquivo)}”, 2ª Vara${r.criadoEm ? `, gerado em ${esc(dataHoraBR(r.criadoEm))}` : ''}.</div>${tabelaPrevia(r)}</div>` : '';
     if (p && !st.metas.outrosLido && !st.metas.carregandoOutros) { st.metas.carregandoOutros = true; carregarOutros().then(() => { st.metas.carregandoOutros = false; render(); }); }
     const semLista = p && st.metas.outrosLido ? M.cruzarPendentes(p.dados.itens, st.filas, servidores(), st.metas.outros).filter(it => !it.lista) : [];
@@ -251,6 +290,12 @@
       <label class="campo"><span>Relatório “Resumo” (.xlsx)</span><input type="file" id="metas-arq-resumo" accept=".xlsx"></label>
       <label class="campo"><span>Relatório “Pendentes por Meta” (.xlsx)</span><input type="file" id="metas-arq-pend" accept=".xlsx"></label>
       <label class="campo"><span>Última Carga do Portal BI (data e hora)</span><input type="datetime-local" id="metas-carga" value="${esc(s.carga)}"></label>
+      <h3>Meta 3: estimativa de homologatórias (opcional)</h3>
+      <p class="small muted">Para o cartão da Meta 3 mostrar quantas sentenças homologatórias faltam, informe as contagens da <b>aba Detalhamento</b> do Portal BI, filtrada por Meta 3, ano 2026, serventia PB - 2ª Vara Federal e, uma de cada vez, instância 1º Grau e JEF (cartões “Sent. Homologatórias” e “Sentenças”). Em branco, o cartão fica sem estimativa.</p>
+      <div class="campos">
+        ${campoM3('1º Grau: sent. homologatórias', 'g1h')}${campoM3('1º Grau: sentenças', 'g1s')}${campoM3('JEF: sent. homologatórias', 'jefh')}${campoM3('JEF: sentenças', 'jefs')}
+      </div>
+      ${m3.erro ? `<div class="aviso erro">${esc(m3.erro)}</div>` : ''}
       ${prevRes}${prevPend}${alertaSem}
       ${jaEnviada() ? '<div class="aviso erro">Essa carga já foi enviada. Se for um reenvio, remova antes o envio anterior da lista abaixo.</div>' : ''}
       ${avisos.map(a => `<div class="aviso novo">${esc(a)}</div>`).join('')}
@@ -264,7 +309,7 @@
 
   async function gravarMetas() {
     const s = imp();
-    if (!s.resumo || !s.pendentes || cargaMs() == null || s.gravando || jaEnviada()) return;
+    if (!s.resumo || !s.pendentes || cargaMs() == null || s.gravando || jaEnviada() || lerM3().erro) return;
     s.gravando = true; render();
     const sb = st.sb;
     let id = null;
@@ -272,7 +317,7 @@
       const pd = s.pendentes.dados;
       const envio = {
         enviado_por: st.email, carga_bi: iso(cargaMs()), n_pendentes: pd.total,
-        resumo: { vara: s.resumo.dados.vara, instancias: s.resumo.dados.instancias, metasLidas: s.resumo.dados.metasLidas },
+        resumo: Object.assign({ vara: s.resumo.dados.vara, instancias: s.resumo.dados.instancias, metasLidas: s.resumo.dados.metasLidas }, Object.keys(lerM3().contagens).length ? { contagens3: lerM3().contagens } : {}),
         arquivos: {
           resumo: { nome: s.resumo.arquivo, criadoEm: s.resumo.criadoEm },
           pendentes: { nome: s.pendentes.arquivo, criadoEm: s.pendentes.criadoEm, total: pd.total, porMeta: pd.porMeta, porInstancia: pd.porInstancia },
@@ -306,7 +351,11 @@
     else if (e.target.id === 'metas-arq-pend') lerPlanilha('pendentes', e.target.files && e.target.files[0]);
     else if (e.target.id === 'metas-carga') { imp().carga = e.target.value; render(); }
   });
-  vg.addEventListener('input', e => { if (e.target.id === 'metas-carga') imp().carga = e.target.value; });
+  vg.addEventListener('input', e => {
+    if (e.target.id === 'metas-carga') imp().carga = e.target.value;
+    else if (/^m3-(g1|jef)[hs]$/.test(e.target.id)) imp().m3[e.target.id.slice(3)] = e.target.value;
+  });
+  vg.addEventListener('change', e => { if (/^m3-(g1|jef)[hs]$/.test(e.target.id)) render(); });
   vg.addEventListener('click', async e => {
     const a = e.target.closest('[data-acao]'); if (!a || !a.dataset.acao.startsWith('metas-')) return;
     try {

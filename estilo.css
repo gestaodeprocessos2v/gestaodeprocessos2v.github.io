@@ -334,3 +334,5 @@ button.tile:focus-visible { outline: 2px solid currentColor; outline-offset: 2px
 
 .sem-lista td { color: var(--muted, #6b7280); }
 .sem-lista .num { color: inherit; }
+.meta-est { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--line); padding-top: 6px; margin-top: 2px; }
+.meta-est > div { cursor: help; }
