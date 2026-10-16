@@ -36,6 +36,10 @@
     capturarGestao();
     prepararRascunho();
     const foco = document.activeElement && document.activeElement.id;
+    // Os campos de arquivo são recriados vazios a cada desenho; os que ainda têm arquivo lido são mantidos.
+    const mi = st.metasImp, imp = st.importacao;
+    const manter = [['imp-arquivo', imp && (imp.resultado || imp.erro)], ['metas-arq-resumo', mi && (mi.resumo || mi.erroResumo)], ['metas-arq-pend', mi && (mi.pendentes || mi.erroPendentes)]]
+      .map(([id, ativo]) => { const el = ativo && document.getElementById(id); return el && el.files && el.files.length ? el : null; }).filter(Boolean);
     v.innerHTML = `<div class="paineis">
       ${P.htmlGestorFila()}
       ${painelImportar()}
@@ -47,6 +51,7 @@
       ${painelTarefas()}
       ${painelConfig()}
     </div>`;
+    manter.forEach(el => { const novo = document.getElementById(el.id); if (novo) novo.replaceWith(el); });
     if (foco) { const el = document.getElementById(foco); if (el && el.tagName !== 'BUTTON') el.focus(); }
   };
 
