@@ -304,3 +304,30 @@ button.tile:focus-visible { outline: 2px solid currentColor; outline-offset: 2px
 .selo.fora { background: var(--sunken); color: var(--muted); border: 1px dashed var(--muted); }
 .selo.fora::after, .selo.paralelo::after { content: attr(data-balao); position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 20; width: max-content; max-width: min(260px, 70vw); padding: 6px 8px; border-radius: var(--r); background: var(--ink, #1c2b2a); color: var(--surface); box-shadow: var(--shadow); font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; line-height: 1.35; white-space: normal; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .12s; }
 .selo.fora:hover::after, .selo.fora:focus::after, .selo.fora:focus-visible::after, .selo.paralelo:hover::after, .selo.paralelo:focus::after, .selo.paralelo:focus-visible::after { opacity: 1; visibility: visible; }
+
+/* Metas CNJ */
+.metas-topo { margin-top: 18px; }
+.metas-topo p { margin: 0; }
+.metas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr)); gap: 14px; margin-top: 14px; }
+.meta-card { background: var(--surface); border-radius: var(--r); box-shadow: var(--shadow); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; border-left: 5px solid var(--line); }
+.meta-card.ok { border-left-color: var(--ok); }
+.meta-card.atencao { border-left-color: var(--pri); }
+.meta-card.baixo { border-left-color: var(--urg); }
+.meta-card header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.meta-card h3 { font-size: .95rem; }
+.meta-card p { margin: 0; }
+.selo-sit { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; white-space: nowrap; background: var(--sunken); color: var(--muted); }
+.selo-sit.ok { background: var(--ok-bg); color: var(--ok); }
+.selo-sit.atencao { background: var(--pri-bg); color: var(--pri); }
+.selo-sit.baixo { background: var(--urg-bg); color: var(--urg); }
+.valor-linha { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.meta-card .valor { font-size: 2rem; line-height: 1.1; font-weight: 600; }
+.meta-card.ok .valor { color: var(--ok); } .meta-card.atencao .valor { color: var(--pri); } .meta-card.baixo .valor { color: var(--urg); }
+.dif { font-size: 12px; font-weight: 600; font-family: var(--font-mono); }
+.dif.sobe { color: var(--ok); } .dif.desce { color: var(--urg); }
+.meta-card .spark { width: 100%; max-width: 160px; height: 30px; color: var(--accent); }
+.spark-meta { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; opacity: .6; }
+.meta-det { display: flex; flex-direction: column; gap: 2px; color: var(--muted); }
+.metas-sem { margin-top: 14px; }
+.chip-meta { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--sunken); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.previa .tabela-wrap { margin-top: 6px; }

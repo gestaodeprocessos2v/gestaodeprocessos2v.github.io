@@ -31,6 +31,7 @@
     filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
     ver: 0, cache: { ver: -1, m: {} },
     aba: 'fila', verComo: '', area: 'fila', menuAreas: false,
+    abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null,
     vis: {
       fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '' },
       geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '' },
@@ -137,6 +138,7 @@
       email: '', perfil: '', nome: '', pessoa: '', config: null, rascunho: null, tarefas: [], mapaTarefas: new Map(), rascTarefas: null,
       tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
       anotando: null, devolvendo: null, modal: null, importacao: null,
+      area: 'fila', menuAreas: false, abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, metasImp: null,
     });
     st.ver++;
   }
@@ -211,6 +213,11 @@
     ]);
     if (cfg.error) throw cfg.error;
     if (negados.error) throw negados.error;
+    // Metas CNJ: só o histórico dos envios (pequeno); a lista de pendentes é carregada quando a aba Pendentes é aberta.
+    if (PERFIS_METAS.includes(st.perfil)) {
+      const m = await sb.from('metas_envios').select('id,enviado_em,enviado_por,carga_bi,resumo,n_pendentes,arquivos').order('carga_bi', { ascending: false }).limit(120);
+      if (m.error) { console.error(m.error); st.metas.erro = true; } else { st.metas.erro = false; st.metas.envios = m.data || []; }
+    }
     const porChave = Object.fromEntries((cfg.data || []).map(r => [r.chave, r]));
     st.config = porChave.geral ? porChave.geral.valor : null;
     if (!st.rascunho && st.config) st.rascunho = JSON.parse(JSON.stringify(st.config));
@@ -348,7 +355,8 @@
 
   // Área Metas CNJ: por enquanto só a estrutura; os dados virão da planilha do Portal BI enviada pelo gestor.
   function renderMetas() {
-    $('#v-metas').innerHTML = `<div class="vazio"><h2>Metas CNJ</h2><p>Esta área vai mostrar como a 2ª Vara está nas Metas Nacionais do Poder Judiciário de 2026 (metas 1, 2, 3, 4, 5, 6, 7 e 10). Os números ainda não foram enviados.</p></div>`;
+    if (window.PAINEL.renderMetas) window.PAINEL.renderMetas();
+    else $('#v-metas').innerHTML = '<div class="vazio"><h2>Metas CNJ</h2><p>Carregando…</p></div>';
   }
 
   function renderMenuAreas(ok) {
@@ -382,14 +390,16 @@
       sel.value = st.verComo;
     }
     if (ok) $('#quem').innerHTML = `${esc(st.nome)} <small>${esc(PERFIS[st.perfil] || st.perfil)}</small>`;
-    const abas = ok && st.area === 'fila' ? abasDisponiveis() : []; // Metas CNJ ainda tem uma só tela
+    const emMetas = st.area === 'metas';
+    const abas = !ok ? [] : emMetas ? ['visao', 'pendentes'] : abasDisponiveis();
+    const atual = emMetas ? st.abaMetas : st.aba;
     const nav = $('#abas');
     nav.hidden = abas.length < 2;
-    const rot = { fila: 'Fila', geral: 'Geral', gestao: 'Gestão' };
-    const nAvisos = urgenciasDoGestor();
-    const h = abas.map(a => `<button class="aba" role="tab" id="aba-${a}" aria-selected="${a === st.aba}" data-aba="${a}">${rot[a]}${a === 'gestao' && nAvisos ? ` <span class="contagem">${nAvisos}</span>` : ''}</button>`).join('');
+    const rot = { fila: 'Fila', geral: 'Geral', gestao: 'Gestão', visao: 'Visão geral', pendentes: 'Pendentes' };
+    const nAvisos = emMetas ? 0 : urgenciasDoGestor();
+    const h = abas.map(a => `<button class="aba" role="tab" id="aba-${a}" aria-selected="${a === atual}" data-aba="${a}">${rot[a]}${a === 'gestao' && nAvisos ? ` <span class="contagem">${nAvisos}</span>` : ''}</button>`).join('');
     if (nav.dataset.h !== h) { nav.innerHTML = h; nav.dataset.h = h; }
-    for (const b of nav.querySelectorAll('.aba')) b.setAttribute('aria-selected', String(b.dataset.aba === st.aba));
+    for (const b of nav.querySelectorAll('.aba')) b.setAttribute('aria-selected', String(b.dataset.aba === atual));
   }
 
   function renderAvisos() {
@@ -944,6 +954,7 @@
     });
     $('#abas').addEventListener('click', e => {
       const b = e.target.closest('.aba'); if (!b) return;
+      if (st.area === 'metas') { st.abaMetas = b.dataset.aba; render(); return; }
       st.aba = b.dataset.aba; guardar('fila.aba.' + st.email, st.aba);
       st.anotando = null; st.devolvendo = null; render();
     });
@@ -1014,7 +1025,7 @@
     st.sb.auth.onAuthStateChange((evento) => {
       if (evento === 'SIGNED_OUT' && st.estado === 'ok') setTimeout(() => { reiniciarEstado(); st.estado = 'login'; render(); }, 0);
     });
-    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, atualizar, baixar, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial });
+    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, atualizar, baixar, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS });
     iniciarSessao();
   }
   iniciar();

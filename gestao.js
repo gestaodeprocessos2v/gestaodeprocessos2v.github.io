@@ -39,6 +39,7 @@
     v.innerHTML = `<div class="paineis">
       ${P.htmlGestorFila()}
       ${painelImportar()}
+      ${P.painelMetasGestao ? P.painelMetasGestao() : ''}
       ${painelUrgencia()}
       ${painelResumo()}
       ${painelAcessosNegados()}
