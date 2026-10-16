@@ -331,3 +331,6 @@ button.tile:focus-visible { outline: 2px solid currentColor; outline-offset: 2px
 .metas-sem { margin-top: 14px; }
 .chip-meta { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--sunken); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
 .previa .tabela-wrap { margin-top: 6px; }
+
+.sem-lista td { color: var(--muted, #6b7280); }
+.sem-lista .num { color: inherit; }

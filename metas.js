@@ -207,5 +207,29 @@
   }
   const pct = v => (v == null ? '—' : (v * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%');
 
-  root.Metas = { VARA, INSTANCIAS, METAS, lerXlsx, lerResumo, lerPendentes, conferir, situacao, pct, serialParaData, LIMITE_ATENCAO };
+  // ---------- cruzamento com as listas dos servidores ----------
+  // filas: linhas {pessoa, itens:[{n, t, ch, fora}]} (lista semanal e diária); servidores: ids de quem conta (só perfil Servidor).
+  // Devolve um Map: número só com dígitos -> {pessoa, tarefa, chegada (ms ou null)}. Mais de uma entrada: vale a de chegada mais antiga.
+  const soDig = s => String(s == null ? '' : s).replace(/\D/g, '');
+  function indexarListas(filas, servidores) {
+    const ok = servidores instanceof Set ? servidores : new Set(servidores);
+    const mapa = new Map();
+    for (const r of filas || []) {
+      if (!ok.has(r.pessoa)) continue;
+      for (const it of r.itens || []) {
+        if (it.fora) continue;
+        const k = soDig(it.n); if (!k) continue;
+        const ja = mapa.get(k), ch = it.ch == null ? null : it.ch;
+        if (!ja || (ch != null && (ja.chegada == null || ch < ja.chegada))) mapa.set(k, { pessoa: r.pessoa, tarefa: it.t || '', chegada: ch });
+      }
+    }
+    return mapa;
+  }
+  // Acrescenta a cada pendente o campo `lista` ({pessoa, tarefa, chegada} ou null). Não altera os itens recebidos.
+  function cruzarPendentes(itens, filas, servidores) {
+    const idx = indexarListas(filas, servidores);
+    return (itens || []).map(it => Object.assign({}, it, { lista: idx.get(soDig(it.n)) || null }));
+  }
+
+  root.Metas = { VARA, INSTANCIAS, METAS, lerXlsx, lerResumo, lerPendentes, conferir, situacao, pct, serialParaData, LIMITE_ATENCAO, indexarListas, cruzarPendentes };
 })(typeof window !== 'undefined' ? window : globalThis);
