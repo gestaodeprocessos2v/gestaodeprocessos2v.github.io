@@ -207,6 +207,29 @@
   }
   const pct = v => (v == null ? '—' : (v * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%');
 
+  // ---------- nome da classe processual ----------
+  // "7 - PROCEDIMENTO COMUM CÍVEL" -> "7 - Procedimento Comum Cível". Preposições e artigos ficam em minúsculas (menos no começo do
+  // nome); siglas conhecidas e algarismos romanos ficam em maiúsculas. O texto original não é alterado (busca e dados seguem iguais).
+  const MINUSCULAS = new Set(['a', 'à', 'as', 'às', 'o', 'os', 'e', 'ou', 'de', 'da', 'das', 'do', 'dos', 'em', 'na', 'nas', 'no', 'nos', 'para', 'por', 'com', 'sem', 'ao', 'aos', 'sobre', 'contra']);
+  const SIGLAS = new Set(['jef', 'inss', 'cpc', 'cnj', 'trf', 'trf5', 'rpv', 'cef', 'ibama', 'incra', 'funai', 'ii', 'iii', 'iv', 'vi', 'vii', 'viii', 'ix']);
+  const cacheClasse = new Map();
+  function formatarClasse(txt) {
+    const s = String(txt == null ? '' : txt);
+    if (cacheClasse.has(s)) return cacheClasse.get(s);
+    let inicio = true;
+    const out = s.toLocaleLowerCase('pt-BR').replace(/[\p{L}\p{N}]+|[^\p{L}\p{N}]+/gu, tok => {
+      if (!/[\p{L}\p{N}]/u.test(tok)) { if (/[-–/]/.test(tok)) inicio = true; return tok; }
+      const primeira = inicio; inicio = false;
+      if (/\d/.test(tok)) return tok;
+      if (SIGLAS.has(tok)) return tok.toLocaleUpperCase('pt-BR');
+      if (!primeira && MINUSCULAS.has(tok)) return tok;
+      return tok.charAt(0).toLocaleUpperCase('pt-BR') + tok.slice(1);
+    });
+    if (cacheClasse.size > 2000) cacheClasse.clear();
+    cacheClasse.set(s, out);
+    return out;
+  }
+
   // ---------- cruzamento com as listas dos servidores ----------
   // filas: linhas {pessoa, itens:[{n, t, ch, fora}]} (lista semanal e diária); servidores: ids de quem conta (só perfil Servidor).
   // Devolve um Map: número só com dígitos -> {pessoa, tarefa, chegada (ms ou null)}. Mais de uma entrada: vale a de chegada mais antiga.
@@ -245,5 +268,5 @@
     });
   }
 
-  root.Metas = { VARA, INSTANCIAS, METAS, lerXlsx, lerResumo, lerPendentes, conferir, situacao, pct, serialParaData, LIMITE_ATENCAO, indexarListas, indexarOutros, cruzarPendentes };
+  root.Metas = { VARA, INSTANCIAS, METAS, lerXlsx, lerResumo, lerPendentes, conferir, situacao, pct, serialParaData, LIMITE_ATENCAO, indexarListas, indexarOutros, cruzarPendentes, formatarClasse };
 })(typeof window !== 'undefined' ? window : globalThis);
