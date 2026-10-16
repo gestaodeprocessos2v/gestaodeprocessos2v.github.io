@@ -30,7 +30,7 @@
     resumo: null,
     filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
     ver: 0, cache: { ver: -1, m: {} },
-    aba: 'fila', verComo: '',
+    aba: 'fila', verComo: '', area: 'fila', menuAreas: false,
     vis: {
       fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '' },
       geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '' },
@@ -163,6 +163,7 @@
       const abas = abasDisponiveis();
       const salva = ler('fila.aba.' + st.email);
       st.aba = abas.includes(salva) ? salva : abas[0];
+      st.area = 'fila'; st.menuAreas = false; // o painel sempre abre na Fila de Trabalho
       st.estado = 'ok'; render();
     } catch (e) {
       console.error(e);
@@ -174,6 +175,23 @@
     if (temFila()) return ['fila', 'geral'];
     if (st.perfil === 'gestor') return st.verComo ? ['fila', 'geral', 'gestao'] : ['geral', 'gestao'];
     return ['geral'];
+  }
+
+  // Áreas do painel (menu do logo). Metas CNJ: gestor, servidores, magistrado(a) e diretor de secretaria.
+  const HOJE = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const AREAS = {
+    fila: { rotulo: 'Fila de Trabalho', titulo: 'Fila de Trabalho', subtitulo: 'Gestão de Processos · 2ª Vara Federal · ' + HOJE, pagina: 'Fila de Trabalho · Gestão de Processos' },
+    metas: { rotulo: 'Metas CNJ', titulo: 'Metas CNJ', subtitulo: 'Metas Nacionais 2026 · 2ª Vara Federal', pagina: 'Metas CNJ · Gestão de Processos' },
+  };
+  const PERFIS_METAS = ['gestor', 'servidor', 'magistrado', 'diretor'];
+  function areasDisponiveis() {
+    return PERFIS_METAS.includes(st.perfil) ? ['fila', 'metas'] : ['fila'];
+  }
+  function irParaArea(area) {
+    st.menuAreas = false;
+    if (!areasDisponiveis().includes(area)) area = 'fila';
+    if (st.area !== area) { st.area = area; st.anotando = null; st.devolvendo = null; st.modal = null; window.scrollTo({ top: 0 }); }
+    render();
   }
 
   // ---------- dados ----------
@@ -298,13 +316,20 @@
     renderTopo();
     renderAvisos();
     const ok = st.estado === 'ok';
+    const emMetas = ok && st.area === 'metas';
     $('#v-estado').hidden = ok;
-    for (const a of ['fila', 'geral', 'gestao']) $('#v-' + a).hidden = !ok || st.aba !== a;
+    for (const a of ['fila', 'geral', 'gestao']) $('#v-' + a).hidden = !ok || emMetas || st.aba !== a;
+    $('#v-metas').hidden = !emMetas;
     if (!ok) {
-      for (const a of ['fila', 'geral', 'gestao']) $('#v-' + a).innerHTML = '';
+      for (const a of ['fila', 'geral', 'gestao', 'metas']) $('#v-' + a).innerHTML = '';
       renderEstado(); renderModal(); return;
     }
     $('#v-estado').innerHTML = '';
+    if (emMetas) {
+      for (const a of ['fila', 'geral', 'gestao']) $('#v-' + a).innerHTML = '';
+      renderMetas(); renderModal(); return;
+    }
+    $('#v-metas').innerHTML = '';
     for (const a of ['fila', 'geral', 'gestao']) if (a !== st.aba) $('#v-' + a).innerHTML = '';
     if (st.aba === 'fila') renderLista('fila');
     else if (st.aba === 'geral') renderLista('geral');
@@ -321,13 +346,35 @@
   // Urgências abertas na fila do gestor (processos que servidores, diretor ou o próprio gestor enviaram a ele).
   const urgenciasDoGestor = () => st.perfil === 'gestor' ? filaDe(GESTOR_ID).filter(l => l.origem === 'urgencia' && !l.concluido).length : 0;
 
+  // Área Metas CNJ: por enquanto só a estrutura; os dados virão da planilha do Portal BI enviada pelo gestor.
+  function renderMetas() {
+    $('#v-metas').innerHTML = `<div class="vazio"><h2>Metas CNJ</h2><p>Esta área vai mostrar como a 2ª Vara está nas Metas Nacionais do Poder Judiciário de 2026 (metas 1, 2, 3, 4, 5, 6, 7 e 10). Os números ainda não foram enviados.</p></div>`;
+  }
+
+  function renderMenuAreas(ok) {
+    const lista = ok ? areasDisponiveis() : [];
+    const btn = $('#btn-areas'), menu = $('#menu-areas');
+    const abre = lista.length > 1; // com uma só área o logo continua apenas como identidade
+    btn.disabled = !abre;
+    if (!abre) st.menuAreas = false;
+    btn.setAttribute('aria-expanded', String(st.menuAreas));
+    menu.hidden = !st.menuAreas;
+    const h = lista.map(a => `<button class="item-area" type="button" role="menuitemradio" aria-checked="${a === st.area}" data-area="${a}">${AREAS[a].rotulo}</button>`).join('');
+    if (menu.dataset.h !== h) { menu.innerHTML = h; menu.dataset.h = h; }
+    for (const b of menu.querySelectorAll('.item-area')) b.setAttribute('aria-checked', String(b.dataset.area === st.area));
+  }
+
   function renderTopo() {
     const ok = st.estado === 'ok';
+    const area = AREAS[ok ? st.area : 'fila'];
     $('#sou').hidden = !ok;
-    document.title = ok ? 'Fila de Trabalho · Gestão de Processos' : 'Acesso restrito';
+    document.title = ok ? area.pagina : 'Acesso restrito';
     $('#marca-nome').hidden = !ok; // título e subtítulo só aparecem depois de validado o acesso
+    $('#marca-nome h1').textContent = area.titulo;
+    $('#subtitulo').textContent = area.subtitulo;
+    renderMenuAreas(ok);
     const sel = $('#ver-como');
-    const mostrarSel = ok && st.perfil === 'gestor' && pessoas().length > 0;
+    const mostrarSel = ok && st.area === 'fila' && st.perfil === 'gestor' && pessoas().length > 0;
     sel.hidden = !mostrarSel;
     if (mostrarSel) {
       const h = opcoesPessoas(st.verComo, 'Ver a fila como…', null, { diretor: true });
@@ -335,7 +382,7 @@
       sel.value = st.verComo;
     }
     if (ok) $('#quem').innerHTML = `${esc(st.nome)} <small>${esc(PERFIS[st.perfil] || st.perfil)}</small>`;
-    const abas = ok ? abasDisponiveis() : [];
+    const abas = ok && st.area === 'fila' ? abasDisponiveis() : []; // Metas CNJ ainda tem uma só tela
     const nav = $('#abas');
     nav.hidden = abas.length < 2;
     const rot = { fila: 'Fila', geral: 'Geral', gestao: 'Gestão' };
@@ -347,7 +394,8 @@
 
   function renderAvisos() {
     const abertos = urgenciasDoGestor();
-    $('#avisos').innerHTML = st.estado === 'ok' && st.verComo
+    $('#avisos').innerHTML = st.estado === 'ok' && st.area !== 'fila' ? ''
+      : st.estado === 'ok' && st.verComo
       ? `<div class="aviso novo"><b>Visualização somente leitura.</b> Você está vendo a fila de ${esc(nomeDe(st.verComo))} como ela vê. Nada é gravado. <button class="btn" type="button" data-acao="sair-ver-como">Voltar à minha visão</button></div>`
       : st.estado === 'ok' && abertos
         ? `<div class="aviso novo"><b>${abertos} ${abertos === 1 ? 'processo enviado' : 'processos enviados'} para você verificar.</b> <button class="btn" type="button" data-acao="abrir-avisos">Ver na aba Gestão</button></div>`
@@ -867,6 +915,25 @@
 
   function ligarEventos() {
     $('#btn-sair').addEventListener('click', sair);
+    // Menu de áreas (logo): abre e fecha com clique, Esc ou clique fora; setas movem o foco entre as opções.
+    $('#btn-areas').addEventListener('click', () => {
+      st.menuAreas = !st.menuAreas; renderMenuAreas(st.estado === 'ok');
+      if (st.menuAreas) { const c = $('#menu-areas [aria-checked="true"]') || $('#menu-areas .item-area'); if (c) c.focus(); }
+    });
+    $('#menu-areas').addEventListener('click', e => {
+      const b = e.target.closest('[data-area]'); if (b) { irParaArea(b.dataset.area); $('#btn-areas').focus(); }
+    });
+    $('#menu-areas').addEventListener('keydown', e => {
+      const itens = [...document.querySelectorAll('#menu-areas .item-area')];
+      const i = itens.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); itens[(i + (e.key === 'ArrowDown' ? 1 : -1) + itens.length) % itens.length].focus(); }
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && st.menuAreas) { st.menuAreas = false; renderMenuAreas(st.estado === 'ok'); $('#btn-areas').focus(); }
+    });
+    document.addEventListener('click', e => {
+      if (st.menuAreas && !e.target.closest('.marca')) { st.menuAreas = false; renderMenuAreas(st.estado === 'ok'); }
+    });
     $('#avisos').addEventListener('click', e => {
       if (e.target.closest('[data-acao="sair-ver-como"]')) sairVerComo();
       else if (e.target.closest('[data-acao="abrir-avisos"]')) { st.aba = 'gestao'; guardar('fila.aba.' + st.email, st.aba); render(); window.scrollTo({ top: 0 }); }
@@ -941,7 +1008,6 @@
   }
 
   function iniciar() {
-    $('#subtitulo').textContent = 'Gestão de Processos · 2ª Vara Federal · ' + new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
     ligarEventos();
     if (!window.supabase || !CFG) { st.estado = 'erro'; st.erro = 'Não foi possível carregar os componentes da página.'; render(); return; }
     st.sb = window.supabase.createClient(CFG.url, CFG.chave, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' } });
