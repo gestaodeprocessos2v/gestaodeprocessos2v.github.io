@@ -428,7 +428,7 @@
   function numeroHTML(n) {
     let c = 0, out = '';
     for (const ch of String(n || '')) {
-      if (/\d/.test(ch) && ++c === 7) { out += `<span class="dig" title="7º algarismo: usado na distribuição">${ch}</span>`; continue; }
+      if (/\d/.test(ch) && ++c === 7) { out += `<span class="dig" data-balao="7º algarismo: usado na distribuição">${ch}</span>`; continue; }
       out += esc(ch);
     }
     return out;
@@ -448,7 +448,7 @@
     }
     if (l.devolvido) selos.push('<span class="selo devolvido">Devolvido ao servidor</span>');
     if (l.concluido) selos.push(`<span class="selo feito">Concluído${l.concluidoEm ? ' em ' + dataHoraBR(l.concluidoEm) : ''}</span>`);
-    else if (l.concluidoAntes) selos.push(`<span class="selo anterior" title="Esse processo foi concluído e a conclusão foi desfeita">Concluído antes em ${dataHoraBR(l.concluidoAntes)}</span>`);
+    else if (l.concluidoAntes) selos.push(`<span class="selo anterior" tabindex="0" role="note" data-balao="Esse processo foi concluído e a conclusão foi desfeita" aria-description="Esse processo foi concluído e a conclusão foi desfeita">Concluído antes em ${dataHoraBR(l.concluidoAntes)}</span>`);
     if (l.foraDaLista) {
       const balao = l.dono === st.pessoa ? 'Esse processo não apareceu mais na sua lista na última atualização.' : `Esse processo não apareceu mais na lista de ${nomeDe(l.dono)} na última atualização.`;
       selos.push(`<span class="selo fora" tabindex="0" role="note" aria-label="Saiu da lista. ${esc(balao)}" data-balao="${esc(balao)}">Saiu da lista</span>`);
@@ -465,7 +465,7 @@
     // Fila do diretor: mostra só as etiquetas da lista dele que o processo tem.
     const etqHTML = l.ed && l.ed.length ? `<div class="etiquetas" aria-label="Etiquetas do filtro">${l.ed.map(x => `<span class="chip">${esc(x)}</span>`).join('')}</div>` : '';
     let acoes = '', anot, form = '';
-    const dis = st.verComo && modo !== 'gestor' ? ' disabled title="Visualização somente leitura"' : '';
+    const dis = st.verComo && modo !== 'gestor' ? ' disabled data-balao="Visualização somente leitura" aria-description="Visualização somente leitura"' : '';
     if (geral) {
       anot = l.anot ? `<span class="anot-texto">${esc(l.anot)}</span><span class="quando">${dataHoraBR(l.anotEm)}</span>` : '<span class="muted">—</span>';
     } else {
@@ -484,7 +484,7 @@
           <button class="btn" type="button" data-acao="cancelar-nota">Cancelar</button></div>
         </form>`;
       } else if (l.anot) {
-        anot = `<button class="anot-texto" data-acao="anotar"${dis ? dis : ' title="Editar anotação"'}>${esc(l.anot)}</button><span class="quando">${dataHoraBR(l.anotEm)}</span>`;
+        anot = `<button class="anot-texto" data-acao="anotar"${dis ? dis : ' data-balao="Editar anotação" aria-description="Editar anotação"'}>${esc(l.anot)}</button><span class="quando">${dataHoraBR(l.anotEm)}</span>`;
       } else {
         anot = `<button class="btn discreto" data-acao="anotar"${dis}>+ Anotar</button>`;
       }
@@ -504,7 +504,7 @@
     return `<li class="linha t-${l.tipo}${l.concluido ? ' concluido' : ''}" data-chave="${esc(l.chave)}" data-dono="${esc(l.dono || '')}">
       <div class="faixa"></div>
       <div class="c-num">
-        <button class="num" data-acao="copiar" data-n="${esc(l.n)}" title="Copiar número">${numeroHTML(l.n)}</button>
+        <button class="num" data-acao="copiar" data-n="${esc(l.n)}" data-balao="Copiar número" aria-description="Copiar número">${numeroHTML(l.n)}</button>
         ${selos.length ? `<div class="selos">${selos.join('')}</div>` : ''}
         ${nota}${resp}${etqHTML}
       </div>
@@ -585,10 +585,10 @@
     if (novos) h += `<div class="aviso novo"><b>${novos} ${novos === 1 ? 'processo novo' : 'processos novos'}</b> em urgências ou tarefas prioritárias desde a sua última visita (${dataHoraBR(st.ultimaVisita)}).</div>`;
     if (modo === 'fila' && st.perfil === 'diretor' && !st.verComo) h += htmlUrgenciaDiretor();
     h += `<div class="contagens">
-      <button type="button" class="tile urgente" data-acao="ir" data-tipo="urgente" title="Ir para esta lista"><span>Urgentes</span><b>${conta('urgente')}</b></button>
-      ${especial ? '' : `<button type="button" class="tile devolvido" data-acao="ir" data-tipo="devolvido" title="Ir para esta lista"><span>Devolvidos</span><b>${conta('devolvido')}</b></button>
-      <button type="button" class="tile prioritaria" data-acao="ir" data-tipo="prioritaria" title="Ir para esta lista"><span>Prioritárias</span><b>${conta('prioritaria')}</b></button>`}
-      <button type="button" class="tile" data-acao="ir" data-tipo="normal" title="Ir para esta lista"><span>Na fila</span><b>${conta('normal')}</b></button>
+      <button type="button" class="tile urgente" data-acao="ir" data-tipo="urgente" data-balao="Ir para esta lista" aria-description="Ir para esta lista"><span>Urgentes</span><b>${conta('urgente')}</b></button>
+      ${especial ? '' : `<button type="button" class="tile devolvido" data-acao="ir" data-tipo="devolvido" data-balao="Ir para esta lista" aria-description="Ir para esta lista"><span>Devolvidos</span><b>${conta('devolvido')}</b></button>
+      <button type="button" class="tile prioritaria" data-acao="ir" data-tipo="prioritaria" data-balao="Ir para esta lista" aria-description="Ir para esta lista"><span>Prioritárias</span><b>${conta('prioritaria')}</b></button>`}
+      <button type="button" class="tile" data-acao="ir" data-tipo="normal" data-balao="Ir para esta lista" aria-description="Ir para esta lista"><span>Na fila</span><b>${conta('normal')}</b></button>
       <div class="tile concluido"><span>Concluídos</span><b>${concluidos}</b></div>
     </div>
     <p class="atualizacao">Lista completa: ${ultimaLista ? dataHoraBR(ultimaLista) : 'ainda não enviada'} · Atualização diária: ${ultimoDiario ? dataHoraBR(ultimoDiario) : 'ainda não enviada'} · Clique no número para copiar.</p>

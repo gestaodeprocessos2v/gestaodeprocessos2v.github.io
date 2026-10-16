@@ -300,11 +300,15 @@ button.tile:focus-visible { outline: 2px solid currentColor; outline-offset: 2px
 .aba .contagem { margin-left: 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 0 7px; border-radius: 999px; background: var(--urg); color: #fff; }
 
 /* Balão: padrão do painel para toda dica (caixa de cantos arredondados, texto em várias linhas; mouse, toque ou foco do teclado).
-   Uso: class="balao" tabindex="0" role="note" aria-label="texto" data-balao="texto". Não usar title="" para dicas. */
-.selo.fora, .selo.paralelo, .balao { position: relative; cursor: help; }
+   Uso: data-balao="texto" no elemento (mais aria-description com o mesmo texto; tabindex="0" role="note" se não for botão nem link).
+   data-balao-dir="dir" alinha o balão à direita do elemento (itens na borda direita). Não usar title="" para dicas. */
+[data-balao] { position: relative; }
+[data-balao]:not(button):not(a) { cursor: help; }
 .selo.fora { background: var(--sunken); color: var(--muted); border: 1px dashed var(--muted); }
-.selo.fora::after, .selo.paralelo::after, .balao::after { content: attr(data-balao); position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 20; width: max-content; max-width: min(260px, 70vw); padding: 6px 8px; border-radius: var(--r); background: var(--ink, #1c2b2a); color: var(--surface); box-shadow: var(--shadow); font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; line-height: 1.35; white-space: normal; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .12s; }
-.balao:hover::after, .balao:focus::after, .balao:focus-visible::after, .selo.fora:hover::after, .selo.fora:focus::after, .selo.fora:focus-visible::after, .selo.paralelo:hover::after, .selo.paralelo:focus::after, .selo.paralelo:focus-visible::after { opacity: 1; visibility: visible; }
+[data-balao]::after { content: attr(data-balao); position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 20; width: max-content; max-width: min(260px, 70vw); padding: 6px 8px; border-radius: var(--r); background: var(--ink, #1c2b2a); color: var(--surface); box-shadow: var(--shadow); font-family: var(--font-body); font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; text-decoration: none; text-align: left; line-height: 1.35; white-space: normal; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .12s; }
+[data-balao][data-balao-dir="dir"]::after { left: auto; right: 0; }
+[data-balao]:hover::after, [data-balao]:focus-visible::after { opacity: 1; visibility: visible; }
+[data-balao]:has([data-balao]:hover)::after { opacity: 0; visibility: hidden; }
 
 /* Metas CNJ */
 .metas-topo { margin-top: 18px; }

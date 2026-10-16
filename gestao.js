@@ -380,7 +380,7 @@
       <td><input type="text" id="tf-etiquetaUrgente-${i}" data-i="${i}" data-campo="etiquetaUrgente" value="${esc(t.etiquetaUrgente || '')}" placeholder="—" aria-label="Urgente se tiver a etiqueta"></td>
       <td class="ck">${ck('zerar', i, t.zerar, 'Zerar (prioritária)')}</td>
       <td class="ck">${ck('paralelo', i, t.paralelo, 'Fluxo paralelo')}</td>
-      <td><button class="btn discreto" type="button" data-acao="tf-excluir" data-i="${i}" title="Excluir tarefa">Excluir</button></td>
+      <td><button class="btn discreto" type="button" data-acao="tf-excluir" data-i="${i}" data-balao="Excluir tarefa" data-balao-dir="dir" aria-description="Excluir tarefa">Excluir</button></td>
     </tr>`).join('');
     const naVara = lista.filter(t => t.painel).length;
     return `<section class="painel largo">
@@ -471,7 +471,7 @@
       <input type="text" id="cfg-o-nome-${i}" value="${esc(o.nome)}" aria-label="Nome">
       <select id="cfg-o-perfil-${i}" aria-label="Perfil" ${eu ? 'disabled' : ''}>${opcPerfil(o.perfil)}</select>
       <input type="text" id="cfg-o-email-${i}" value="${esc(o.email || '')}" aria-label="E-mail Google" inputmode="email" autocomplete="off" placeholder="E-mail Google (Gmail)" ${eu ? 'disabled' : ''}>
-      <button class="btn" type="button" data-acao="cfg-remover-outro" data-i="${i}" ${eu ? 'disabled title="Seu próprio acesso não pode ser removido"' : ''}>Remover</button></div>`;
+      <button class="btn" type="button" data-acao="cfg-remover-outro" data-i="${i}" ${eu ? 'disabled data-balao="Seu próprio acesso não pode ser removido" data-balao-dir="dir" aria-description="Seu próprio acesso não pode ser removido"' : ''}>Remover</button></div>`;
     }).join('');
     const setoresH = SETORES.map(([id, nome]) => {
       const s = (c.setores || {})[id] || { modo: 'fixo', responsavel: '' };
