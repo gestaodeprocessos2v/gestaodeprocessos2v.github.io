@@ -130,10 +130,11 @@
   const setorDe = tarefa => { const l = st.mapaTarefas && st.mapaTarefas.get(P.R.normTexto(tarefa)); return (l && (l.setor || l.painel)) || 'Outro setor'; };
   const nomeLista = it => !it.lista ? '' : it.lista.outro ? setorDe(it.lista.tarefa) : P.nomeDe(it.lista.pessoa);
 
-  function pendentesFiltrados() {
+  // semMeta: ignora o filtro de meta (usado para contar os processos de cada meta no próprio filtro).
+  function pendentesFiltrados(semMeta) {
     const f = st.fMetas, busca = f.busca.replace(/\D/g, ''), txt = f.busca.trim().toLowerCase(), serv = f.serv || '';
     const tem = (a, b) => (a != null ? 1 : 0) - (b != null ? 1 : 0);
-    return cruzar(st.metas.pend || []).filter(it => (!f.meta || (it.m || []).includes(f.meta)) && (!f.inst || it.i === f.inst)
+    return cruzar(st.metas.pend || []).filter(it => (semMeta || !f.meta || (it.m || []).includes(f.meta)) && (!f.inst || it.i === f.inst)
       && (!serv || (serv === SEM_LISTA ? !it.lista : serv === OUTROS ? it.lista && it.lista.outro : it.lista && it.lista.pessoa === serv))
       && (!f.busca.trim() || (busca && it.n.replace(/\D/g, '').includes(busca)) || (it.c || '').toLowerCase().includes(txt)
         || nomeLista(it).toLowerCase().includes(txt) || (it.lista && it.lista.tarefa.toLowerCase().includes(txt))))
@@ -151,7 +152,10 @@
     const info = st.metas.pendInfo;
     const doEnvio = info && info.envio ? st.metas.envios.find(x => x.id === info.envio) : null;
     const quando = doEnvio ? dataHoraBR(Date.parse(doEnvio.carga_bi)) : info ? dataHoraBR(Date.parse(info.em)) : '—';
-    const opMetas = M.METAS.filter(m => m.pend).map(m => `<option value="${m.id}"${f.meta === m.id ? ' selected' : ''}>${esc(m.nome)}</option>`).join('');
+    // só metas com processos (com os demais filtros aplicados), cada uma com a quantidade; a meta escolhida fica na lista mesmo sem processos
+    const base = pendentesFiltrados(true), qtdMeta = id => base.filter(it => (it.m || []).includes(id)).length;
+    const opMetas = M.METAS.filter(m => m.pend).map(m => ({ m, n: qtdMeta(m.id) })).filter(x => x.n > 0 || f.meta === x.m.id)
+      .map(x => `<option value="${x.m.id}"${f.meta === x.m.id ? ' selected' : ''}>${esc(x.m.nome)} (${x.n.toLocaleString('pt-BR')})</option>`).join('');
     const opInst = M.INSTANCIAS.map(i => `<option value="${esc(i)}"${f.inst === i ? ' selected' : ''}>${esc(i)}</option>`).join('');
     const opServ = [`<option value="">Todos os servidores</option>`, ...servidores().map(id => `<option value="${esc(id)}"${f.serv === id ? ' selected' : ''}>${esc(P.nomeDe(id))}</option>`), `<option value="${OUTROS}"${f.serv === OUTROS ? ' selected' : ''}>Outros setores da vara</option>`, `<option value="${SEM_LISTA}"${f.serv === SEM_LISTA ? ' selected' : ''}>Não localizados</option>`].join('');
     const todos = cruzar(st.metas.pend || []), semLista = todos.filter(it => !it.lista), nOutros = todos.filter(it => it.lista && it.lista.outro).length;
@@ -170,7 +174,7 @@
         <select id="metas-filtro-serv" aria-label="Filtrar por servidor">${opServ}</select>
         <span class="direita"><span class="small muted mono">${lista.length.toLocaleString('pt-BR')} ${lista.length === 1 ? 'processo' : 'processos'}</span><button class="btn" type="button" data-acao="metas-csv">Baixar CSV</button></span>
       </div>
-      ${aviso || `<section class="painel largo"><div class="tabela-wrap"><table><thead><tr><th>Número do processo</th><th>Servidor ou setor</th><th>Tarefa atual</th><th>Entrada na tarefa</th><th>Instância</th><th>Classe</th><th>1ª distribuição</th><th>Metas pendentes</th></tr></thead><tbody>${linhas || '<tr><td colspan="8">Nenhum processo com esse filtro.</td></tr>'}</tbody></table></div>
+      ${aviso || `<section class="painel largo"><div class="tabela-wrap tabela-prioritaria"><table><thead><tr><th>Número do processo</th><th>Servidor ou setor</th><th>Tarefa atual</th><th>Entrada na tarefa</th><th>Instância</th><th>Classe</th><th>1ª distribuição</th><th>Metas pendentes</th></tr></thead><tbody>${linhas || '<tr><td colspan="8">Nenhum processo com esse filtro.</td></tr>'}</tbody></table></div>
       ${lista.length > mostrar.length ? `<div class="linha-botoes"><button class="btn" type="button" data-acao="metas-mais">Mostrar mais ${Math.min(LIMITE_PASSO, lista.length - mostrar.length)}</button><span class="small muted">Mostrando ${mostrar.length} de ${lista.length}</span></div>` : ''}</section>`}`;
   }
 

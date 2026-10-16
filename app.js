@@ -563,20 +563,26 @@
     const abertas = todas.filter(l => !l.concluido);
     const conta = t => abertas.filter(l => l.tipo === t).length;
     const novos = geral ? 0 : abertas.filter(l => l.novo).length;
-    const tarefas = [...new Set(todas.map(l => l.t).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
     const { campo: campoEt, lista: listaEt, especial } = etConfig(modo);
     const etiquetas = listaEt.filter(x => todas.some(l => (l[campoEt] || []).includes(x)));
     if (f.etiqueta && !etiquetas.includes(f.etiqueta)) f.etiqueta = '';
     const busca = R.normTexto(f.busca);
     const buscaDig = R.soDigitos(f.busca);
-    const visiveis = todas.filter(l => {
+    // ign: filtro a ignorar ('tarefa' ou 'etiqueta'), para contar cada opção do filtro com os outros filtros aplicados.
+    const casa = (l, ign) => {
       if (l.concluido && !f.concl) return false;
-      if (f.tarefa && l.t !== f.tarefa) return false;
-      if (f.etiqueta && !(l[campoEt] || []).includes(f.etiqueta)) return false;
+      if (ign !== 'tarefa' && f.tarefa && l.t !== f.tarefa) return false;
+      if (ign !== 'etiqueta' && f.etiqueta && !(l[campoEt] || []).includes(f.etiqueta)) return false;
       if (!busca) return true;
       if (buscaDig.length >= 4 && R.soDigitos(l.n).includes(buscaDig)) return true;
       return R.normTexto([l.n, l.c, l.t, l.cg, l.motivo, l.anot, geral ? nomeDe(l.dono) : ''].join(' ')).includes(busca);
-    });
+    };
+    const visiveis = todas.filter(l => casa(l));
+    // Filtros de tarefa e de etiqueta: só opções com processos, com a quantidade, considerando os outros filtros; a opção escolhida fica mesmo sem processos.
+    const paraTarefa = todas.filter(l => casa(l, 'tarefa')), paraEtiqueta = todas.filter(l => casa(l, 'etiqueta'));
+    const opTarefas = [...new Set(todas.map(l => l.t).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+      .map(x => ({ x, n: paraTarefa.filter(l => l.t === x).length })).filter(o => o.n > 0 || o.x === f.tarefa);
+    const opEtiquetas = etiquetas.map(x => ({ x, n: paraEtiqueta.filter(l => (l[campoEt] || []).includes(x)).length })).filter(o => o.n > 0 || o.x === f.etiqueta);
     const concluidos = todas.length - abertas.length;
     const ultimaLista = st.filas.filter(r => r.lista === 'semanal').reduce((m, r) => Math.max(m, ms(r.importado_em) || 0), 0);
     const ultimoDiario = st.filas.filter(r => r.lista === 'diaria').reduce((m, r) => Math.max(m, ms(r.importado_em) || 0), 0);
@@ -596,8 +602,8 @@
       <input type="search" id="busca" placeholder="Buscar por número, classe, tarefa, cargo ou anotação" value="${esc(f.busca)}" aria-label="Buscar">
       ${geral && st.perfil !== 'visitante' ? `<select id="filtro-pessoa" aria-label="Filtrar por servidor">${opcoesPessoas(f.pessoa, 'Todos os servidores', null, { diretor: true })}</select>` : ''}
       ${(() => { const vs = visoesDe(pessoaDaVisao(modo)); return vs.length ? `<select id="filtro-visao" aria-label="Mostrar"><option value="">Painel completo</option>${vs.map(v => `<option value="${esc(idVisao(v))}"${idVisao(v) === f.visao ? ' selected' : ''}>${esc(v.nome)}</option>`).join('')}</select>` : ''; })()}
-      <select id="filtro-tarefa" aria-label="Filtrar por tarefa"><option value="">Todas as tarefas</option>${tarefas.map(t => `<option${t === f.tarefa ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>
-      ${etiquetas.length ? `<select id="filtro-etiqueta" aria-label="Filtrar por etiqueta"><option value="">Todas as etiquetas</option>${etiquetas.map(x => `<option value="${esc(x)}"${x === f.etiqueta ? ' selected' : ''}>${esc(x)} (${todas.filter(l => !l.concluido && (l[campoEt] || []).includes(x)).length})</option>`).join('')}</select>` : ''}
+      <select id="filtro-tarefa" aria-label="Filtrar por tarefa"><option value="">Todas as tarefas</option>${opTarefas.map(o => `<option value="${esc(o.x)}"${o.x === f.tarefa ? ' selected' : ''}>${esc(o.x)} (${o.n})</option>`).join('')}</select>
+      ${etiquetas.length ? `<select id="filtro-etiqueta" aria-label="Filtrar por etiqueta"><option value="">Todas as etiquetas</option>${opEtiquetas.map(o => `<option value="${esc(o.x)}"${o.x === f.etiqueta ? ' selected' : ''}>${esc(o.x)} (${o.n})</option>`).join('')}</select>` : ''}
       <label class="small"><input type="checkbox" id="mostrar-concluidos"${f.concl ? ' checked' : ''}> Mostrar concluídos</label>
       <div class="direita"><button class="btn" data-acao="baixar">Baixar CSV</button></div>
     </div>`;
