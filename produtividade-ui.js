@@ -11,7 +11,7 @@
   const txt = v => String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
   const norm = R.normTexto;
   const ATIV = [X.ATIV_DOC, X.ATIV_RETIF, X.ATIV_TAREFA];
-  const PERIODOS = [['30', 'Últimos 30 dias'], ['mes', 'Mês atual'], ['mesAnterior', 'Mês anterior'], ['90', 'Últimos 90 dias'], ['ano', 'Este ano'], ['anoAnterior', 'Ano passado'], ['tudo', 'Tudo']];
+  const PERIODOS = [['30', 'Últimos 30 dias'], ['mes', 'Mês atual'], ['mesAnterior', 'Mês anterior'], ['90', 'Últimos 90 dias'], ['12m', 'Últimos 12 meses'], ['ano', 'Este ano'], ['anoAnterior', 'Ano passado'], ['tudo', 'Tudo']];
   const LOTE = 1000;   // registros por envio ao banco
   const GRANS = [['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês']];
   const dBR = d => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : '—');

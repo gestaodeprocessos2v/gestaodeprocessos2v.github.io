@@ -170,6 +170,7 @@
     if (preset === 'mes') return { ini: inicioMes(fim), fim };
     if (preset === 'mesAnterior') { const fa = somarDias(inicioMes(fim), -1); return { ini: inicioMes(fa), fim: fa }; }
     if (preset === '90') return { ini: somarDias(fim, -89), fim };
+    if (preset === '12m') return { ini: somarDias(umAnoAntes(fim), 1), fim };   // 12 meses até o último dia com dados
     if (preset === 'ano') return { ini: fim.slice(0, 4) + '-01-01', fim };
     if (preset === 'anoAnterior') { const a = +fim.slice(0, 4) - 1; return { ini: `${a}-01-01`, fim: `${a}-12-31` }; }
     if (preset === 'tudo') return { ini: primeiro || fim, fim };
