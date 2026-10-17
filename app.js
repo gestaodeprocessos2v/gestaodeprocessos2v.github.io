@@ -378,14 +378,17 @@
   function renderMenuAreas(ok) {
     const lista = ok ? areasDisponiveis() : [];
     const btn = $('#btn-areas'), menu = $('#menu-areas');
-    const abre = lista.length > 1; // com uma só área o logo continua apenas como identidade
-    btn.disabled = !abre;
-    if (!abre) st.menuAreas = false;
+    // O menu abre para qualquer pessoa logada: tem sempre o controle "Aparência"; as áreas (e a linha divisória) só aparecem com mais de uma.
+    const multi = lista.length > 1;
+    btn.disabled = !ok;
+    if (!ok) st.menuAreas = false;
     btn.setAttribute('aria-expanded', String(st.menuAreas));
     menu.hidden = !st.menuAreas;
-    const h = lista.map(a => `<button class="item-area" type="button" role="menuitemradio" aria-checked="${a === st.area}" data-area="${a}">${AREAS[a].rotulo}</button>`).join('');
-    if (menu.dataset.h !== h) { menu.innerHTML = h; menu.dataset.h = h; }
-    for (const b of menu.querySelectorAll('.item-area')) b.setAttribute('aria-checked', String(b.dataset.area === st.area));
+    const itens = $('#itens-areas');
+    const h = multi ? lista.map(a => `<button class="item-area" type="button" role="menuitemradio" aria-checked="${a === st.area}" data-area="${a}">${AREAS[a].rotulo}</button>`).join('') : '';
+    if (itens.dataset.h !== h) { itens.innerHTML = h; itens.dataset.h = h; }
+    itens.hidden = !multi; $('#menu-sep').hidden = !multi;
+    for (const b of itens.querySelectorAll('.item-area')) b.setAttribute('aria-checked', String(b.dataset.area === st.area));
   }
 
   function renderTopo() {
@@ -984,9 +987,17 @@
       const b = e.target.closest('[data-area]'); if (b) { irParaArea(b.dataset.area); $('#btn-areas').focus(); }
     });
     $('#menu-areas').addEventListener('keydown', e => {
-      const itens = [...document.querySelectorAll('#menu-areas .item-area')];
-      const i = itens.indexOf(document.activeElement);
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); itens[(i + (e.key === 'ArrowDown' ? 1 : -1) + itens.length) % itens.length].focus(); }
+      const areas = [...document.querySelectorAll('#menu-areas .item-area')];
+      const seg = [...document.querySelectorAll('#menu-areas .seg-tema button')];
+      const ativo = document.activeElement;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        // ↑/↓ percorrem as áreas e, por último, o botão de aparência marcado
+        const vertical = [...areas, seg.find(b => b.getAttribute('aria-checked') === 'true') || seg[0]];
+        let i = vertical.indexOf(ativo); if (i < 0 && seg.includes(ativo)) i = vertical.length - 1;
+        e.preventDefault(); vertical[(i + (e.key === 'ArrowDown' ? 1 : -1) + vertical.length) % vertical.length].focus();
+      } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && seg.includes(ativo)) {
+        e.preventDefault(); seg[(seg.indexOf(ativo) + (e.key === 'ArrowRight' ? 1 : -1) + seg.length) % seg.length].focus();
+      }
     });
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape' && st.menuAreas) { st.menuAreas = false; renderMenuAreas(st.estado === 'ok'); $('#btn-areas').focus(); }

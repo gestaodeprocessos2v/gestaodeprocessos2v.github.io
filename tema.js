@@ -1,11 +1,12 @@
-/* Tema da página: Automático (segue o sistema), Claro ou Escuro. A escolha fica só neste navegador (localStorage).
-   Carregado no <head>, antes do CSS desenhar a página, para não piscar o tema errado. As cores de cada tema estão em estilo.css
+/* Aparência da página: Sistema (segue o sistema), Claro ou Escuro. A escolha fica só neste navegador (localStorage).
+   A aplicação roda no <head>, antes do CSS desenhar a página, para não piscar o tema errado. O controle fica no menu do logo
+   (index.html, .seg-tema, botões com data-tema="auto|light|dark"). As cores de cada tema estão em estilo.css
    (variáveis em :root, em @media (prefers-color-scheme: dark) e em :root[data-theme="dark"|"light"]). */
 (function () {
   'use strict';
   const CHAVE = 'tema';
-  const TEMAS = [['auto', 'Automático'], ['light', 'Claro'], ['dark', 'Escuro']];
-  const valido = t => TEMAS.some(([v]) => v === t);
+  const VALIDOS = ['auto', 'light', 'dark'];
+  const valido = t => VALIDOS.includes(t);
 
   function ler() {
     try { const t = localStorage.getItem(CHAVE); return valido(t) ? t : 'auto'; } catch (e) { return 'auto'; }
@@ -21,22 +22,23 @@
   let atual = ler();
   aplicar(atual);
 
-  function rotulo(botao) {
-    const nome = TEMAS.find(([v]) => v === atual)[1];
-    const proximo = TEMAS[(TEMAS.findIndex(([v]) => v === atual) + 1) % TEMAS.length][1];
-    const dica = `Tema: ${nome}. Clique para mudar para ${proximo}.`;
-    botao.textContent = nome;
-    botao.setAttribute('data-balao', dica);
-    botao.setAttribute('aria-label', dica);
+  function marcar() {
+    for (const b of document.querySelectorAll('[data-tema]')) b.setAttribute('aria-checked', String(b.dataset.tema === atual));
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    const botao = document.getElementById('btn-tema');
-    if (!botao) return;
-    rotulo(botao);
-    botao.addEventListener('click', () => {
-      atual = TEMAS[(TEMAS.findIndex(([v]) => v === atual) + 1) % TEMAS.length][0];
-      gravar(atual); aplicar(atual); rotulo(botao);
-    });
+    marcar();
+    for (const b of document.querySelectorAll('[data-tema]')) {
+      b.addEventListener('click', () => {
+        if (!valido(b.dataset.tema)) return;
+        atual = b.dataset.tema; gravar(atual); aplicar(atual); marcar();
+      });
+    }
+  });
+
+  // Outra aba mudou a aparência: acompanha.
+  window.addEventListener('storage', e => {
+    if (e.key !== CHAVE && e.key !== null) return;
+    atual = ler(); aplicar(atual); marcar();
   });
 })();
