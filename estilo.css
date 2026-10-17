@@ -274,8 +274,8 @@ body { margin: 0; }
 [hidden] { display: none !important; }
 .topo .quem { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; background: var(--band-2); color: var(--band-ink); border-radius: var(--r); padding: 7px 10px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .topo .quem small { color: var(--band-muted); font-weight: 500; font-size: 12px; }
-.btn.sair { background: var(--band-2); color: var(--band-ink); border-color: transparent; }
-.btn.sair:hover { border-color: var(--band-muted); background: var(--band-2); }
+.btn.sair, .btn.tema { background: var(--band-2); color: var(--band-ink); border-color: transparent; }
+.btn.sair:hover, .btn.tema:hover { border-color: var(--band-muted); background: var(--band-2); }
 .vazio .btn { margin-top: 14px; }
 .vazio p { margin: 0 auto; max-width: 46rem; overflow-wrap: anywhere; }
 .vazio .btn + p, .vazio p + .btn { margin-top: 14px; }
