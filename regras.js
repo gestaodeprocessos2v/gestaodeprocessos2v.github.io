@@ -261,8 +261,17 @@
       if (!ja) { const o = { n: it.n }; if (it.t) o.t = it.t; if (it.ch != null) o.ch = it.ch; outros.set(k, o); return; }
       if (it.ch != null && (ja.ch == null || it.ch < ja.ch)) { ja.ch = it.ch; if (it.t) ja.t = it.t; }
     };
+    // Tarefas que não existem na tabela (diferente de "Setor no painel = Ignorar", que é decisão do gestor): processos por tarefa.
+    const semCad = new Map(), numsSemCad = new Set();
+    const contarSemCadastro = it => {
+      const k = normTexto(it.t), nome = String(it.t == null ? '' : it.t).trim() || '(sem tarefa)';
+      const g = semCad.get(k) || semCad.set(k, { t: nome, nums: new Set() }).get(k);
+      const chave = it.n ? soDigitos(it.n) : 'linha' + numsSemCad.size;
+      g.nums.add(chave); numsSemCad.add(chave);
+    };
     for (const it of itens) {
       const linha = mapa.get(normTexto(it.t));
+      if (!linha) contarSemCadastro(it);
       if (!linha || !linha.painel) { ignorados.foraDaVara++; guardarOutro(it); continue; }
       if (linha.etiqueta && !temEtiqueta(it.e, linha.etiqueta)) { ignorados.semEtiqueta++; guardarOutro(it); continue; }
       const s = linha.painel;
@@ -281,7 +290,8 @@
       if (!pessoa) { semResponsavel.push(Object.assign(item, { motivo: r.motivo })); continue; }
       (porPessoa[pessoa] = porPessoa[pessoa] || []).push(item);
     }
-    return { porPessoa, semResponsavel, ignorados, porSetor, outros: [...outros.values()] };
+    const semCadastro = [...semCad.values()].map(g => ({ t: g.t, n: g.nums.size })).sort((a, b) => b.n - a.n || a.t.localeCompare(b.t, 'pt-BR'));
+    return { porPessoa, semResponsavel, ignorados, porSetor, outros: [...outros.values()], semCadastro, semCadastroProcessos: numsSemCad.size };
   }
 
   // Filas do diretor e do gestor: escolhidas só por etiqueta, em qualquer tarefa ou setor (independem da tabela de tarefas).

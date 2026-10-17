@@ -73,6 +73,8 @@ button.simbolo:disabled { cursor: default; opacity: 1; }
 .item-area { border: 0; background: none; text-align: left; padding: 9px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; color: var(--ink); }
 .item-area:hover { background: var(--sunken); }
 .item-area[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
+.aviso .tabela-wrap td { vertical-align: middle; }
+.aviso .linha-botoes { margin-top: 8px; }
 #itens-areas { display: flex; flex-direction: column; gap: 2px; }
 #itens-areas[hidden], .menu-sep[hidden] { display: none; }
 .menu-sep { border: 0; border-top: 1px solid var(--line); margin: 6px 4px; }

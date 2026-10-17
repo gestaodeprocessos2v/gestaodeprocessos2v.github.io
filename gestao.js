@@ -11,6 +11,7 @@
   const DIRETORIA = 'diretoria';   // destino da urgência do gestor: o diretor de secretaria
   const clonar = o => JSON.parse(JSON.stringify(o));
   const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const SEM_TAREFA = '(sem tarefa)';   // nome que R.prepararLista dá às linhas do relatório sem tarefa
 
   // Rascunho da configuração: pessoas (com e-mail, vindo de `acesso`) e outros acessos (sem fila).
   function prepararRascunho() {
@@ -69,6 +70,13 @@
         .map(([p, its]) => `<tr><td>${esc(nomeDe(p))}</td><td class="n">${its.length}</td><td class="n">${conta(its, 'urgente')}</td><td class="n">${conta(its, 'prioritaria')}</td></tr>`).join('');
       const setores = SETORES.filter(([id]) => r.porSetor[id]).map(([id, n]) => `${n}: <b class="mono">${r.porSetor[id]}</b>`).join(' · ');
       const sem = r.semResponsavel.length ? `<div class="aviso erro"><b>${r.semResponsavel.length} sem responsável</b> e não serão gravados: ${r.semResponsavel.slice(0, 6).map(i => `${esc(i.n)} (${esc(i.motivo)})`).join('; ')}${r.semResponsavel.length > 6 ? '…' : ''}. Ajuste a configuração e leia o arquivo de novo.</div>` : '';
+      // Tarefas que não existem na tabela: os processos delas não entram na fila de ninguém. ("Ignorar" é decisão do gestor e não entra aqui.)
+      const sc = r.semCadastro || [], nSc = r.semCadastroProcessos || 0;
+      const cadastraveis = sc.filter(x => x.t !== SEM_TAREFA);
+      const semCad = sc.length ? `<div class="aviso novo"><b>${sc.length} ${sc.length === 1 ? 'tarefa do PJe sem cadastro' : 'tarefas do PJe sem cadastro'}</b> na tabela de tarefas, com ${nSc} ${nSc === 1 ? 'processo' : 'processos'}. Esses processos não entram na fila de ninguém até as tarefas serem cadastradas.
+        <div class="tabela-wrap"><table><thead><tr><th>Tarefa</th><th>Processos</th><th></th></tr></thead><tbody>${sc.slice(0, 15).map(x => `<tr><td>${esc(x.t)}</td><td class="n">${x.n}</td><td>${x.t === SEM_TAREFA ? '<span class="muted small">sem nome de tarefa no arquivo</span>' : `<button class="btn discreto" type="button" data-acao="tf-cadastrar" data-origem="previa" data-t="${esc(x.t)}">Cadastrar</button>`}</td></tr>`).join('')}${sc.length > 15 ? `<tr><td colspan="3" class="muted small">… e mais ${sc.length - 15}.</td></tr>` : ''}</tbody></table></div>
+        ${cadastraveis.length ? `<div class="linha-botoes"><button class="btn" type="button" data-acao="tf-cadastrar-todas" data-origem="previa">Cadastrar todas</button></div>` : ''}</div>` : '';
+      const confirmar = imp.confirmando && sc.length;
       previa = `<div class="previa">
         <div><b>${imp.lidos} linhas lidas</b> em “${esc(imp.arquivo)}”.</div>
         <div class="small">Por setor: ${setores || '—'}</div>
@@ -76,9 +84,12 @@
         <div class="small muted">Ignorados: ${r.ignorados.foraDaVara} em tarefas de outros setores${r.ignorados.semEtiqueta ? ` e ${r.ignorados.semEtiqueta} sem a etiqueta exigida pela tarefa` : ''}.${imp.semData ? ` ${imp.semData} sem data de chegada vão para o fim da fila.` : ''}</div>
         <div class="tabela-wrap"><table><thead><tr><th>Pessoa</th><th>Processos</th><th>Urgentes</th><th>Prioritários</th></tr></thead><tbody>${linhas || '<tr><td colspan="4">Nenhum processo para gravar.</td></tr>'}</tbody></table></div>
         ${sem}
+        ${semCad}
         ${especiaisPrevia(imp)}
+        ${confirmar ? `<div class="aviso erro"><b>${sc.length} ${sc.length === 1 ? 'tarefa e' : 'tarefas e'} ${nSc} ${nSc === 1 ? 'processo continuam' : 'processos continuam'} sem cadastro</b> e não entrarão em nenhuma fila. Gravar mesmo assim?</div>` : ''}
         <div class="linha-botoes">
-          <button class="btn primario" data-acao="gravar-importacao" ${st.gravando || (!Object.keys(r.porPessoa).length && !temEspeciais(imp)) ? 'disabled' : ''}>${st.gravando ? 'Gravando…' : 'Gravar e substituir a lista'}</button>
+          <button class="btn ${confirmar ? 'perigo' : 'primario'}" data-acao="gravar-importacao" ${st.gravando || (!Object.keys(r.porPessoa).length && !temEspeciais(imp)) ? 'disabled' : ''}>${st.gravando ? 'Gravando…' : confirmar ? 'Gravar mesmo assim' : 'Gravar e substituir a lista'}</button>
+          ${confirmar ? '<button class="btn" data-acao="voltar-importacao">Voltar</button>' : ''}
           <button class="btn" data-acao="cancelar-importacao">Cancelar</button>
         </div>
       </div>`;
@@ -120,7 +131,7 @@
       if (!st.tarefas.length) throw new Error('A tabela de tarefas está vazia. Cadastre as tarefas antes de enviar o relatório.');
       const lido = R.lerCsv(await lerArquivo(arquivo));
       Object.assign(st.importacao, {
-        arquivo: arquivo.name, lidos: lido.itens.length, semData: lido.semData,
+        arquivo: arquivo.name, lidos: lido.itens.length, semData: lido.semData, itens: lido.itens,
         resultado: R.prepararLista(lido.itens, st.mapaTarefas, st.config, pessoaFixa || null),
         especiais: pessoaFixa ? null : R.prepararEspeciais(lido.itens, st.config),
       });
@@ -202,6 +213,8 @@
       if (fixa) fixos[fixa] = { em: agora, total };
       else resumo.semanal = info;
       delete resumo.diaria;
+      // Tarefas do relatório sem cadastro na tabela (lembrete no painel "Tarefas do PJe"); a "lista para uma pessoa" não mexe nisso.
+      if (!fixa) { resumo.semCadastro = (imp.resultado.semCadastro || []).slice(0, 50); resumo.semCadastroEm = agora; }
       const { error } = await sb.from('config').upsert({ chave: 'resumo', valor: resumo, atualizado_em: I, atualizado_por: st.email }, { onConflict: 'chave' });
       if (error) throw error;
       toast('Lista gravada.');
@@ -353,8 +366,13 @@
       <td><button class="btn discreto" type="button" data-acao="tf-excluir" data-i="${i}" data-balao="Excluir tarefa" data-balao-dir="dir" aria-description="Excluir tarefa">Excluir</button></td>
     </tr>`).join('');
     const naVara = lista.filter(t => t.painel).length;
-    return `<section class="painel largo">
+    // Lembrete: tarefas do último envio da lista que ainda não estão na tabela (nem no rascunho). Some sozinho quando forem cadastradas.
+    const noRascunho = new Set(lista.map(t => R.normTexto(t.tarefa)));
+    const pendentesCad = ((st.resumo && st.resumo.semCadastro) || []).filter(x => x.t !== SEM_TAREFA && !st.mapaTarefas.has(R.normTexto(x.t)) && !noRascunho.has(R.normTexto(x.t)));
+    const lembrete = pendentesCad.length ? `<div class="aviso novo"><b>${pendentesCad.length} ${pendentesCad.length === 1 ? 'tarefa do último envio ainda sem cadastro' : 'tarefas do último envio ainda sem cadastro'}</b>${st.resumo.semCadastroEm ? ` (${dataHoraBR(st.resumo.semCadastroEm)})` : ''}: os processos delas não entram na fila de ninguém. ${pendentesCad.slice(0, 8).map(x => `${esc(x.t)} (${x.n}) <button class="btn discreto" type="button" data-acao="tf-cadastrar" data-origem="lembrete" data-t="${esc(x.t)}">Cadastrar</button>`).join(' · ')}${pendentesCad.length > 8 ? ` … e mais ${pendentesCad.length - 8}.` : ''} <button class="btn" type="button" data-acao="tf-cadastrar-todas" data-origem="lembrete">Cadastrar todas</button></div>` : '';
+    return `<section class="painel largo" id="painel-tarefas">
       <h2>Tarefas do PJe</h2>
+      ${lembrete}
       <p>${lista.length} tarefas, ${naVara} nos seis setores da vara${st.tarefasEm ? ` · atualizada em ${dataHoraBR(st.tarefasEm)}` : ''}. “Setor no painel” decide onde o processo entra; “Etiqueta exigida” faz a tarefa só valer para processos com aquela etiqueta. Urgente vai para o topo (também quando o processo tem a etiqueta de “Urgente se etiqueta”); Zerar entra como prioritária.</p>
       <div class="filtros dentro">
         <input type="search" id="tf-busca" placeholder="Buscar tarefa, setor ou etiqueta" value="${esc(f.busca)}" aria-label="Buscar na tabela de tarefas">
@@ -393,9 +411,30 @@
     for (const a of ['tf-salvar', 'tf-descartar']) { const b = document.querySelector(`[data-acao="${a}"]`); if (b) b.disabled = false; }
   }
 
+  // Tarefas vistas no relatório que não estão na tabela: acrescenta ao rascunho (sem setor; o gestor escolhe e salva).
+  function nomesSemCadastro(origem, um) {
+    if (um) return [um];
+    const base = origem === 'previa' ? ((st.importacao && st.importacao.resultado && st.importacao.resultado.semCadastro) || []) : ((st.resumo && st.resumo.semCadastro) || []);
+    return base.map(x => x.t).filter(t => t !== SEM_TAREFA);
+  }
+  function cadastrarSemCadastro(nomes) {
+    const lista = st.rascTarefas || (st.rascTarefas = []);
+    const ja = new Set(lista.map(t => R.normTexto(t.tarefa)).concat([...st.mapaTarefas.keys()]));
+    const novas = nomes.filter((t, i) => t && !ja.has(R.normTexto(t)) && nomes.findIndex(u => R.normTexto(u) === R.normTexto(t)) === i);
+    if (!novas.length) { toast('Essas tarefas já estão na tabela.'); return; }
+    lista.unshift(...novas.map(tarefa => ({ tarefa, setor: '', painel: '', etiqueta: '', etiquetaUrgente: '', urgente: false, zerar: false, paralelo: false })));
+    st.filtroTabela = { busca: '', painel: '' };
+    marcarTarefasAlteradas(); render();
+    const painel = document.getElementById('painel-tarefas'); if (painel) painel.scrollIntoView({ block: 'start' });
+    const el = document.getElementById('tf-setor-0'); if (el) el.focus({ preventScroll: true });
+    toast(`${novas.length === 1 ? 'Tarefa incluída' : novas.length + ' tarefas incluídas'} no fim da tabela, sem setor. Escolha o setor no painel e clique em Salvar tabela.`);
+  }
+
   async function acaoTarefas(acao, alvo) {
     const lista = st.rascTarefas || (st.rascTarefas = []);
-    if (acao === 'tf-incluir') {
+    if (acao === 'tf-cadastrar' || acao === 'tf-cadastrar-todas') {
+      cadastrarSemCadastro(nomesSemCadastro(alvo.dataset.origem, acao === 'tf-cadastrar' ? alvo.dataset.t : null));
+    } else if (acao === 'tf-incluir') {
       lista.unshift({ tarefa: '', setor: '', painel: '', etiqueta: '', etiquetaUrgente: '', urgente: false, zerar: false, paralelo: false });
       st.filtroTabela = { busca: '', painel: '' };
       marcarTarefasAlteradas(); render();
@@ -417,7 +456,11 @@
       const { error } = await st.sb.from('config').upsert({ chave: 'tarefas', valor: { itens }, atualizado_em: iso(Date.now()), atualizado_por: st.email }, { onConflict: 'chave' });
       if (error) throw error;
       st.tarefasAlteradas = false;
-      await P.carregar(); render();
+      await P.carregar();
+      // A prévia do upload acompanha a tabela nova: as tarefas cadastradas saem do aviso e a distribuição é refeita sem reler o arquivo.
+      const imp = st.importacao;
+      if (imp && imp.itens && imp.resultado) { imp.resultado = R.prepararLista(imp.itens, st.mapaTarefas, st.config, imp.pessoaFixa || null); imp.confirmando = false; }
+      render();
       toast('Tabela de tarefas salva.');
     } else if (acao === 'tf-baixar') {
       baixar('tarefas-pje-' + new Date().toISOString().slice(0, 10) + '.csv', R.tarefasParaCsv(lista));
@@ -623,7 +666,13 @@
     const c = st.rascunho;
     try {
       if (acao.startsWith('tf-')) await acaoTarefas(acao, alvo);
-      else if (acao === 'gravar-importacao') await gravarImportacao();
+      else if (acao === 'gravar-importacao') {
+        // Com tarefas sem cadastro no relatório, o primeiro clique só pede confirmação; o segundo grava.
+        const imp = st.importacao, sc = (imp && imp.resultado && imp.resultado.semCadastro) || [];
+        if (sc.length && !imp.confirmando) { imp.confirmando = true; render(); }
+        else await gravarImportacao();
+      }
+      else if (acao === 'voltar-importacao') { if (st.importacao) st.importacao.confirmando = false; render(); }
       else if (acao === 'cancelar-importacao') { st.importacao = null; render(); }
       else if (acao === 'pedir-remocao') { st.confirmarRemocao = Number(alvo.dataset.id); render(); }
       else if (acao === 'remover-urgencia') {
