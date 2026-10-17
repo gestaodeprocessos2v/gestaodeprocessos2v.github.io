@@ -281,7 +281,7 @@
   }
 
   // ---------- cruzamento com as listas dos servidores ----------
-  // filas: linhas {pessoa, itens:[{n, t, ch, fora}]} (lista semanal e diária); servidores: ids de quem conta (só perfil Servidor).
+  // filas: linhas {pessoa, itens:[{n, t, ch, fora}]} (lista do PJe); servidores: ids de quem conta (só perfil Servidor).
   // Devolve um Map: número só com dígitos -> {pessoa, tarefa, chegada (ms ou null)}. Mais de uma entrada: vale a de chegada mais antiga.
   const soDig = s => String(s == null ? '' : s).replace(/\D/g, '');
   function indexarListas(filas, servidores) {

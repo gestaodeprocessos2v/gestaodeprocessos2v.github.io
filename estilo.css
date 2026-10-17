@@ -19,6 +19,7 @@
   --dev: #6a3fb0;   --dev-bg: #efe8fa;
   --novo: #1d5fbf;  --novo-bg: #e3edfc;
   --ok: #2c7339;    --ok-bg: #e3f2e6;
+  --jd: #c2189a;    --jd-bg: #fbe4f5;   --jd-ink: #ffffff;
   --shadow: 0 1px 2px rgba(15, 53, 51, .06), 0 6px 18px rgba(15, 53, 51, .07);
   --font-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
   --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -31,6 +32,7 @@
     --accent: #5fc0b4; --accent-ink: #0a1715; --band: #0a2321; --band-2: #143734; --band-ink: #e2f0ed; --band-muted: #8db7b1;
     --urg: #ff8f80; --urg-bg: #3a1c19; --pri: #f0b45e; --pri-bg: #33270f; --dev: #c5a8f6; --dev-bg: #29203f;
     --novo: #8fb9f8; --novo-bg: #172a45; --ok: #7fd08e; --ok-bg: #16301c;
+    --jd: #ff6bd6; --jd-bg: #3b1633; --jd-ink: #1a0615;
     --shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 6px 18px rgba(0, 0, 0, .25);
     color-scheme: dark;
   }
@@ -40,6 +42,7 @@
   --accent: #5fc0b4; --accent-ink: #0a1715; --band: #0a2321; --band-2: #143734; --band-ink: #e2f0ed; --band-muted: #8db7b1;
   --urg: #ff8f80; --urg-bg: #3a1c19; --pri: #f0b45e; --pri-bg: #33270f; --dev: #c5a8f6; --dev-bg: #29203f;
   --novo: #8fb9f8; --novo-bg: #172a45; --ok: #7fd08e; --ok-bg: #16301c;
+  --jd: #ff6bd6; --jd-bg: #3b1633; --jd-ink: #1a0615;
   --shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 6px 18px rgba(0, 0, 0, .25);
   color-scheme: dark;
 }
@@ -173,6 +176,13 @@ ol.linhas { list-style: none; margin: 0; padding: 0; }
 .selo.novo { background: var(--novo); color: var(--surface); }
 .selo.sigilo { background: var(--sunken); color: var(--muted); border: 1px solid var(--line); }
 .nota { margin-top: 6px; font-size: 12.5px; padding: 5px 8px; border-radius: 6px; background: var(--sunken); }
+/* Card do Jurisdição Delegada (processos de Pagamentos): resumo das RPV/PRC; o selo PRC usa a cor viva própria (--jd). */
+.jd-card { margin-top: 6px; font-size: 12.5px; padding: 5px 8px; border-radius: 6px; background: var(--sunken); border-left: 3px solid var(--line); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.jd-card.com-prc { border-left-color: var(--jd); }
+.jd-card.jd-sem { color: var(--muted); }
+.jd-rot { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.jd-card b { font-weight: 700; }
+.selo.prc { background: var(--jd); color: var(--jd-ink); }
 .acoes { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 .acoes .btn { font-size: 12.5px; padding: 5px 10px; }
 .anotar-form { display: flex; flex-direction: column; gap: 6px; }

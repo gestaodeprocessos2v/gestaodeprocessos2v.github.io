@@ -98,6 +98,41 @@
     return `${d.slice(0, 7)}-${d.slice(7, 9)}.${d.slice(9, 13)}.${d.slice(13, 14)}.${d.slice(14, 16)}.${d.slice(16)}`;
   }
 
+  // Jurisdição Delegada (JD): situações na ordem em que o servidor precisa agir (rejeitadas primeiro) e o plural de cada uma.
+  const SITUACOES_JD = [
+    ['Rejeitada pelo TRF', 'Rejeitadas pelo TRF'], ['Devolvida', 'Devolvidas'], ['Em Conferência', 'Em Conferência'],
+    ['Em Elaboração', 'Em Elaboração'], ['Assinada', 'Assinadas'], ['Autuada no TRF', 'Autuadas no TRF'],
+    ['Paga', 'Pagas'], ['Cancelada', 'Canceladas'],
+  ];
+  const JD_EM_ALERTA = new Set(['Rejeitada pelo TRF', 'Devolvida']);
+
+  // Linhas da planilha do JD (Nº do processo | Nº da requisição | Tipo | Valor | Situação) -> um item por processo:
+  // { n: requisições, prc: quantas são PRC, s: { situação: quantidade } }, chaveado pelos 20 dígitos do processo.
+  function resumirJD(linhas) {
+    const itens = {}; let requisicoes = 0, prc = 0; const vistas = new Set();
+    for (const c of linhas) {
+      const chave = soDigitos(c && c[0]);
+      if (chave.length !== 20) continue;                    // cabeçalho e linhas em branco
+      const req = String(c[1] == null ? '' : c[1]).trim(), tipo = String(c[2] == null ? '' : c[2]).trim().toUpperCase(), sit = String(c[4] == null ? '' : c[4]).trim();
+      if (!req || !sit || vistas.has(req)) continue;
+      vistas.add(req);
+      const it = itens[chave] || (itens[chave] = { n: 0, prc: 0, s: {} });
+      it.n++; it.s[sit] = (it.s[sit] || 0) + 1; requisicoes++;
+      if (tipo === 'PRC') { it.prc++; prc++; }
+    }
+    return { itens, processos: Object.keys(itens).length, requisicoes, prc };
+  }
+
+  // Partes do texto do card, na ordem de urgência: [{ n, rotulo, alerta }]. Situação desconhecida vai ao fim, com o nome original.
+  function partesJD(it) {
+    const s = it && it.s || {}, partes = [], usadas = new Set();
+    for (const [sing, plural] of SITUACOES_JD) {
+      if (s[sing]) { partes.push({ n: s[sing], rotulo: s[sing] > 1 ? plural : sing, alerta: JD_EM_ALERTA.has(sing) }); usadas.add(sing); }
+    }
+    for (const [sit, n] of Object.entries(s)) if (!usadas.has(sit) && n) partes.push({ n, rotulo: sit, alerta: false });
+    return partes;
+  }
+
   // 7º algarismo da esquerda para a direita, contando só os dígitos do número.
   function digito(numero) {
     const d = soDigitos(numero);
@@ -279,18 +314,7 @@
     return { diretor: [...dir.values()], gestor: [...ges.values()] };
   }
 
-  function filtrarDiario(itens, tabela) {
-    const mapa = mapaTarefas(tabela);
-    return itens.filter(it => tipoItem(it, mapa) !== 'normal');
-  }
-
   const chaveItem = it => soDigitos(it.n) + '|' + (it.ch == null ? '' : it.ch);
-
-  // Mantém a data em que cada processo foi visto pela primeira vez na tarefa (selo "novo").
-  function mesclarDiario(anteriores, novos, agora) {
-    const vistos = new Map((anteriores || []).map(it => [chaveItem(it), it.vistoEm]));
-    return novos.map(it => Object.assign({}, it, { vistoEm: vistos.get(chaveItem(it)) || agora }));
-  }
 
   function bytes(obj) {
     const s = JSON.stringify(obj);
@@ -352,7 +376,7 @@
     return [...por.values()].map(it => Object.assign({}, it, { fora: true }));
   }
 
-  // Junta lista semanal + diário + urgências manuais + devoluções numa fila única, sem repetir processo.
+  // Junta a lista do PJe + urgências manuais + devoluções numa fila única, sem repetir processo.
   // Urgente/prioritária vêm da tabela de tarefas (colunas "Urgente?" e "Zerar?").
   function montarFila(entrada) {
     const e = entrada || {};
@@ -360,7 +384,7 @@
     const marcas = e.marcas || {};
     const ultimaVisita = e.ultimaVisita || 0;
     // Mesmo processo em mais de uma entrada: se alguma tarefa é de fluxo paralelo, mostra a de chegada
-    // mais antiga com o selo "Fluxo paralelo"; senão, a mais recente (lista semanal x atualização diária).
+    // mais antiga com o selo "Fluxo paralelo"; senão, a mais recente.
     const grupos = new Map();
     for (const it of e.itens || []) {
       const k = soDigitos(it.n);
@@ -440,7 +464,7 @@
 
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem,
-    atribuir, pessoasDoSetor, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, filtrarDiario, mesclarDiario, fatiar, podarMarcas, montarFila, comparar, chaveItem,
+    atribuir, pessoasDoSetor, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, resumirJD, partesJD, fatiar, podarMarcas, montarFila, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

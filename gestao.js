@@ -37,12 +37,13 @@
     prepararRascunho();
     const foco = document.activeElement && document.activeElement.id;
     // Os campos de arquivo são recriados vazios a cada desenho; os que ainda têm arquivo lido são mantidos.
-    const mi = st.metasImp, imp = st.importacao;
-    const manter = [['imp-arquivo', imp && (imp.resultado || imp.erro)], ['metas-arq-resumo', mi && (mi.resumo || mi.erroResumo)], ['metas-arq-pend', mi && (mi.pendentes || mi.erroPendentes)]]
+    const mi = st.metasImp, imp = st.importacao, ji = st.jdImp;
+    const manter = [['imp-arquivo', imp && (imp.resultado || imp.erro)], ['jd-arquivo', ji && (ji.resumo || ji.erro)],['metas-arq-resumo', mi && (mi.resumo || mi.erroResumo)], ['metas-arq-pend', mi && (mi.pendentes || mi.erroPendentes)]]
       .map(([id, ativo]) => { const el = ativo && document.getElementById(id); return el && el.files && el.files.length ? el : null; }).filter(Boolean);
     v.innerHTML = `<div class="paineis">
       ${P.htmlGestorFila()}
       ${painelImportar()}
+      ${P.painelJDGestao ? P.painelJDGestao() : ''}
       ${P.painelMetasGestao ? P.painelMetasGestao() : ''}
       ${painelUrgencia()}
       ${painelResumo()}
@@ -69,15 +70,15 @@
       const setores = SETORES.filter(([id]) => r.porSetor[id]).map(([id, n]) => `${n}: <b class="mono">${r.porSetor[id]}</b>`).join(' · ');
       const sem = r.semResponsavel.length ? `<div class="aviso erro"><b>${r.semResponsavel.length} sem responsável</b> e não serão gravados: ${r.semResponsavel.slice(0, 6).map(i => `${esc(i.n)} (${esc(i.motivo)})`).join('; ')}${r.semResponsavel.length > 6 ? '…' : ''}. Ajuste a configuração e leia o arquivo de novo.</div>` : '';
       previa = `<div class="previa">
-        <div><b>${imp.lidos} linhas lidas</b> em “${esc(imp.arquivo)}”${imp.tipo === 'diario' ? `; ${imp.filtrados} em tarefas urgentes ou de “Zerar”` : ''}.</div>
+        <div><b>${imp.lidos} linhas lidas</b> em “${esc(imp.arquivo)}”.</div>
         <div class="small">Por setor: ${setores || '—'}</div>
-        ${imp.tipo === 'semanal' && !imp.pessoaFixa ? `<div class="small">Outros setores da vara (sem fila de servidor): <b class="mono">${(r.outros || []).length}</b> processos, guardados só para as Metas CNJ.</div>` : ''}
+        ${!imp.pessoaFixa ? `<div class="small">Outros setores da vara (sem fila de servidor): <b class="mono">${(r.outros || []).length}</b> processos, guardados só para as Metas CNJ.</div>` : ''}
         <div class="small muted">Ignorados: ${r.ignorados.foraDaVara} em tarefas de outros setores${r.ignorados.semEtiqueta ? ` e ${r.ignorados.semEtiqueta} sem a etiqueta exigida pela tarefa` : ''}.${imp.semData ? ` ${imp.semData} sem data de chegada vão para o fim da fila.` : ''}</div>
         <div class="tabela-wrap"><table><thead><tr><th>Pessoa</th><th>Processos</th><th>Urgentes</th><th>Prioritários</th></tr></thead><tbody>${linhas || '<tr><td colspan="4">Nenhum processo para gravar.</td></tr>'}</tbody></table></div>
         ${sem}
         ${especiaisPrevia(imp)}
         <div class="linha-botoes">
-          <button class="btn primario" data-acao="gravar-importacao" ${st.gravando || (!Object.keys(r.porPessoa).length && !temEspeciais(imp)) ? 'disabled' : ''}>${st.gravando ? 'Gravando…' : imp.tipo === 'diario' ? 'Gravar atualização diária' : 'Gravar e substituir a lista'}</button>
+          <button class="btn primario" data-acao="gravar-importacao" ${st.gravando || (!Object.keys(r.porPessoa).length && !temEspeciais(imp)) ? 'disabled' : ''}>${st.gravando ? 'Gravando…' : 'Gravar e substituir a lista'}</button>
           <button class="btn" data-acao="cancelar-importacao">Cancelar</button>
         </div>
       </div>`;
@@ -85,12 +86,8 @@
     const semTabela = !st.tarefas.length ? `<div class="aviso erro">Cadastre a tabela de tarefas (painel “Tarefas do PJe”) antes de enviar o relatório: é ela que diz o setor de cada processo.</div>` : '';
     return `<section class="painel">
       <h2>Enviar relatório do PJe+R</h2>
-      <p>Envie a lista completa de processos. O setor de cada processo vem da tarefa em que ele está, pela tabela de tarefas; processos de outros setores são ignorados nas filas dos servidores. A atualização diária só aproveita tarefas urgentes ou de “Zerar”. As urgências e as prioritárias seguem o relatório: quem não está na lista nova sai da fila. Só as urgências incluídas aqui na Gestão e as enviadas entre pessoas ficam até serem concluídas. As filas do diretor e do gestor são escolhidas só por etiqueta, em qualquer tarefa, e são refeitas por qualquer um dos dois tipos de envio.</p>
+      <p>Envie a lista completa de processos. O setor de cada processo vem da tarefa em que ele está, pela tabela de tarefas; processos de outros setores são ignorados nas filas dos servidores. As urgências e as prioritárias seguem o relatório: quem não está na lista nova sai da fila. Só as urgências incluídas aqui na Gestão e as enviadas entre pessoas ficam até serem concluídas. As filas do diretor e do gestor são escolhidas só por etiqueta, em qualquer tarefa, e são refeitas a cada envio.</p>
       ${semTabela}
-      <div class="opcoes" role="radiogroup" aria-label="Tipo de envio">
-        <label><input type="radio" name="tipo-imp" id="tipo-semanal" value="semanal"${imp.tipo !== 'diario' ? ' checked' : ''}> Lista completa (semanal)</label>
-        <label><input type="radio" name="tipo-imp" id="tipo-diario" value="diario"${imp.tipo === 'diario' ? ' checked' : ''}> Atualização diária</label>
-      </div>
       <label class="campo"><span>Distribuir</span><select id="imp-destino">${destinoOpc}</select></label>
       <label class="campo"><span>Arquivo CSV</span><input type="file" id="imp-arquivo" accept=".csv,text/csv,text/plain"></label>
       ${previa}
@@ -116,17 +113,15 @@
   async function prepararImportacao() {
     const input = $('#imp-arquivo');
     const arquivo = input && input.files && input.files[0];
-    const tipo = ($('#tipo-diario') || {}).checked ? 'diario' : 'semanal';
     const pessoaFixa = $('#imp-destino').value;
-    st.importacao = { tipo, pessoaFixa };
+    st.importacao = { pessoaFixa };
     if (!arquivo) { render(); return; }
     try {
       if (!st.tarefas.length) throw new Error('A tabela de tarefas está vazia. Cadastre as tarefas antes de enviar o relatório.');
       const lido = R.lerCsv(await lerArquivo(arquivo));
-      const base = tipo === 'diario' ? R.filtrarDiario(lido.itens, st.mapaTarefas) : lido.itens;
       Object.assign(st.importacao, {
-        arquivo: arquivo.name, lidos: lido.itens.length, filtrados: base.length, semData: lido.semData,
-        resultado: R.prepararLista(base, st.mapaTarefas, st.config, pessoaFixa || null),
+        arquivo: arquivo.name, lidos: lido.itens.length, semData: lido.semData,
+        resultado: R.prepararLista(lido.itens, st.mapaTarefas, st.config, pessoaFixa || null),
         especiais: pessoaFixa ? null : R.prepararEspeciais(lido.itens, st.config),
       });
     } catch (e) {
@@ -162,22 +157,16 @@
       const doPessoa = (lista, p) => (st.filas.find(r => r.lista === lista && r.pessoa === p) || {}).itens || [];
       // Processo com anotação e não concluído não some quando sai do arquivo novo: fica (como "Saiu da lista") até ser concluído ou a anotação ser excluída.
       const anotados = (p, presentes) => R.guardarAnotados([...doPessoa('semanal', p), ...doPessoa('diaria', p)], presentes, st.notas[p], st.marcas[p]);
-      const semFora = (p, itens) => itens.filter(it => !it.fora || ((st.notas[p] || {})[R.soDigitos(it.n)] || {}).texto);
-      let rows;
-      if (imp.tipo === 'semanal') {
-        rows = gravar.map(([p, itens]) => {
-          const vistos = new Map([...doPessoa('semanal', p), ...doPessoa('diaria', p)].map(i => [R.chaveItem(i), i.vistoEm]));
-          const marcados = itens.map(it => R.tipoItem(it, st.mapaTarefas) !== 'normal' ? Object.assign({}, it, { vistoEm: vistos.get(R.chaveItem(it)) || agora }) : it);
-          return { lista: 'semanal', pessoa: p, itens: marcados.concat(anotados(p, itens)), importado_em: I };
-        });
-        // quem não recebeu nada no arquivo novo mas tem processo anotado ainda ativo mantém só esses
-        for (const p of alvo) {
-          if (rows.some(r => r.pessoa === p)) continue;
-          const sobra = anotados(p, []);
-          if (sobra.length) rows.push({ lista: 'semanal', pessoa: p, itens: sobra, importado_em: I });
-        }
-      } else {
-        rows = gravar.map(([p, itens]) => ({ lista: 'diaria', pessoa: p, itens: R.mesclarDiario(doPessoa('diaria', p), itens, agora), importado_em: I }));
+      const rows = gravar.map(([p, itens]) => {
+        const vistos = new Map([...doPessoa('semanal', p), ...doPessoa('diaria', p)].map(i => [R.chaveItem(i), i.vistoEm]));
+        const marcados = itens.map(it => R.tipoItem(it, st.mapaTarefas) !== 'normal' ? Object.assign({}, it, { vistoEm: vistos.get(R.chaveItem(it)) || agora }) : it);
+        return { lista: 'semanal', pessoa: p, itens: marcados.concat(anotados(p, itens)), importado_em: I };
+      });
+      // quem não recebeu nada no arquivo novo mas tem processo anotado ainda ativo mantém só esses
+      for (const p of alvo) {
+        if (rows.some(r => r.pessoa === p)) continue;
+        const sobra = anotados(p, []);
+        if (sobra.length) rows.push({ lista: 'semanal', pessoa: p, itens: sobra, importado_em: I });
       }
       for (const row of rows) {
         const { error } = await sb.from('filas').upsert(row, { onConflict: 'lista,pessoa' });
@@ -185,29 +174,11 @@
       }
       const gravadas = new Set(rows.map(r => r.pessoa));
       const semNovo = [...alvo].filter(p => !gravadas.has(p));
-      if (imp.tipo === 'semanal') {
-        // a lista completa substitui tudo: some o que saiu do PJe e a atualização diária anterior (exceto os processos anotados, que já foram para a lista semanal)
-        const semNovoSem = semNovo.filter(p => !rows.some(r => r.pessoa === p));
-        if (semNovoSem.length) { const { error } = await sb.from('filas').delete().eq('lista', 'semanal').in('pessoa', semNovoSem); if (error) throw error; }
-        if (alvo.size) { const { error } = await sb.from('filas').delete().eq('lista', 'diaria').in('pessoa', [...alvo]); if (error) throw error; }
-      } else {
-        if (semNovo.length) { const { error } = await sb.from('filas').delete().eq('lista', 'diaria').in('pessoa', semNovo); if (error) throw error; }
-        // o relatório diário traz todas as tarefas de "Zerar": as prioritárias antigas da lista completa saem;
-        // os processos anotados que ficaram sem lugar (prioritária antiga ou item da atualização diária anterior) vão para a lista completa como "Saiu da lista"
-        for (const p of alvo) {
-          const antigaSem = doPessoa('semanal', p);
-          const resto = semFora(p, antigaSem.filter(it => R.tipoItem(it, st.mapaTarefas) !== 'prioritaria'));
-          const novosDia = ((rows.find(r => r.pessoa === p) || {}).itens) || [];
-          const guardados = R.guardarAnotados([...antigaSem, ...doPessoa('diaria', p)], [...resto, ...novosDia], st.notas[p], st.marcas[p]);
-          const novos = resto.concat(guardados);
-          if (JSON.stringify(novos) === JSON.stringify(antigaSem)) continue;
-          if (!novos.length && !antigaSem.length) continue;
-          const orig = st.filas.find(x => x.lista === 'semanal' && x.pessoa === p);
-          const { error } = await sb.from('filas').upsert({ lista: 'semanal', pessoa: p, itens: novos, importado_em: (orig && orig.importado_em) || I }, { onConflict: 'lista,pessoa' });
-          if (error) throw error;
-        }
-      }
-      // Filas do diretor e do gestor (por etiqueta): qualquer tipo de envio refaz a lista inteira e descarta a atualização diária anterior.
+      // a lista completa substitui tudo: some o que saiu do PJe (exceto os processos anotados, que já foram para a lista) e qualquer resíduo da antiga atualização diária
+      const semNovoSem = semNovo.filter(p => !rows.some(r => r.pessoa === p));
+      if (semNovoSem.length) { const { error } = await sb.from('filas').delete().eq('lista', 'semanal').in('pessoa', semNovoSem); if (error) throw error; }
+      if (alvo.size) { const { error } = await sb.from('filas').delete().eq('lista', 'diaria').in('pessoa', [...alvo]); if (error) throw error; }
+      // Filas do diretor e do gestor (por etiqueta): cada envio refaz a lista inteira e descarta resíduo da antiga atualização diária.
       if (imp.especiais && !fixa) {
         const dest = [[GESTOR_ID, imp.especiais.gestor], ...pessoas().filter(p => p.tipo === 'diretor').map(p => [p.id, imp.especiais.diretor])];
         for (const [pessoa, itens] of dest) {
@@ -220,7 +191,7 @@
         }
       }
       // Lista completa para todos: guarda também os processos de tarefas sem fila de servidor, só para a aba Pendentes das Metas CNJ.
-      if (imp.tipo === 'semanal' && !fixa) {
+      if (!fixa) {
         const { error: eo } = await sb.from('fora_vara').upsert({ id: 1, itens: imp.resultado.outros || [], importado_em: I, atualizado_por: st.email }, { onConflict: 'id' });
         if (eo) { console.error(eo); toast('A lista foi gravada, mas não consegui guardar os processos de outros setores (Metas CNJ).'); }
         else st.metas.foraEm = 0;
@@ -228,13 +199,13 @@
       await limparUrgenciasDaLista();
       const total =gravar.reduce((s, [, x]) => s + x.length, 0);
       const info = { em: agora, total, porPessoa: Object.fromEntries(gravar.map(([p, x]) => [p, x.length])) };
-      if (fixa && imp.tipo === 'semanal') fixos[fixa] = { em: agora, total };
-      else if (imp.tipo === 'semanal') resumo.semanal = info;
-      else resumo.diaria = info;
+      if (fixa) fixos[fixa] = { em: agora, total };
+      else resumo.semanal = info;
+      delete resumo.diaria;
       const { error } = await sb.from('config').upsert({ chave: 'resumo', valor: resumo, atualizado_em: I, atualizado_por: st.email }, { onConflict: 'chave' });
       if (error) throw error;
-      toast(imp.tipo === 'diario' ? 'Atualização diária gravada.' : 'Lista completa gravada.');
-      st.importacao = { tipo: imp.tipo, pessoaFixa: imp.pessoaFixa };
+      toast('Lista gravada.');
+      st.importacao = { pessoaFixa: imp.pessoaFixa };
       await P.carregar();
     } catch (e) { falha(e); }
     st.gravando = false; render();
@@ -312,20 +283,19 @@
     const conta = (lista, p) => st.filas.filter(r => r.lista === lista && r.pessoa === p).reduce((s, r) => s + (r.itens || []).length, 0);
     const lista = [...pessoas(), { id: GESTOR_ID, nome: 'Gestor', tipo: 'gestor' }];
     const linhas = lista.map(p => `<tr><td>${esc(p.nome)}${p.tipo && p.tipo !== 'servidor' ? ` <span class="muted small">(${esc((ROTULO_TIPO[p.tipo] || (p.tipo === 'gestor' ? 'fila própria, por etiqueta' : p.tipo)).toLowerCase())})</span>` : ''}${(resumo.fixos || {})[p.id] ? ' <span class="muted small">(lista própria)</span>' : ''}</td>
-      <td class="n">${conta('semanal', p.id)}</td><td class="n">${conta('diaria', p.id)}</td>
+      <td class="n">${conta('semanal', p.id)}</td>
       <td class="n">${P.filaDe(p.id).filter(l => l.tipo === 'urgente' && !l.concluido).length}</td>
       <td class="n">${st.devolucoes.filter(d => d.para === p.id && !d.concluidaEm).length}</td></tr>`).join('');
     const envios = [];
-    if (resumo.semanal) envios.push(['Lista completa', 'Semanal', resumo.semanal.em, resumo.semanal.total, '']);
-    if (resumo.diaria) envios.push(['Atualização diária', 'Diária', resumo.diaria.em, resumo.diaria.total, '']);
-    for (const [p, i] of Object.entries(resumo.fixos || {})) envios.push(['Para ' + nomeDe(p), 'Semanal', i.em, i.total, p]);
-    envios.sort((a, b) => (b[2] || 0) - (a[2] || 0));
-    const trEnvio = e => `<tr><td>${esc(e[0])}</td><td>${e[1]}</td><td>${dataHoraBR(e[2])}</td><td class="n">${e[3] || 0}</td><td>${e[4] ? `<button class="btn discreto" data-acao="liberar-fixo" data-p="${esc(e[4])}">Voltar às regras</button>` : ''}</td></tr>`;
+    if (resumo.semanal) envios.push(['Lista completa', resumo.semanal.em, resumo.semanal.total, '']);
+    for (const [p, i] of Object.entries(resumo.fixos || {})) envios.push(['Para ' + nomeDe(p), i.em, i.total, p]);
+    envios.sort((a, b) => (b[1] || 0) - (a[1] || 0));
+    const trEnvio = e => `<tr><td>${esc(e[0])}</td><td>${dataHoraBR(e[1])}</td><td class="n">${e[2] || 0}</td><td>${e[3] ? `<button class="btn discreto" data-acao="liberar-fixo" data-p="${esc(e[3])}">Voltar às regras</button>` : ''}</td></tr>`;
     return `<section class="painel">
       <h2>Resumo por pessoa</h2>
-      <div class="tabela-wrap"><table><thead><tr><th>Pessoa</th><th>Lista completa</th><th>Diário</th><th>Urgências abertas</th><th>Devoluções abertas</th></tr></thead><tbody>${linhas || '<tr><td colspan="5">Cadastre as pessoas na configuração.</td></tr>'}</tbody></table></div>
+      <div class="tabela-wrap"><table><thead><tr><th>Pessoa</th><th>Lista completa</th><th>Urgências abertas</th><th>Devoluções abertas</th></tr></thead><tbody>${linhas || '<tr><td colspan="4">Cadastre as pessoas na configuração.</td></tr>'}</tbody></table></div>
       <h3>Últimos envios</h3>
-      <div class="tabela-wrap"><table><thead><tr><th>Lista</th><th>Tipo</th><th>Enviada em</th><th>Processos</th><th></th></tr></thead><tbody>${envios.map(trEnvio).join('') || '<tr><td colspan="5" class="muted">Nenhum relatório enviado ainda.</td></tr>'}</tbody></table></div>
+      <div class="tabela-wrap"><table><thead><tr><th>Lista</th><th>Enviada em</th><th>Processos</th><th></th></tr></thead><tbody>${envios.map(trEnvio).join('') || '<tr><td colspan="4" class="muted">Nenhum relatório enviado ainda.</td></tr>'}</tbody></table></div>
     </section>`;
   }
 
@@ -697,7 +667,7 @@
   v.addEventListener('submit', e => { if (e.target.id === 'form-urgencia') aoIncluirUrgencia(e); else e.preventDefault(); });
   v.addEventListener('change', e => {
     const id = e.target.id;
-    if (id === 'imp-arquivo' || id === 'imp-destino' || e.target.name === 'tipo-imp') prepararImportacao();
+    if (id === 'imp-arquivo' || id === 'imp-destino') prepararImportacao();
     else if (e.target.dataset.campo && e.target.dataset.i != null) editarTarefa(e.target);
     else if (id === 'tf-filtro-painel') { st.filtroTabela.painel = e.target.value; render(); }
     else if (id === 'urg-setor') sugerirResponsavel();

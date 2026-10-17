@@ -27,15 +27,15 @@
     config: null, rascunho: null,
     tarefas: [], mapaTarefas: new Map(), tarefasEm: null, rascTarefas: null, tarefasAlteradas: false,
     filtroTabela: { busca: '', painel: '' },
-    resumo: null,
+    resumo: null, jd: null,
     filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
     ver: 0, cache: { ver: -1, m: {} },
     aba: 'fila', verComo: '', area: 'fila', menuAreas: false,
     abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null,
     vis: {
-      fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '' },
-      geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '' },
-      gestor: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '' },
+      fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '' },
+      geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '' },
+      gestor: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '' },
     },
     gOculta: false, gBase: 0, duAberta: false, novaUrgDir: { numero: '', setor: 'secretaria', responsavel: '', motivo: '' },
     anotando: null, notaRascunho: '', devolvendo: null, devMotivo: '', modal: null,
@@ -197,6 +197,21 @@
   }
 
   // ---------- dados ----------
+  // Jurisdição Delegada: uma linha só (jd_requisicoes). Carrega o conteúdo apenas quando a data do JD muda; se a tabela
+  // ainda não existe ou falhar, o painel segue sem o card.
+  async function carregarJD() {
+    try {
+      const d = await st.sb.from('jd_requisicoes').select('importado_em').eq('id', 1).maybeSingle();
+      if (d.error) throw d.error;
+      if (!d.data) { st.jd = null; return; }
+      const em = ms(d.data.importado_em);
+      if (st.jd && st.jd.em === em) return;
+      const r = await st.sb.from('jd_requisicoes').select('itens,importado_em').eq('id', 1).maybeSingle();
+      if (r.error) throw r.error;
+      st.jd = r.data ? { itens: r.data.itens || {}, em: ms(r.data.importado_em) } : null;
+    } catch (e) { console.warn('JD indisponível', e); st.jd = null; }
+  }
+
   async function carregar() {
     const sb = st.sb;
     const desdeConcl = iso(Date.now() - 35 * DIA), desdeMarcas = iso(Date.now() - 95 * DIA);
@@ -238,6 +253,7 @@
     for (const n of notas) (st.notas[n.pessoa] = st.notas[n.pessoa] || {})[n.numero] = { texto: n.texto, em: ms(n.em) };
     st.acessos = acessos;
     st.negados = (negados.data || []).map(r => ({ email: r.email, em: ms(r.em) }));
+    await carregarJD();
     if (!st.rascOutros) st.rascOutros = null;
     st.ver++;
   }
@@ -434,6 +450,28 @@
     return out;
   }
 
+  // Jurisdição Delegada: só para processos de tarefas de Pagamentos. Item do JD do processo (ou undefined).
+  const ehPagamentos = l => l.s === 'pagamentos';
+  const itemJD = l => (st.jd && st.jd.itens ? st.jd.itens[R.soDigitos(l.n)] : undefined);
+  // Filtro "JD": prc (tem precatório), rejeitada (tem rejeitada pelo TRF), sem (processo de Pagamentos sem RPV/PRC no JD).
+  const OPCOES_JD = [['prc', 'Com precatório (PRC)'], ['rejeitada', 'Com rejeitada pelo TRF'], ['sem', 'Sem RPV/PRC no JD']];
+  function casaJD(l, chave) {
+    if (!chave) return true;
+    if (!st.jd || !ehPagamentos(l)) return false;
+    const it = itemJD(l);
+    if (chave === 'sem') return !it;
+    if (!it) return false;
+    return chave === 'prc' ? it.prc > 0 : !!(it.s && it.s['Rejeitada pelo TRF'] > 0);
+  }
+  function cardJD(l) {
+    if (!st.jd || !ehPagamentos(l)) return '';
+    const it = itemJD(l);
+    if (!it) return '<div class="jd-card jd-sem"><span class="jd-rot">JD</span><span>Sem RPV/PRC no JD</span></div>';
+    const txt = R.partesJD(it).map(p => p.alerta ? `<b>${p.n} ${esc(p.rotulo)}</b>` : `${p.n} ${esc(p.rotulo)}`).join('; ');
+    const prc = it.prc > 0 ? `<span class="selo prc">${it.prc > 1 ? it.prc + ' ' : ''}PRC</span>` : '';
+    return `<div class="jd-card${it.prc > 0 ? ' com-prc' : ''}"><span class="jd-rot">JD</span><span>${txt}</span>${prc}</div>`;
+  }
+
   function linhaHTML(l, modo) {
     const geral = modo === 'geral';
     const selos = [];
@@ -506,6 +544,7 @@
       <div class="c-num">
         <button class="num" data-acao="copiar" data-n="${esc(l.n)}" data-balao="Copiar número" aria-description="Copiar número">${numeroHTML(l.n)}</button>
         ${selos.length ? `<div class="selos">${selos.join('')}</div>` : ''}
+        ${cardJD(l)}
         ${nota}${resp}${etqHTML}
       </div>
       <div class="c-classe"><span class="rot-m">Classe</span>${esc(l.c || '—')}</div>
@@ -573,6 +612,7 @@
       if (l.concluido && !f.concl) return false;
       if (ign !== 'tarefa' && f.tarefa && l.t !== f.tarefa) return false;
       if (ign !== 'etiqueta' && f.etiqueta && !(l[campoEt] || []).includes(f.etiqueta)) return false;
+      if (ign !== 'jd' && !casaJD(l, f.jd)) return false;
       if (!busca) return true;
       if (buscaDig.length >= 4 && R.soDigitos(l.n).includes(buscaDig)) return true;
       return R.normTexto([l.n, l.c, l.t, l.cg, l.motivo, l.anot, geral ? nomeDe(l.dono) : ''].join(' ')).includes(busca);
@@ -583,9 +623,12 @@
     const opTarefas = [...new Set(todas.map(l => l.t).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'))
       .map(x => ({ x, n: paraTarefa.filter(l => l.t === x).length })).filter(o => o.n > 0 || o.x === f.tarefa);
     const opEtiquetas = etiquetas.map(x => ({ x, n: paraEtiqueta.filter(l => (l[campoEt] || []).includes(x)).length })).filter(o => o.n > 0 || o.x === f.etiqueta);
+    // Filtro do JD: só aparece se há dados do JD e processos de Pagamentos na lista; mesma regra dos outros filtros (só opções com processos, com a quantidade).
+    const paraJD = todas.filter(l => casa(l, 'jd'));
+    const opJD = st.jd && todas.some(ehPagamentos)
+      ? OPCOES_JD.map(([x, rot]) => ({ x, rot, n: paraJD.filter(l => casaJD(l, x)).length })).filter(o => o.n > 0 || o.x === f.jd) : [];
     const concluidos = todas.length - abertas.length;
-    const ultimaLista = st.filas.filter(r => r.lista === 'semanal').reduce((m, r) => Math.max(m, ms(r.importado_em) || 0), 0);
-    const ultimoDiario = st.filas.filter(r => r.lista === 'diaria').reduce((m, r) => Math.max(m, ms(r.importado_em) || 0), 0);
+    const ultimaLista = st.filas.reduce((m, r) => Math.max(m, ms(r.importado_em) || 0), 0);
 
     let h = '';
     if (novos) h += `<div class="aviso novo"><b>${novos} ${novos === 1 ? 'processo novo' : 'processos novos'}</b> em urgências ou tarefas prioritárias desde a sua última visita (${dataHoraBR(st.ultimaVisita)}).</div>`;
@@ -597,13 +640,14 @@
       <button type="button" class="tile" data-acao="ir" data-tipo="normal" data-balao="Ir para esta lista" aria-description="Ir para esta lista"><span>Na fila</span><b>${conta('normal')}</b></button>
       <div class="tile concluido"><span>Concluídos</span><b>${concluidos}</b></div>
     </div>
-    <p class="atualizacao">Lista completa: ${ultimaLista ? dataHoraBR(ultimaLista) : 'ainda não enviada'} · Atualização diária: ${ultimoDiario ? dataHoraBR(ultimoDiario) : 'ainda não enviada'} · Clique no número para copiar.</p>
+    <p class="atualizacao">Lista do PJe: ${ultimaLista ? dataHoraBR(ultimaLista) : 'ainda não enviada'}${st.jd && st.jd.em ? ` · JD: ${dataHoraBR(st.jd.em)}` : ''} · Clique no número para copiar.</p>
     <div class="filtros">
       <input type="search" id="busca" placeholder="Buscar por número, classe, tarefa, cargo ou anotação" value="${esc(f.busca)}" aria-label="Buscar">
       ${geral && st.perfil !== 'visitante' ? `<select id="filtro-pessoa" aria-label="Filtrar por servidor">${opcoesPessoas(f.pessoa, 'Todos os servidores', null, { diretor: true })}</select>` : ''}
       ${(() => { const vs = visoesDe(pessoaDaVisao(modo)); return vs.length ? `<select id="filtro-visao" aria-label="Mostrar"><option value="">Painel completo</option>${vs.map(v => `<option value="${esc(idVisao(v))}"${idVisao(v) === f.visao ? ' selected' : ''}>${esc(v.nome)}</option>`).join('')}</select>` : ''; })()}
       <select id="filtro-tarefa" aria-label="Filtrar por tarefa"><option value="">Todas as tarefas</option>${opTarefas.map(o => `<option value="${esc(o.x)}"${o.x === f.tarefa ? ' selected' : ''}>${esc(o.x)} (${o.n})</option>`).join('')}</select>
       ${etiquetas.length ? `<select id="filtro-etiqueta" aria-label="Filtrar por etiqueta"><option value="">Todas as etiquetas</option>${opEtiquetas.map(o => `<option value="${esc(o.x)}"${o.x === f.etiqueta ? ' selected' : ''}>${esc(o.x)} (${o.n})</option>`).join('')}</select>` : ''}
+      ${opJD.length ? `<select id="filtro-jd" aria-label="Filtrar pela situação no JD"><option value="">Todos (JD)</option>${opJD.map(o => `<option value="${o.x}"${o.x === f.jd ? ' selected' : ''}>${esc(o.rot)} (${o.n})</option>`).join('')}</select>` : ''}
       <label class="small"><input type="checkbox" id="mostrar-concluidos"${f.concl ? ' checked' : ''}> Mostrar concluídos</label>
       <div class="direita"><button class="btn" data-acao="baixar">Baixar CSV</button></div>
     </div>`;
@@ -886,7 +930,7 @@
       } else if (acao === 'mais') {
         f.limite += LIMITE_NORMAL; render();
       } else if (acao === 'baixar') {
-        const base = aplicarVisao(modo, modo === 'geral' ? linhasGeral(f.pessoa) : filaDe(pessoaAtiva())).filter(l => !f.etiqueta || (l[etConfig(modo).campo] || []).includes(f.etiqueta));
+        const base = aplicarVisao(modo, modo === 'geral' ? linhasGeral(f.pessoa) : filaDe(pessoaAtiva())).filter(l => (!f.etiqueta || (l[etConfig(modo).campo] || []).includes(f.etiqueta)) && casaJD(l, f.jd));
         const linhas = base.filter(l => f.concl || !l.concluido);
         const hoje = new Date().toISOString().slice(0, 10);
         baixar(`fila-${modo === 'geral' ? 'geral' : pessoaAtiva()}-${hoje}.csv`, R.paraCsv(linhas, nomes(), modo === 'geral'));
@@ -993,8 +1037,9 @@
         const f = st.vis[modo];
         if (e.target.id === 'filtro-tarefa') { f.tarefa = e.target.value; render(); }
         if (e.target.id === 'filtro-etiqueta') { f.etiqueta = e.target.value; f.limite = LIMITE_NORMAL; render(); }
-        if (e.target.id === 'filtro-visao') { f.visao = e.target.value; f.tarefa = ''; f.etiqueta = ''; f.limite = LIMITE_NORMAL; render(); }
-        if (e.target.id === 'filtro-pessoa') { f.pessoa = e.target.value; f.visao = ''; f.tarefa = ''; f.etiqueta = ''; f.limite = LIMITE_NORMAL; render(); }
+        if (e.target.id === 'filtro-jd') { f.jd = e.target.value; f.limite = LIMITE_NORMAL; render(); }
+        if (e.target.id === 'filtro-visao') { f.visao = e.target.value; f.tarefa = ''; f.etiqueta = ''; f.jd = ''; f.limite = LIMITE_NORMAL; render(); }
+        if (e.target.id === 'filtro-pessoa') { f.pessoa = e.target.value; f.visao = ''; f.tarefa = ''; f.etiqueta = ''; f.jd = ''; f.limite = LIMITE_NORMAL; render(); }
         if (e.target.id === 'mostrar-concluidos') { f.concl = e.target.checked; render(); }
       });
     }
