@@ -129,6 +129,7 @@
 
   async function sair() {
     try { await st.sb.auth.signOut(); } catch (e) { console.error(e); }
+    if (window.TEMA) window.TEMA.desligar();
     reiniciarEstado();
     st.estado = 'login'; render();
   }
@@ -158,6 +159,7 @@
       if (error) throw error;
       if (!data) { st.estado = 'negado'; render(); registrarNegado(st.email); return; }
       st.nome = data.nome; st.perfil = data.perfil; st.pessoa = data.perfil === 'gestor' ? GESTOR_ID : (data.pessoa_id || '');
+      if (window.TEMA) window.TEMA.ligar(st.sb, st.email); // aparência guardada na conta (não bloqueia o carregamento)
       const visto = Number(ler('fila.visita.' + st.email));
       st.ultimaVisita = visto || Date.now() - DIA;
       guardar('fila.visita.' + st.email, String(Date.now()));
