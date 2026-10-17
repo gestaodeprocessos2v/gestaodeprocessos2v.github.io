@@ -1,0 +1,460 @@
+/* Fila de Trabalho da Vara — área "Produtividade da Vara" (só gestor, diretor e magistrado) e os painéis da aba Gestão
+   (Equipe da Produtividade e Envio do relatório do BI). As regras de leitura e de contagem estão em produtividade.js. */
+(function () {
+  'use strict';
+  const P = window.PAINEL, M = window.Metas, X = window.Produtividade;
+  if (!P || !P.render || !M || !X) return;
+  const { st, R, esc, toast, falha, dataBR, dataHoraBR, todas, baixar } = P;
+  const $ = sel => document.querySelector(sel);
+  const render = () => P.render();
+  const nBR = n => Number(n || 0).toLocaleString('pt-BR');
+  const txt = v => String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+  const norm = R.normTexto;
+  const ATIV = [X.ATIV_DOC, X.ATIV_RETIF, X.ATIV_TAREFA];
+  const PERIODOS = [['30', 'Últimos 30 dias'], ['mes', 'Mês atual'], ['mesAnterior', 'Mês anterior'], ['90', 'Últimos 90 dias'], ['ano', 'Ano'], ['tudo', 'Tudo']];
+  const GRANS = [['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês']];
+  const dBR = d => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : '—');
+  const dCurta = d => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '—');
+  const podeVer = () => P.PERFIS_PRODUTIVIDADE.includes(st.perfil);
+
+  // ---------- estado ----------
+  const S = () => st.prod || (st.prod = {
+    equipe: [], envios: [], carregado: false, erro: false,
+    dias: null, procs: null, dadosEnvio: null, carregando: false, erroDados: false, dataFim: null, primeiro: null,
+    tipos: null, tiposChave: '', carregandoTipos: false, erroTipos: false,
+    f: { periodo: '30', gran: 'dia', medida: 'atividades', perfil: '', grupo: '', busca: '', ordem: 'total', dir: -1 },
+    eq: { rasc: null, alterada: false, erro: '', salvando: false },
+    imp: { arquivo: '', rel: null, erro: '', novos: null, conferindo: false, ano: {}, gravando: false, remover: null },
+  });
+
+  // ---------- dados (equipe e envios sempre; o resto só quando a área é aberta) ----------
+  P.carregarProd = async function () {
+    const s = S();
+    try {
+      const [eq, ev] = await Promise.all([
+        st.sb.from('produtividade_equipe').select('nome_bi,perfil,grupo,ordem,ativo').order('ordem').order('nome_bi'),
+        st.sb.from('produtividade_envios').select('id,enviado_em,enviado_por,arquivo,periodo_ini,periodo_fim,lidas,da_lista,novas,total_bi,ano_anterior').order('id', { ascending: false }).limit(40),
+      ]);
+      if (eq.error) throw eq.error;
+      if (ev.error) throw ev.error;
+      s.equipe = eq.data || []; s.envios = ev.data || []; s.erro = false; s.carregado = true;
+    } catch (e) { console.warn('Produtividade indisponível', e); s.erro = true; s.carregado = true; }
+  };
+
+  async function garantirDados() {
+    const s = S(), ultimo = s.envios[0] ? s.envios[0].id : 0;
+    if (s.carregando || (s.dias && s.dadosEnvio === ultimo)) return;
+    if (!ultimo) { s.dias = []; s.procs = []; s.dadosEnvio = 0; return; }
+    s.carregando = true;
+    try {
+      const [d, p] = await Promise.all([
+        todas((a, b) => st.sb.from('produtividade_dia').select('pessoa,dia,atividade,atividades').order('dia').order('pessoa').order('atividade').range(a, b)),
+        todas((a, b) => st.sb.from('produtividade_processos_dia').select('pessoa,dia,processos').order('dia').order('pessoa').range(a, b)),
+      ]);
+      s.dias = d; s.procs = p; s.dadosEnvio = ultimo; s.erroDados = false;
+      const todos = d.map(r => r.dia).concat(p.map(r => r.dia)).sort();
+      s.primeiro = todos[0] || null; s.dataFim = todos[todos.length - 1] || null;
+    } catch (e) { console.error(e); s.erroDados = true; s.dias = s.dias || []; s.procs = s.procs || []; s.dadosEnvio = ultimo; }
+    s.carregando = false;
+    s.tiposChave = '';
+    if (st.area === 'produtividade') render();
+  }
+
+  async function garantirTipos(ini, fim) {
+    const s = S(), chave = `${ini}|${fim}|${s.dadosEnvio}`;
+    if (s.tiposChave === chave || s.carregandoTipos) return;
+    s.carregandoTipos = true;
+    try {
+      s.tipos = await todas((a, b) => st.sb.from('produtividade_tipo_dia').select('pessoa,dia,atividade,tipo,atividades').gte('dia', ini).lte('dia', fim)
+        .order('dia').order('pessoa').order('atividade').order('tipo').range(a, b));
+      s.erroTipos = false;
+    } catch (e) { console.error(e); s.erroTipos = true; s.tipos = []; }
+    s.tiposChave = chave; s.carregandoTipos = false;
+    if (st.area === 'produtividade' && st.abaProd === 'atividades') render();
+  }
+
+  // ---------- auxiliares de tela ----------
+  const vazio = (titulo, p) => `<div class="vazio"><h2>${esc(titulo)}</h2><p>${p}</p></div>`;
+  const grupos = s => [...new Set(s.equipe.filter(p => p.ativo !== false).map(p => p.grupo || '—'))];
+  const cor = (gs, g) => `var(--prod-${Math.max(0, gs.indexOf(g)) % 8})`;
+  // vazioRot = texto da opção "todos"; null = sem essa opção (período e agrupamento sempre têm um valor).
+  const opts = (lista, atual, vazioRot) => (vazioRot == null ? '' : `<option value="">${vazioRot}</option>`) + lista.map(o => `<option value="${esc(o.v)}"${o.v === atual ? ' selected' : ''}>${esc(o.r)}</option>`).join('');
+
+  function filtros(s, aba, ctx) {
+    const f = s.f;
+    const sel = (campo, rot, lista, atual, vazioRot) => `<select data-pf="${campo}" aria-label="${rot}">${opts(lista, atual, vazioRot)}</select>`;
+    const periodo = sel('periodo', 'Período', PERIODOS.map(([v, r]) => ({ v, r })), f.periodo, null);
+    // Regra dos filtros do painel: só opções com dados, com a quantidade (atividades no período), contadas com os outros filtros.
+    const conta = (extra) => ctx.contar(Object.assign({ perfil: f.perfil, grupo: f.grupo }, extra));
+    const perfis = [...new Set(s.equipe.filter(p => p.ativo !== false).map(p => p.perfil).filter(Boolean))]
+      .map(v => ({ v, n: conta({ perfil: v, grupo: f.grupo }) })).filter(o => o.n > 0 || o.v === f.perfil).map(o => ({ v: o.v, r: `${o.v} (${nBR(o.n)})` }));
+    const gs = grupos(s).filter(g => g !== '—')
+      .map(v => ({ v, n: conta({ perfil: f.perfil, grupo: v }) })).filter(o => o.n > 0 || o.v === f.grupo).map(o => ({ v: o.v, r: `${o.v} (${nBR(o.n)})` }));
+    const extra = [];
+    if (aba === 'resumo') extra.push(sel('gran', 'Agrupar por', GRANS.map(([v, r]) => ({ v, r: `Por ${r.toLowerCase()}` })), f.gran, null));
+    if (aba !== 'atividades') extra.push(`<div class="seg-tema prod-alterna" role="group" aria-label="Medida">${[['atividades', 'Atividades'], ['processos', 'Processos']].map(([v, r]) => `<button type="button" role="menuitemradio" aria-checked="${f.medida === v}" data-pacao="medida" data-v="${v}">${r}</button>`).join('')}</div>`);
+    if (aba !== 'resumo') extra.push(`<input type="search" id="prod-busca" placeholder="${aba === 'pessoas' ? 'Buscar pessoa' : 'Buscar tipo de atividade'}" value="${esc(f.busca)}" aria-label="Buscar">`);
+    return `<div class="filtros prod-filtros">${periodo}${perfis.length ? sel('perfil', 'Perfil', perfis, f.perfil, 'Todos os perfis') : ''}${gs.length ? sel('grupo', 'Grupo', gs, f.grupo, 'Todos os grupos') : ''}${extra.join('')}${aba === 'pessoas' ? '<div class="direita"><button class="btn" type="button" data-pacao="csv">Baixar CSV</button></div>' : ''}</div>`;
+  }
+
+  const delta = (atual, ant, temAnt, rotAnt) => {
+    if (!temAnt) return '<small class="prod-delta muted">sem período anterior completo</small>';
+    if (!ant) return `<small class="prod-delta muted" data-balao="${esc(rotAnt)}" tabindex="0" role="note">antes: 0</small>`;
+    const p = Math.round(((atual - ant) / ant) * 100);
+    return `<small class="prod-delta ${p >= 0 ? 'sobe' : 'desce'}" data-balao="${esc(`${rotAnt}\nAntes: ${nBR(ant)}`)}" tabindex="0" role="note">${p >= 0 ? '▲' : '▼'} ${Math.abs(p)}% sobre o período anterior</small>`;
+  };
+
+  // ---------- visão geral ----------
+  function telaResumo(s, ctx) {
+    const f = s.f, ag = ctx.ag(f), ant = ctx.anterior(f);
+    const gs = grupos(s), medida = f.medida;
+    const tile = (rot, v, a) => `<div class="tile"><span>${rot}</span><b>${nBR(v)}</b>${delta(v, a, ctx.temAnt, ctx.rotAnt)}</div>`;
+    const t = ag.totais, ta = ant ? ant.totais : {};
+    const cartoes = `<div class="contagens prod-contagens">${tile('Documentos Minutados', t[X.ATIV_DOC], ta[X.ATIV_DOC])}${tile('Retificações', t[X.ATIV_RETIF], ta[X.ATIV_RETIF])}${tile('Tarefas', t[X.ATIV_TAREFA], ta[X.ATIV_TAREFA])}${tile('Total de atividades', t.total, ta.total)}${tile('Processos', t.processos, ta.processos)}</div>`;
+
+    // Totais da vara no BI (último envio que trouxe a célula "Totais")
+    const env = s.envios.find(e => e.total_bi != null);
+    let bi = '';
+    if (env) {
+      const doEnvio = ctx.agPeriodo(env.periodo_ini, env.periodo_fim);
+      const parte = env.total_bi ? Math.round((doEnvio.totais.total / env.total_bi) * 100) : null;
+      const aa = env.ano_anterior || {};
+      const linhasAA = ['documentos', 'retificacoes', 'tarefas', 'total'].filter(k => aa[k] != null && aa[k] !== '').length
+        ? ` Ano anterior no BI: ${[['documentos', 'documentos'], ['retificacoes', 'retificações'], ['tarefas', 'tarefas'], ['total', 'total']].filter(([k]) => aa[k] != null && aa[k] !== '').map(([k, r]) => `${r} ${nBR(aa[k])}`).join(', ')}.` : '';
+      bi = `<section class="painel prod-bi"><h3>Vara toda no BI</h3><p>Entre ${dBR(env.periodo_ini)} e ${dBR(env.periodo_fim)} o BI registrou <b class="mono">${nBR(env.total_bi)}</b> atividades na 2ª Vara. A equipe da lista responde por <b class="mono">${nBR(doEnvio.totais.total)}</b>${parte != null ? ` (${parte}%)` : ''}.${esc(linhasAA)}</p></section>`;
+    }
+
+    // Evolução: colunas empilhadas por grupo
+    const val = b => (medida === 'processos' ? b.processos : b.total);
+    const max = Math.max(1, ...ag.buckets.map(val));
+    const passo = Math.max(1, Math.ceil(ag.buckets.length / 14));
+    const colunas = ag.buckets.map((b, i) => {
+      const partes = Object.entries(b.grupos).map(([g, v]) => [g, medida === 'processos' ? v.processos : v.atividades]).filter(([, v]) => v > 0)
+        .sort((a, c) => gs.indexOf(a[0]) - gs.indexOf(c[0]));
+      const periodo = f.gran === 'dia' ? dBR(b.inicio) : `${dBR(b.inicio)} a ${dBR(b.fim)}`;
+      const balao = [`${periodo}${b.parcial ? ' (dados parciais)' : ''}`, ...partes.map(([g, v]) => `${g}: ${nBR(v)}`), `Total: ${nBR(val(b))}`].join('\n');
+      const seg = partes.map(([g, v]) => `<i class="prod-seg" style="flex:${v};background:${cor(gs, g)}"></i>`).join('');
+      return `<div class="prod-col${b.parcial ? ' parcial' : ''}" tabindex="0" role="note" data-balao="${esc(balao)}" aria-label="${esc(balao.replace(/\n/g, '. '))}"><div class="prod-pilha" style="height:${(val(b) / max) * 100}%">${seg}</div><span class="prod-rot">${i % passo === 0 ? esc(b.rotulo) : ''}</span></div>`;
+    }).join('');
+    const legenda = gs.map(g => `<span class="prod-leg"><i style="background:${cor(gs, g)}"></i>${esc(g)}</span>`).join('');
+    const nome = { dia: 'por dia', semana: 'por semana (segunda a domingo)', mes: 'por mês' }[f.gran];
+    const grafico = `<section class="painel largo"><h3>${medida === 'processos' ? 'Processos' : 'Atividades'} ${nome}</h3>
+      <div class="prod-grafico-wrap"><span class="prod-max mono">${nBR(max)}</span><div class="prod-grafico">${colunas}</div></div>
+      <div class="prod-legenda">${legenda}<span class="muted small">Colunas listradas: período com dados parciais.</span></div></section>`;
+    return cartoes + bi + grafico;
+  }
+
+  // ---------- por pessoa ----------
+  const CAMPOS_TAB = [['pessoa', 'Pessoa'], ['perfil', 'Perfil'], ['grupo', 'Grupo'], [X.ATIV_DOC, 'Documentos'], [X.ATIV_RETIF, 'Retificações'], [X.ATIV_TAREFA, 'Tarefas'], ['total', 'Atividades'], ['processos', 'Processos'], ['diasAtivos', 'Dias ativos'], ['media', 'Média por dia ativo']];
+  const media = p => (p.diasAtivos ? p.total / p.diasAtivos : 0);
+  function linhasPessoas(s, ctx) {
+    const f = s.f, busca = norm(f.busca);
+    let ps = ctx.ag(f).pessoas.filter(p => !busca || norm(p.pessoa).includes(busca));
+    const k = f.ordem, d = f.dir;
+    ps.sort((a, b) => {
+      const va = k === 'media' ? media(a) : a[k], vb = k === 'media' ? media(b) : b[k];
+      const c = typeof va === 'string' ? va.localeCompare(vb, 'pt-BR') : (va || 0) - (vb || 0);
+      return c ? c * d : a.pessoa.localeCompare(b.pessoa, 'pt-BR');   // empate: sempre por nome, de A a Z
+    });
+    return ps;
+  }
+  function telaPessoas(s, ctx) {
+    const f = s.f, gs = grupos(s), ps = linhasPessoas(s, ctx);
+    const v = p => (f.medida === 'processos' ? p.processos : p.total);
+    const ranking = ps.slice().sort((a, b) => v(b) - v(a) || a.pessoa.localeCompare(b.pessoa, 'pt-BR'));
+    const max = Math.max(1, ...ranking.map(v));
+    const barras = ranking.map(p => {
+      const balao = [p.pessoa, `${p.perfil || '—'} · ${p.grupo || '—'}`, `Documentos: ${nBR(p[X.ATIV_DOC])}`, `Retificações: ${nBR(p[X.ATIV_RETIF])}`, `Tarefas: ${nBR(p[X.ATIV_TAREFA])}`, `Atividades: ${nBR(p.total)}`, `Processos: ${nBR(p.processos)}`, `Dias com atividade: ${nBR(p.diasAtivos)}`].join('\n');
+      return `<div class="prod-rank-lin" tabindex="0" role="note" data-balao="${esc(balao)}" aria-label="${esc(balao.replace(/\n/g, '. '))}"><span class="prod-nome">${esc(p.pessoa)}<small>${esc(p.grupo || '—')}</small></span><span class="prod-barra"><i style="width:${(v(p) / max) * 100}%;background:${cor(gs, p.grupo || '—')}"></i></span><b class="mono">${nBR(v(p))}</b></div>`;
+    }).join('');
+    const tot = ps.reduce((a, p) => { for (const c of ATIV.concat(['total', 'processos'])) a[c] = (a[c] || 0) + p[c]; return a; }, {});
+    const cab = CAMPOS_TAB.map(([c, r]) => `<th class="${['pessoa', 'perfil', 'grupo'].includes(c) ? '' : 'n'}" aria-sort="${f.ordem === c ? (f.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" class="prod-th" data-pacao="ordem" data-campo="${esc(c)}">${r}${f.ordem === c ? (f.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`).join('');
+    const corpo = ps.map(p => `<tr><td>${esc(p.pessoa)}</td><td>${esc(p.perfil)}</td><td>${esc(p.grupo)}</td><td class="n">${nBR(p[X.ATIV_DOC])}</td><td class="n">${nBR(p[X.ATIV_RETIF])}</td><td class="n">${nBR(p[X.ATIV_TAREFA])}</td><td class="n"><b>${nBR(p.total)}</b></td><td class="n">${nBR(p.processos)}</td><td class="n">${nBR(p.diasAtivos)}</td><td class="n">${media(p).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td></tr>`).join('');
+    const rodape = `<tr class="prod-total"><td colspan="3">Total (${ps.length} ${ps.length === 1 ? 'pessoa' : 'pessoas'})</td><td class="n">${nBR(tot[X.ATIV_DOC])}</td><td class="n">${nBR(tot[X.ATIV_RETIF])}</td><td class="n">${nBR(tot[X.ATIV_TAREFA])}</td><td class="n"><b>${nBR(tot.total)}</b></td><td class="n">${nBR(tot.processos)}</td><td></td><td></td></tr>`;
+    return `<section class="painel largo"><h3>Ranking de ${f.medida === 'processos' ? 'processos' : 'atividades'} por pessoa</h3>
+        <div class="prod-rank">${barras || '<p class="muted">Nenhuma pessoa com esse filtro.</p>'}</div>
+        <div class="prod-legenda">${gs.map(g => `<span class="prod-leg"><i style="background:${cor(gs, g)}"></i>${esc(g)}</span>`).join('')}</div></section>
+      <section class="painel largo"><h3>Detalhe por pessoa</h3>
+        <div class="tabela-wrap"><table class="prod-tabela"><thead><tr>${cab}</tr></thead><tbody>${corpo || '<tr><td colspan="10" class="muted">Nenhuma pessoa com esse filtro.</td></tr>'}${ps.length ? rodape : ''}</tbody></table></div>
+        <p class="small muted">Processos: soma, por pessoa, dos processos distintos de cada dia (o mesmo processo em dias diferentes conta mais de uma vez).</p></section>`;
+  }
+  function csvPessoas(s, ctx) {
+    const q = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+    const ps = linhasPessoas(s, ctx);
+    const linhas = [CAMPOS_TAB.map(([, r]) => r).join(';')].concat(ps.map(p => [p.pessoa, p.perfil, p.grupo, p[X.ATIV_DOC], p[X.ATIV_RETIF], p[X.ATIV_TAREFA], p.total, p.processos, p.diasAtivos, media(p).toFixed(1).replace('.', ',')].map(q).join(';')));
+    return '﻿' + linhas.join('\r\n');
+  }
+
+  // ---------- por atividade ----------
+  function telaAtividades(s, ctx) {
+    const f = s.f, gs = grupos(s), per = ctx.periodo(f), eq = new Map(s.equipe.map(p => [norm(p.nome_bi), p]));
+    garantirTipos(per.ini, per.fim);
+    if (s.tiposChave !== `${per.ini}|${per.fim}|${s.dadosEnvio}`) return vazio('Carregando atividades…', 'Buscando os tipos de atividade do período.');
+    if (s.erroTipos) return `<div class="aviso erro">Não foi possível carregar os tipos de atividade agora.</div>`;
+    const busca = norm(f.busca), linhas = new Map(), tot = { total: 0 };
+    for (const r of s.tipos || []) {
+      const p = eq.get(norm(r.pessoa));
+      if (!p || p.ativo === false || (f.perfil && p.perfil !== f.perfil) || (f.grupo && p.grupo !== f.grupo)) continue;
+      if (busca && !norm(r.tipo).includes(busca)) continue;
+      const k = r.atividade + '|' + r.tipo;
+      const l = linhas.get(k) || linhas.set(k, { atividade: r.atividade, tipo: r.tipo, total: 0, g: {} }).get(k);
+      const g = p.grupo || '—'; l.g[g] = (l.g[g] || 0) + r.atividades; l.total += r.atividades; tot.total += r.atividades;
+      tot[r.atividade] = (tot[r.atividade] || 0) + r.atividades;
+    }
+    const ls = [...linhas.values()].sort((a, b) => b.total - a.total || a.tipo.localeCompare(b.tipo, 'pt-BR'));
+    const cartoes = `<div class="contagens prod-contagens">${ATIV.map(a => `<div class="tile"><span>${a === X.ATIV_DOC ? 'Documentos Minutados' : a === X.ATIV_RETIF ? 'Retificações' : 'Tarefas'}</span><b>${nBR(tot[a])}</b></div>`).join('')}<div class="tile"><span>Total de atividades</span><b>${nBR(tot.total)}</b></div><div class="tile"><span>Tipos diferentes</span><b>${nBR(ls.length)}</b></div></div>`;
+    const gcols = gs.filter(g => ls.some(l => l.g[g]));
+    const corpo = ls.slice(0, 300).map(l => `<tr><td>${esc(l.atividade)}</td><td>${esc(l.tipo || '—')}</td>${gcols.map(g => `<td class="n">${l.g[g] ? nBR(l.g[g]) : '·'}</td>`).join('')}<td class="n"><b>${nBR(l.total)}</b></td><td class="n">${tot.total ? ((l.total / tot.total) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : 0}%</td></tr>`).join('');
+    return cartoes + `<section class="painel largo"><h3>Tipos de atividade (${dBR(per.ini)} a ${dBR(per.fim)})</h3>
+      <div class="tabela-wrap"><table class="prod-tabela"><thead><tr><th>Atividade</th><th>Tipo</th>${gcols.map(g => `<th class="n"><i class="prod-ponto" style="background:${cor(gs, g)}"></i>${esc(g)}</th>`).join('')}<th class="n">Total</th><th class="n">%</th></tr></thead>
+      <tbody>${corpo || `<tr><td colspan="${4 + gcols.length}" class="muted">Nenhuma atividade com esse filtro.</td></tr>`}</tbody></table></div>
+      ${ls.length > 300 ? `<p class="small muted">Mostrando os 300 tipos mais frequentes de ${nBR(ls.length)}.</p>` : ''}</section>`;
+  }
+
+  // ---------- contexto de cálculo da área ----------
+  function contexto(s) {
+    const f = s.f, cob = X.cobertura(s.envios);
+    const periodo = fl => X.periodoPreset(fl.periodo, s.dataFim, s.primeiro);
+    const agBase = (fl, per, gran) => X.agregar({ dias: s.dias, procs: s.procs, equipe: s.equipe, filtro: { perfil: fl.perfil, grupo: fl.grupo }, ini: per.ini, fim: per.fim, gran: gran || 'dia', cob });
+    const ctx = {
+      periodo,
+      ag: fl => agBase(fl, periodo(fl), fl.gran),
+      agPeriodo: (ini, fim) => X.agregar({ dias: s.dias, procs: s.procs, equipe: s.equipe, ini, fim, gran: 'mes', cob }),
+      anterior: fl => { const p = periodo(fl); if (!p.ini) return null; const a = X.periodoAnterior(p.ini, p.fim); return X.coberto(a.ini, a.fim, cob) ? agBase(fl, a, 'mes') : null; },
+      contar: filtro => X.agregar({ dias: s.dias, procs: s.procs, equipe: s.equipe, filtro, ini: periodo(f).ini, fim: periodo(f).fim, gran: 'mes' }).totais.total,
+    };
+    const per = periodo(f), a = per.ini ? X.periodoAnterior(per.ini, per.fim) : null;
+    ctx.temAnt = !!(a && X.coberto(a.ini, a.fim, cob));
+    ctx.rotAnt = a ? `Período anterior: ${dBR(a.ini)} a ${dBR(a.fim)}` : '';
+    return ctx;
+  }
+
+  // ---------- tela da área ----------
+  P.renderProd = function () {
+    const v = $('#v-prod'), s = S();
+    if (!podeVer()) { v.innerHTML = vazio('Produtividade da Vara', 'Esta área é restrita ao gestor, ao diretor e aos magistrados.'); return; }
+    if (!s.carregado) { v.innerHTML = vazio('Produtividade da Vara', 'Carregando…'); return; }
+    if (s.erro) { v.innerHTML = `<div class="aviso erro">Não foi possível carregar os dados da Produtividade agora. Tente de novo em instantes.</div>`; return; }
+    if (!s.equipe.length) { v.innerHTML = vazio('A lista da equipe ainda não foi cadastrada', st.perfil === 'gestor' ? 'Cadastre as pessoas em <b>Gestão → Equipe da Produtividade</b> e depois envie o relatório do BI.' : 'O gestor ainda precisa cadastrar a equipe.'); return; }
+    if (!s.envios.length) { v.innerHTML = vazio('Ainda não há dados de produtividade', st.perfil === 'gestor' ? 'Envie o relatório “Atividades por Usuário” do BI em <b>Gestão → Enviar produtividade do BI</b>.' : 'O gestor ainda não enviou o relatório do BI.'); return; }
+    garantirDados();
+    if (!s.dias || s.dadosEnvio !== s.envios[0].id) { v.innerHTML = vazio('Carregando a produtividade…', 'Buscando os dados da equipe.'); return; }
+    const foco = document.activeElement && document.activeElement.id, pos = foco === 'prod-busca' ? document.activeElement.selectionStart : null;
+    const aba = st.abaProd, ctx = contexto(s);
+    const ultimo = s.envios[0];
+    const atual = `<p class="atualizacao">Dados do BI de ${dBR(s.primeiro)} a ${dBR(s.dataFim)} · último envio em ${esc(dataHoraBR(Date.parse(ultimo.enviado_em)))} · só as pessoas da lista da equipe.</p>`;
+    const corpo = aba === 'pessoas' ? telaPessoas(s, ctx) : aba === 'atividades' ? telaAtividades(s, ctx) : telaResumo(s, ctx);
+    v.innerHTML = (s.erroDados ? '<div class="aviso erro">Não foi possível carregar todos os dados agora. Os números podem estar incompletos.</div>' : '') + filtros(s, aba, ctx) + atual + corpo;
+    if (foco === 'prod-busca') { const b = $('#prod-busca'); if (b) { b.focus(); if (pos != null) b.setSelectionRange(pos, pos); } }
+  };
+
+  // eventos da área
+  const vp = $('#v-prod');
+  let buscaTimer = null;
+  vp.addEventListener('change', e => {
+    const c = e.target.dataset && e.target.dataset.pf; if (!c) return;
+    S().f[c] = e.target.value; render();
+  });
+  vp.addEventListener('input', e => {
+    if (e.target.id !== 'prod-busca') return;
+    clearTimeout(buscaTimer); buscaTimer = setTimeout(() => { S().f.busca = e.target.value; render(); }, 180);
+  });
+  vp.addEventListener('click', e => {
+    const a = e.target.closest('[data-pacao]'); if (!a) return;
+    const s = S(), f = s.f;
+    if (a.dataset.pacao === 'medida') { f.medida = a.dataset.v; render(); }
+    else if (a.dataset.pacao === 'ordem') {
+      const c = a.dataset.campo, texto = ['pessoa', 'perfil', 'grupo'].includes(c);
+      if (f.ordem === c) f.dir = -f.dir; else { f.ordem = c; f.dir = texto ? 1 : -1; }
+      render();
+    } else if (a.dataset.pacao === 'csv') baixar(`produtividade-por-pessoa-${new Date().toISOString().slice(0, 10)}.csv`, csvPessoas(s, contexto(s)));
+  });
+  vp.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.matches('.prod-col, .prod-rank-lin')) e.preventDefault();
+  });
+
+  // ============================ GESTÃO ============================
+  // ---------- Equipe da Produtividade ----------
+  const clonar = o => JSON.parse(JSON.stringify(o));
+  P.painelEquipeGestao = function () {
+    const s = S(), eq = s.eq, linhas = eq.rasc || s.equipe;
+    const distintos = c => [...new Set(linhas.map(p => txt(p[c])).filter(Boolean))];
+    const corpo = linhas.map((p, i) => `<tr>
+      <td><input type="text" id="eq-nome-${i}" data-eq="nome_bi" data-i="${i}" value="${esc(p.nome_bi)}" aria-label="Nome no BI"></td>
+      <td><input type="text" id="eq-perfil-${i}" list="eq-perfis" data-eq="perfil" data-i="${i}" value="${esc(p.perfil)}" aria-label="Perfil"></td>
+      <td><input type="text" id="eq-grupo-${i}" list="eq-grupos" data-eq="grupo" data-i="${i}" value="${esc(p.grupo)}" aria-label="Grupo"></td>
+      <td class="ck"><input type="checkbox" id="eq-ativo-${i}" data-eq="ativo" data-i="${i}"${p.ativo !== false ? ' checked' : ''} aria-label="Entra no dashboard"></td>
+      <td><button class="btn discreto" type="button" data-acao="pr-eq-excluir" data-i="${i}">Excluir</button></td></tr>`).join('');
+    return `<section class="painel largo" id="painel-equipe-prod">
+      <h2>Equipe da Produtividade</h2>
+      <p>Pessoas que entram no dashboard “Produtividade da Vara”. O <b>nome no BI</b> precisa ser igual ao que o relatório traz (maiúsculas e acentos não importam). Quem não está na lista é descartado quando o relatório é enviado. Se mudar o nome de alguém, os dados já guardados continuam com o nome antigo. Os dados dessa área só são visíveis para o gestor, o diretor e os magistrados.</p>
+      ${eq.erro ? `<div class="aviso erro">${esc(eq.erro)}</div>` : ''}
+      <label class="campo"><span>Importar lista (.xlsx com Servidor, Perfil e Grupo)</span><input type="file" id="pr-lista-arq" accept=".xlsx"></label>
+      <datalist id="eq-perfis">${distintos('perfil').map(v => `<option value="${esc(v)}">`).join('')}</datalist>
+      <datalist id="eq-grupos">${distintos('grupo').map(v => `<option value="${esc(v)}">`).join('')}</datalist>
+      <div class="filtros dentro"><span id="eq-estado" class="small ${eq.alterada ? 'alterado' : 'muted'}">${eq.alterada ? 'Alterações não salvas' : `${s.equipe.length} ${s.equipe.length === 1 ? 'pessoa' : 'pessoas'}, tudo salvo`}</span>
+        <div class="direita"><button class="btn" type="button" data-acao="pr-eq-incluir">Incluir pessoa</button></div></div>
+      <div class="tabela-wrap"><table><thead><tr><th>Nome no BI</th><th>Perfil</th><th>Grupo</th><th>Entra</th><th></th></tr></thead>
+      <tbody>${corpo || '<tr><td colspan="5" class="muted">Nenhuma pessoa. Importe a lista ou inclua manualmente.</td></tr>'}</tbody></table></div>
+      <div class="linha-botoes"><button class="btn primario" type="button" data-acao="pr-eq-salvar" ${eq.alterada && !eq.salvando ? '' : 'disabled'}>${eq.salvando ? 'Salvando…' : 'Salvar equipe'}</button>
+        <button class="btn" type="button" data-acao="pr-eq-descartar" ${eq.alterada ? '' : 'disabled'}>Descartar alterações</button></div></section>`;
+  };
+
+  function marcarEquipe() {
+    const eq = S().eq; eq.alterada = true;
+    const e = $('#eq-estado'); if (e) { e.textContent = 'Alterações não salvas'; e.className = 'small alterado'; }
+    for (const a of ['pr-eq-salvar', 'pr-eq-descartar']) { const b = document.querySelector(`[data-acao="${a}"]`); if (b) b.disabled = false; }
+  }
+  function editarEquipe(el) {
+    const s = S(); if (!s.eq.rasc) s.eq.rasc = clonar(s.equipe);
+    const p = s.eq.rasc[Number(el.dataset.i)]; if (!p) return;
+    p[el.dataset.eq] = el.type === 'checkbox' ? el.checked : el.value;
+    marcarEquipe();
+  }
+  async function lerLista(arquivo) {
+    const s = S(); s.eq.erro = '';
+    if (arquivo) {
+      try {
+        const x = await M.lerXlsx(await arquivo.arrayBuffer());
+        s.eq.rasc = X.lerEquipe(x.linhas); marcarEquipe();
+        toast(`${s.eq.rasc.length} pessoas lidas. Confira e clique em Salvar equipe.`);
+      } catch (e) { s.eq.erro = e.message || 'Não consegui ler a lista.'; }
+    }
+    render();
+  }
+  async function salvarEquipe() {
+    const s = S(), eq = s.eq; if (!eq.rasc || eq.salvando) return;
+    const itens = eq.rasc.map((p, i) => ({ nome_bi: txt(p.nome_bi), perfil: txt(p.perfil), grupo: txt(p.grupo), ordem: i + 1, ativo: p.ativo !== false })).filter(p => p.nome_bi);
+    const vistos = new Set(), repetidas = [];
+    for (const p of itens) { const k = norm(p.nome_bi); if (vistos.has(k)) repetidas.push(p.nome_bi); vistos.add(k); }
+    if (repetidas.length) { toast('Nome repetido na lista: ' + repetidas.slice(0, 3).join('; ') + '. Exclua uma das linhas antes de salvar.'); return; }
+    eq.salvando = true; render();
+    try {
+      const novos = new Set(itens.map(p => p.nome_bi)), remover = s.equipe.map(p => p.nome_bi).filter(n => !novos.has(n));
+      if (itens.length) { const { error } = await st.sb.from('produtividade_equipe').upsert(itens, { onConflict: 'nome_bi' }); if (error) throw error; }
+      if (remover.length) { const { error } = await st.sb.from('produtividade_equipe').delete().in('nome_bi', remover); if (error) throw error; }
+      eq.rasc = null; eq.alterada = false; eq.erro = '';
+      await P.carregar(); toast('Equipe salva.');
+    } catch (e) { falha(e); }
+    eq.salvando = false; render();
+  }
+
+  // ---------- Envio do relatório do BI ----------
+  const ANO = [['documentos', 'Documentos Minutados'], ['retificacoes', 'Retificações'], ['tarefas', 'Tarefas'], ['total', 'Total de atividades']];
+  async function conferirNovos(rel) {
+    const s = S(), i = s.imp;
+    if (!rel.eventos.length || !rel.periodoIni) { i.novos = { novos: 0, guardados: 0 }; return; }
+    i.conferindo = true; render();
+    try {
+      const ja = new Set((await todas((a, b) => st.sb.from('produtividade_eventos').select('chave').gte('ocorreu_em', rel.periodoIni + 'T00:00:00').lte('ocorreu_em', rel.periodoFim + 'T23:59:59.999').order('id').range(a, b))).map(r => r.chave));
+      const guardados = rel.eventos.filter(e => ja.has(e.chave)).length;
+      i.novos = { novos: rel.eventos.length - guardados, guardados };
+    } catch (e) { console.warn(e); i.novos = null; }
+    i.conferindo = false;
+  }
+  async function lerRelatorio(arquivo) {
+    const s = S(), i = s.imp; i.rel = null; i.erro = ''; i.novos = null; i.arquivo = '';
+    if (arquivo) {
+      try {
+        const x = await M.lerXlsx(await arquivo.arrayBuffer());
+        i.rel = X.lerRelatorio(x.linhas, s.equipe); i.arquivo = arquivo.name;
+        if (!i.rel.eventos.length) throw new Error('Não encontrei nenhuma atividade das pessoas da lista neste arquivo. Confira a lista da equipe e o arquivo.');
+        await conferirNovos(i.rel);
+      } catch (e) { i.rel = null; i.erro = e.message || 'Não consegui ler o relatório.'; }
+    }
+    render();
+  }
+  P.painelProdGestao = function () {
+    const s = S(), i = s.imp, r = i.rel;
+    const por = r ? r.eventos.reduce((a, e) => { a[e.atividade] = (a[e.atividade] || 0) + e.total; return a; }, {}) : {};
+    const previa = i.erro ? `<div class="aviso erro">${esc(i.erro)}</div>` : r ? `<div class="previa">
+        <div><b>${nBR(r.eventos.length)} registros das pessoas da lista</b> em “${esc(i.arquivo)}”, de ${dBR(r.periodoIni)} a ${dBR(r.periodoFim)}.</div>
+        <div class="small">Atividades pela regra do BI: ${ATIV.map(a => `${a === X.ATIV_DOC ? 'documentos' : a === X.ATIV_RETIF ? 'retificações' : 'tarefas'} <b class="mono">${nBR(por[a])}</b>`).join(' · ')} · total <b class="mono">${nBR(Object.values(por).reduce((x, y) => x + y, 0))}</b>.</div>
+        <div class="small">${r.totalBi != null ? `Total da vara no BI: <b class="mono">${nBR(r.totalBi)}</b> (célula “Totais”). ` : 'O arquivo não traz a linha “Totais” (relatório sem formatação). '}${i.conferindo ? 'Conferindo o que já está guardado…' : i.novos ? `Novos: <b class="mono">${nBR(i.novos.novos)}</b> · já guardados: <b class="mono">${nBR(i.novos.guardados)}</b>.` : ''}</div>
+        ${r.invalidas ? `<div class="aviso novo">${r.invalidas} linhas com data inválida foram ignoradas.</div>` : ''}
+      </div>` : '';
+    const campoAno = ([k, rot]) => `<label class="campo"><span>${rot}</span><input type="number" min="0" step="1" inputmode="numeric" id="pr-ano-${k}" data-ano="${k}" value="${esc((i.ano || {})[k] == null ? '' : i.ano[k])}"></label>`;
+    const hist = s.envios.slice(0, 8).map(e => `<tr><td>${esc(dataHoraBR(Date.parse(e.enviado_em)))}</td><td>${dBR(e.periodo_ini)} a ${dBR(e.periodo_fim)}</td><td class="n">${nBR(e.da_lista)}</td><td class="n">${nBR(e.novas)}</td><td class="n">${e.total_bi == null ? '—' : nBR(e.total_bi)}</td>
+      <td>${i.remover === e.id ? `<button class="btn perigo" type="button" data-acao="pr-env-remover" data-id="${e.id}">Confirmar remoção</button> <button class="btn discreto" type="button" data-acao="pr-env-cancelar">Cancelar</button>` : `<button class="btn discreto" type="button" data-acao="pr-env-pedir" data-id="${e.id}">Remover</button>`}</td></tr>`).join('');
+    return `<section class="painel" id="painel-prod-envio">
+      <h2>Enviar produtividade do BI</h2>
+      <p>No Portal BI (painel “Atuação de Magistrados e Servidores”, aba “Produtividade dos Servidores”), filtre pela serventia <b>PB - 2ª Vara Federal</b> e exporte a tabela “Atividades por Usuário” em Excel, com as colunas Usuário, Número Processo, Atividade, Tipo Atividade e Data Atividade. Os envios se acumulam: o que já está guardado não é contado de novo.</p>
+      <label class="campo"><span>Relatório (.xlsx)</span><input type="file" id="pr-arq" accept=".xlsx"></label>
+      <h3>Ano anterior (opcional)</h3>
+      <p class="small muted">Os quatro números “Ano Anterior” dos cartões do BI, para a comparação na Visão geral.</p>
+      <div class="campos">${ANO.map(campoAno).join('')}</div>
+      ${previa}
+      <div class="linha-botoes">
+        <button class="btn primario" type="button" data-acao="pr-env-gravar" ${r && !i.gravando && !i.conferindo ? '' : 'disabled'}>${i.gravando ? 'Gravando…' : 'Gravar produtividade'}</button>
+        ${r || i.erro ? '<button class="btn" type="button" data-acao="pr-env-limpar">Limpar</button>' : ''}
+      </div>
+      ${hist ? `<h3>Últimos envios</h3><div class="tabela-wrap"><table><thead><tr><th>Enviado em</th><th>Período</th><th>Da lista</th><th>Novos</th><th>Total BI</th><th></th></tr></thead><tbody>${hist}</tbody></table></div>
+      <p class="small muted">Remover um envio apaga os registros que ele acrescentou.</p>` : ''}
+    </section>`;
+  };
+
+  async function gravarEnvio() {
+    const s = S(), i = s.imp, r = i.rel; if (!r || i.gravando) return;
+    i.gravando = true; render();
+    let id = null;
+    try {
+      const ano = {};
+      for (const [k] of ANO) { const v = i.ano && i.ano[k]; if (v !== '' && v != null && isFinite(Number(v))) ano[k] = Number(v); }
+      const ins = await st.sb.from('produtividade_envios').insert({
+        enviado_por: st.email, arquivo: i.arquivo, periodo_ini: r.periodoIni, periodo_fim: r.periodoFim,
+        lidas: r.lidas, da_lista: r.daLista, novas: 0, total_bi: r.totalBi, ano_anterior: Object.keys(ano).length ? ano : null,
+      }).select('id').single();
+      if (ins.error) throw ins.error;
+      id = ins.data.id;
+      let novas = 0;
+      for (let k = 0; k < r.eventos.length; k += 500) {
+        const lote = r.eventos.slice(k, k + 500).map(e => ({ chave: e.chave, envio_id: id, pessoa: e.pessoa, processo: e.processo, atividade: e.atividade, tipo: e.tipo, ocorreu_em: e.ocorreu_em, total: e.total }));
+        const g = await st.sb.from('produtividade_eventos').upsert(lote, { onConflict: 'chave', ignoreDuplicates: true }).select('chave');
+        if (g.error) throw g.error;
+        novas += (g.data || []).length;
+      }
+      const up = await st.sb.from('produtividade_envios').update({ novas }).eq('id', id);
+      if (up.error) throw up.error;
+      s.imp = { arquivo: '', rel: null, erro: '', novos: null, conferindo: false, ano: {}, gravando: false, remover: null };
+      s.dadosEnvio = null; s.dias = null; s.tiposChave = '';
+      await P.carregar(); toast(`Produtividade gravada: ${nBR(novas)} registros novos.`);
+    } catch (e) {
+      if (id != null) { try { await st.sb.from('produtividade_envios').delete().eq('id', id); } catch (e2) { console.error(e2); } }
+      falha(e); i.gravando = false;
+    }
+    render();
+  }
+  async function removerEnvio(id) {
+    const { error } = await st.sb.from('produtividade_envios').delete().eq('id', id);
+    if (error) throw error;
+    const s = S(); s.imp.remover = null; s.dadosEnvio = null; s.dias = null; s.tiposChave = '';
+    toast('Envio removido.'); await P.carregar(); render();
+  }
+
+  // eventos da Gestão (ações com prefixo pr-)
+  const vg = $('#v-gestao');
+  vg.addEventListener('input', e => {
+    if (e.target.dataset && e.target.dataset.eq && e.target.type !== 'checkbox') editarEquipe(e.target);
+    else if (e.target.dataset && e.target.dataset.ano) { const i = S().imp; i.ano = i.ano || {}; i.ano[e.target.dataset.ano] = e.target.value; }
+  });
+  vg.addEventListener('change', e => {
+    if (e.target.id === 'pr-lista-arq') lerLista(e.target.files && e.target.files[0]);
+    else if (e.target.id === 'pr-arq') lerRelatorio(e.target.files && e.target.files[0]);
+    else if (e.target.dataset && e.target.dataset.eq && e.target.type === 'checkbox') editarEquipe(e.target);
+  });
+  vg.addEventListener('click', async e => {
+    const a = e.target.closest('[data-acao]'); if (!a || !a.dataset.acao.startsWith('pr-')) return;
+    const s = S(), eq = s.eq, acao = a.dataset.acao;
+    try {
+      if (acao === 'pr-eq-incluir') { if (!eq.rasc) eq.rasc = clonar(s.equipe); eq.rasc.push({ nome_bi: '', perfil: '', grupo: '', ordem: eq.rasc.length + 1, ativo: true }); marcarEquipe(); render(); const el = document.getElementById('eq-nome-' + (eq.rasc.length - 1)); if (el) el.focus(); }
+      else if (acao === 'pr-eq-excluir') { if (!eq.rasc) eq.rasc = clonar(s.equipe); eq.rasc.splice(Number(a.dataset.i), 1); marcarEquipe(); render(); }
+      else if (acao === 'pr-eq-descartar') { eq.rasc = null; eq.alterada = false; eq.erro = ''; render(); toast('Alterações na equipe descartadas.'); }
+      else if (acao === 'pr-eq-salvar') await salvarEquipe();
+      else if (acao === 'pr-env-gravar') await gravarEnvio();
+      else if (acao === 'pr-env-limpar') { s.imp = { arquivo: '', rel: null, erro: '', novos: null, conferindo: false, ano: {}, gravando: false, remover: null }; render(); }
+      else if (acao === 'pr-env-pedir') { s.imp.remover = Number(a.dataset.id); render(); }
+      else if (acao === 'pr-env-cancelar') { s.imp.remover = null; render(); }
+      else if (acao === 'pr-env-remover') await removerEnvio(Number(a.dataset.id));
+    } catch (err) { falha(err); }
+  });
+})();

@@ -38,13 +38,16 @@
     prepararRascunho();
     const foco = document.activeElement && document.activeElement.id;
     // Os campos de arquivo são recriados vazios a cada desenho; os que ainda têm arquivo lido são mantidos.
-    const mi = st.metasImp, imp = st.importacao, ji = st.jdImp;
-    const manter = [['imp-arquivo', imp && (imp.resultado || imp.erro)], ['jd-arquivo', ji && (ji.resumo || ji.erro)],['metas-arq-resumo', mi && (mi.resumo || mi.erroResumo)], ['metas-arq-pend', mi && (mi.pendentes || mi.erroPendentes)]]
+    const mi = st.metasImp, imp = st.importacao, ji = st.jdImp, pe = st.prod && st.prod.eq, pi = st.prod && st.prod.imp;
+    const manter = [['imp-arquivo', imp && (imp.resultado || imp.erro)], ['jd-arquivo', ji && (ji.resumo || ji.erro)],
+      ['pr-lista-arq', pe && (pe.rasc || pe.erro)], ['pr-arq', pi && (pi.rel || pi.erro)], ['metas-arq-resumo', mi && (mi.resumo || mi.erroResumo)], ['metas-arq-pend', mi && (mi.pendentes || mi.erroPendentes)]]
       .map(([id, ativo]) => { const el = ativo && document.getElementById(id); return el && el.files && el.files.length ? el : null; }).filter(Boolean);
     v.innerHTML = `<div class="paineis">
       ${P.htmlGestorFila()}
       ${painelImportar()}
       ${P.painelJDGestao ? P.painelJDGestao() : ''}
+      ${P.painelEquipeGestao ? P.painelEquipeGestao() : ''}
+      ${P.painelProdGestao ? P.painelProdGestao() : ''}
       ${P.painelMetasGestao ? P.painelMetasGestao() : ''}
       ${painelUrgencia()}
       ${painelResumo()}
