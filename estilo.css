@@ -394,6 +394,8 @@ button.tile:focus-visible { outline: 2px solid currentColor; outline-offset: 2px
 .prod-barra { display: block; height: 14px; background: var(--sunken); border-radius: 7px; overflow: hidden; }
 .prod-barra i { display: block; height: 100%; border-radius: 7px; min-width: 2px; }
 .prod-rank-lin b { text-align: right; }
+/* As primeiras linhas não têm espaço acima (o painel corta o que passa do topo): o balão abre para baixo */
+.prod-rank-lin:nth-child(-n+4)[data-balao]::after { bottom: auto; top: calc(100% + 6px); }
 .prod-tabela th.n { text-align: right; }
 .prod-th { font: inherit; font-weight: 600; background: none; border: 0; cursor: pointer; color: inherit; padding: 0; text-align: inherit; }
 .prod-tabela .prod-total td { border-top: 2px solid var(--line); font-weight: 600; }
