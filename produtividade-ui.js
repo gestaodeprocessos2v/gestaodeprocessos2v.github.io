@@ -371,7 +371,8 @@
         ${r || i.erro ? '<button class="btn" type="button" data-acao="pr-env-limpar">Limpar</button>' : ''}
       </div>
       ${hist ? `<h3>Últimos envios</h3><div class="tabela-wrap"><table><thead><tr><th>Enviado em</th><th>Período</th><th>Da lista</th><th>Novos</th><th>Total BI</th><th></th></tr></thead><tbody>${hist}</tbody></table></div>
-      <p class="small muted">Remover um envio apaga os registros que ele acrescentou.</p>` : ''}
+      <p class="small muted">Remover um envio apaga os registros que ele acrescentou. Os totais do dashboard são refeitos a cada envio ou remoção; se os números parecerem desatualizados, use “Recalcular totais”.</p>
+      <div class="linha-botoes"><button class="btn discreto" type="button" data-acao="pr-env-recalcular" ${s.recalculando ? 'disabled' : ''}>${s.recalculando ? 'Recalculando…' : 'Recalcular totais'}</button></div>` : ''}
     </section>`;
   };
 
@@ -394,6 +395,9 @@
         novas += (g.data || []).length;
         const b = document.querySelector('[data-acao="pr-env-gravar"]'); if (b) b.textContent = `Gravando… ${Math.min(100, Math.round(((k + LOTE) / r.eventos.length) * 100))}%`;
       }
+      // Os totais do dashboard ficam em tabelas prontas: refaz só o período deste envio (se falhar, o envio criado é desfeito abaixo).
+      const rc = await st.sb.rpc('produtividade_recalcular', { p_ini: r.periodoIni, p_fim: r.periodoFim });
+      if (rc.error) throw rc.error;
       const up = await st.sb.from('produtividade_envios').update({ novas }).eq('id', id);
       if (up.error) throw up.error;
       s.imp = { arquivo: '', rel: null, erro: '', novos: null, conferindo: false, gravando: false, remover: null };
@@ -406,10 +410,28 @@
     render();
   }
   async function removerEnvio(id) {
+    const s = S(), env = s.envios.find(e => e.id === id);
     const { error } = await st.sb.from('produtividade_envios').delete().eq('id', id);
     if (error) throw error;
-    const s = S(); s.imp.remover = null; s.dadosEnvio = null; s.dias = null;
-    toast('Envio removido.'); await P.carregar(); render();
+    s.imp.remover = null; s.dadosEnvio = null; s.dias = null;
+    let aviso = 'Envio removido.';
+    if (env && env.periodo_ini && env.periodo_fim) {
+      const rc = await st.sb.rpc('produtividade_recalcular', { p_ini: env.periodo_ini, p_fim: env.periodo_fim });
+      if (rc.error) { console.error(rc.error); aviso = 'Envio removido, mas não consegui atualizar os totais. Use “Recalcular totais”.'; }
+    }
+    toast(aviso); await P.carregar(); render();
+  }
+  // Refaz todos os totais do dashboard a partir dos registros guardados (reparo, caso os números pareçam desatualizados).
+  async function recalcularTudo() {
+    const s = S(); if (s.recalculando) return;
+    s.recalculando = true; render();
+    try {
+      const rc = await st.sb.rpc('produtividade_recalcular', { p_ini: '1900-01-01', p_fim: '2100-12-31' });
+      if (rc.error) throw rc.error;
+      s.dadosEnvio = null; s.dias = null;
+      toast('Totais recalculados.'); await P.carregar();
+    } catch (e) { falha(e); }
+    s.recalculando = false; render();
   }
 
   // eventos da Gestão (ações com prefixo pr-)
@@ -435,6 +457,7 @@
       else if (acao === 'pr-env-pedir') { s.imp.remover = Number(a.dataset.id); render(); }
       else if (acao === 'pr-env-cancelar') { s.imp.remover = null; render(); }
       else if (acao === 'pr-env-remover') await removerEnvio(Number(a.dataset.id));
+      else if (acao === 'pr-env-recalcular') await recalcularTudo();
     } catch (err) { falha(err); }
   });
 })();

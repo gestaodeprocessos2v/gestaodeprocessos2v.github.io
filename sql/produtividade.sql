@@ -2,7 +2,8 @@
 -- Quem lê: gestor, diretor e magistrado (NÃO servidor, estagiário, residente nem visitante). Quem grava: só o gestor.
 -- Nenhum nome de pessoa fica neste arquivo: a lista da equipe é carregada pela aba Gestão do painel.
 -- Aplicado em produção como migração `produtividade` (17/10/2026) e depois `produtividade_limpeza`, que tirou o que a aba "Por atividade" usava
--- (views por tipo e a coluna `tipo`) e a coluna `ano_anterior`. Este arquivo já reflete o estado final.
+-- (views por tipo e a coluna `tipo`) e a coluna `ano_anterior`, e `produtividade_agregados`, que trocou as views por tabelas de agregados.
+-- Este arquivo já reflete o estado final.
 
 -- Lista de pessoas da equipe (nome exatamente como o BI escreve), com a classificação própria desta área.
 create table if not exists public.produtividade_equipe (
@@ -66,16 +67,61 @@ begin
   end loop;
 end $$;
 
--- Agregados lidos pelo dashboard (herdam a RLS dos eventos: security_invoker).
-create or replace view public.produtividade_dia with (security_invoker = true) as
-  select pessoa, ocorreu_em::date as dia, atividade, sum(total)::integer as atividades
-  from public.produtividade_eventos
-  group by pessoa, ocorreu_em::date, atividade;
-
+-- Agregados lidos pelo dashboard, guardados em tabelas (migração `produtividade_agregados`, 17/10/2026). Antes eram views que refaziam o
+-- GROUP BY sobre todos os eventos a cada página lida (~3,5 s por página com 207 mil eventos; agora ~10 ms).
+-- Só a função produtividade_recalcular grava (o painel a chama depois de gravar ou remover um envio).
+create table if not exists public.produtividade_dia (
+  dia date not null,
+  pessoa text not null,
+  atividade text not null,
+  atividades integer not null,            -- soma de `total` dos eventos da pessoa naquele dia e atividade
+  primary key (dia, pessoa, atividade)
+);
 -- Processos distintos por pessoa e dia (regra da macro antiga, mantida).
-create or replace view public.produtividade_processos_dia with (security_invoker = true) as
-  select pessoa, ocorreu_em::date as dia, count(distinct processo)::integer as processos
-  from public.produtividade_eventos
-  group by pessoa, ocorreu_em::date;
+create table if not exists public.produtividade_processos_dia (
+  dia date not null,
+  pessoa text not null,
+  processos integer not null,
+  primary key (dia, pessoa)
+);
 
-grant select on public.produtividade_dia, public.produtividade_processos_dia to authenticated;
+alter table public.produtividade_dia enable row level security;
+alter table public.produtividade_processos_dia enable row level security;
+grant select on public.produtividade_dia, public.produtividade_processos_dia to authenticated;   -- sem política nem grant de escrita
+
+create policy produtividade_dia_le on public.produtividade_dia for select to authenticated
+  using ((select app.perfil_atual()) = any (array['gestor','diretor','magistrado']::perfil_acesso[]));
+create policy produtividade_processos_dia_le on public.produtividade_processos_dia for select to authenticated
+  using ((select app.perfil_atual()) = any (array['gestor','diretor','magistrado']::perfil_acesso[]));
+
+-- Carga inicial (feita uma vez, na migração, a partir dos eventos já guardados):
+--   insert into public.produtividade_dia select ocorreu_em::date, pessoa, atividade, sum(total)::integer from public.produtividade_eventos group by 1, 2, 3;
+--   insert into public.produtividade_processos_dia select ocorreu_em::date, pessoa, count(distinct processo)::integer from public.produtividade_eventos group by 1, 2;
+
+-- Refaz os agregados de um intervalo de datas; só o gestor executa.
+create or replace function public.produtividade_recalcular(p_ini date, p_fim date)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if (select app.perfil_atual()) is distinct from 'gestor'::public.perfil_acesso then
+    raise exception 'sem permissão' using errcode = '42501';
+  end if;
+  delete from public.produtividade_dia where dia between p_ini and p_fim;
+  insert into public.produtividade_dia (dia, pessoa, atividade, atividades)
+    select ocorreu_em::date, pessoa, atividade, sum(total)::integer
+    from public.produtividade_eventos
+    where ocorreu_em >= p_ini::timestamp and ocorreu_em < (p_fim + 1)::timestamp
+    group by 1, 2, 3;
+  delete from public.produtividade_processos_dia where dia between p_ini and p_fim;
+  insert into public.produtividade_processos_dia (dia, pessoa, processos)
+    select ocorreu_em::date, pessoa, count(distinct processo)::integer
+    from public.produtividade_eventos
+    where ocorreu_em >= p_ini::timestamp and ocorreu_em < (p_fim + 1)::timestamp
+    group by 1, 2;
+end;
+$$;
+revoke all on function public.produtividade_recalcular(date, date) from public, anon;
+grant execute on function public.produtividade_recalcular(date, date) to authenticated;
