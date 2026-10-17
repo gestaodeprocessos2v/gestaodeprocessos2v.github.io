@@ -107,7 +107,8 @@
   const JD_EM_ALERTA = new Set(['Rejeitada pelo TRF', 'Devolvida']);
 
   // Linhas da planilha do JD (Nº do processo | Nº da requisição | Tipo | Valor | Situação) -> um item por processo:
-  // { n: requisições, prc: quantas são PRC, s: { situação: quantidade } }, chaveado pelos 20 dígitos do processo.
+  // { n: requisições, prc: quantas são PRC, s: { situação: quantidade }, tp: { PRC|RPV: { situação: quantidade } } }, chaveado pelos
+  // 20 dígitos do processo. `tp` (por tipo) alimenta o balão do card; envios feitos antes dele não têm esse campo.
   function resumirJD(linhas) {
     const itens = {}; let requisicoes = 0, prc = 0; const vistas = new Set();
     for (const c of linhas) {
@@ -116,8 +117,10 @@
       const req = String(c[1] == null ? '' : c[1]).trim(), tipo = String(c[2] == null ? '' : c[2]).trim().toUpperCase(), sit = String(c[4] == null ? '' : c[4]).trim();
       if (!req || !sit || vistas.has(req)) continue;
       vistas.add(req);
-      const it = itens[chave] || (itens[chave] = { n: 0, prc: 0, s: {} });
+      const it = itens[chave] || (itens[chave] = { n: 0, prc: 0, s: {}, tp: {} });
       it.n++; it.s[sit] = (it.s[sit] || 0) + 1; requisicoes++;
+      const porTipo = it.tp[tipo || 'RPV'] || (it.tp[tipo || 'RPV'] = {});
+      porTipo[sit] = (porTipo[sit] || 0) + 1;
       if (tipo === 'PRC') { it.prc++; prc++; }
     }
     return { itens, processos: Object.keys(itens).length, requisicoes, prc };
@@ -131,6 +134,22 @@
     }
     for (const [sit, n] of Object.entries(s)) if (!usadas.has(sit) && n) partes.push({ n, rotulo: sit, alerta: false });
     return partes;
+  }
+
+  // Texto do balão do card, uma linha por tipo (PRC primeiro, porque leva mais de um ano):
+  // "17 requisições no JD" / "PRC: 1 Autuada no TRF; 9 Pagas" / "RPV: 3 Canceladas; 4 Pagas".
+  function balaoJD(it) {
+    if (!it) return '';
+    const n = it.n || 0;
+    const linhas = [`${n} ${n === 1 ? 'requisição' : 'requisições'} no JD`];
+    const tp = it.tp || null;
+    if (!tp) { if (it.prc > 0) linhas.push(`PRC: ${it.prc}`); return linhas.join('\n'); }   // dados de um envio anterior ao balão
+    const tipos = Object.keys(tp).sort((a, b) => (b === 'PRC') - (a === 'PRC') || (b === 'RPV') - (a === 'RPV') || a.localeCompare(b));
+    for (const t of tipos) {
+      const partes = partesJD({ s: tp[t] }).map(p => `${p.n} ${p.rotulo}`);
+      if (partes.length) linhas.push(`${t}: ${partes.join('; ')}`);
+    }
+    return linhas.join('\n');
   }
 
   // 7º algarismo da esquerda para a direita, contando só os dígitos do número.
@@ -474,7 +493,7 @@
 
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem,
-    atribuir, pessoasDoSetor, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, resumirJD, partesJD, fatiar, podarMarcas, montarFila, comparar, chaveItem,
+    atribuir, pessoasDoSetor, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, montarFila, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

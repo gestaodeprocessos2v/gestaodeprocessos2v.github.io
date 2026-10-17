@@ -474,7 +474,9 @@
     if (!it) return '<div class="jd-card jd-sem"><span class="jd-rot">JD</span><span>Sem RPV/PRC no JD</span></div>';
     const txt = R.partesJD(it).map(p => p.alerta ? `<b>${p.n} ${esc(p.rotulo)}</b>` : `${p.n} ${esc(p.rotulo)}`).join('; ');
     const prc = it.prc > 0 ? `<span class="selo prc">${it.prc > 1 ? it.prc + ' ' : ''}PRC</span>` : '';
-    return `<div class="jd-card${it.prc > 0 ? ' com-prc' : ''}"><span class="jd-rot">JD</span><span>${txt}</span>${prc}</div>`;
+    // Balão por tipo de requisitório (PRC primeiro): total de requisições e a situação de cada tipo.
+    const balao = R.balaoJD(it);
+    return `<div class="jd-card${it.prc > 0 ? ' com-prc' : ''}" tabindex="0" role="note" aria-label="${esc('JD. ' + balao.replace(/\n/g, '. '))}" data-balao="${esc(balao)}"><span class="jd-rot">JD</span><span>${txt}</span>${prc}</div>`;
   }
 
   function linhaHTML(l, modo) {
