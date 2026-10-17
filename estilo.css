@@ -387,8 +387,7 @@ button.tile:focus-visible { outline: 2px solid currentColor; outline-offset: 2px
 .prod-col:nth-child(-n+4)[data-balao]::after { left: 0; transform: none; }
 .prod-col:nth-last-child(-n+4)[data-balao]::after { left: auto; right: 0; transform: none; }
 .prod-legenda { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 12.5px; align-items: center; }
-.prod-leg i, .prod-ponto { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; }
-.prod-ponto { border-radius: 50%; width: 8px; height: 8px; }
+.prod-leg i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; }
 .prod-rank { display: grid; gap: 6px; }
 .prod-rank-lin { display: grid; grid-template-columns: minmax(9rem, 16rem) 1fr 4.5rem; gap: 10px; align-items: center; }
 .prod-nome small { display: block; font-size: 11px; color: var(--muted); }

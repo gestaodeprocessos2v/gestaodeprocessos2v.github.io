@@ -96,18 +96,18 @@
       const pessoa = porNome.get(normTexto(nome));
       if (!pessoa) continue;                                   // fora da lista: descartado sem aviso
       daLista++;
-      const atividade = atividadeCanonica(r[col.atividade]), tipo = txt(r[col.tipoatividade]);
+      const atividade = atividadeCanonica(r[col.atividade]), tipo = txt(r[col.tipoatividade]);   // o tipo só entra na chave (não é guardado)
       const chavePessoa = normTexto(pessoa);
       if (atividade === ATIV_DOC) {
         const seg = Math.floor(ms / 1000) * 1000, chave = `${chavePessoa}|${proc}|doc|${iso(seg).slice(0, 19)}`;
         const ja = docs.get(chave);
-        if (!ja || ms < ja.ms) docs.set(chave, { chave, pessoa, processo: proc, atividade, tipo, ocorreu_em: iso(seg), total: 1, ms });
+        if (!ja || ms < ja.ms) docs.set(chave, { chave, pessoa, processo: proc, atividade, ocorreu_em: iso(seg), total: 1, ms });
       } else {
         const tot = Number(r[col.totalatividades]), total = isFinite(tot) && tot > 0 ? Math.round(tot) : 1;
-        const chave = `${chavePessoa}|${proc}|${normTexto(atividade)}|${normTexto(tipo)}|${iso(ms)}`;
+        const chave = `${chavePessoa}|${proc}|${normTexto(atividade)}|${normTexto(tipo)}|${iso(ms)}`;   // formato já usado nos registros guardados: não mudar
         const ja = outros.get(chave);
         if (ja) ja.total += total;
-        else outros.set(chave, { chave, pessoa, processo: proc, atividade, tipo, ocorreu_em: iso(ms), total, ms });
+        else outros.set(chave, { chave, pessoa, processo: proc, atividade, ocorreu_em: iso(ms), total, ms });
       }
     }
     const eventos = [...docs.values(), ...outros.values()].sort((a, b) => a.ms - b.ms).map(({ ms, ...e }) => e);

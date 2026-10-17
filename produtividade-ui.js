@@ -22,7 +22,6 @@
   const S = () => st.prod || (st.prod = {
     equipe: [], envios: [], carregado: false, erro: false,
     dias: null, procs: null, dadosEnvio: null, carregando: false, erroDados: false, dataFim: null, primeiro: null,
-    tipos: null, tiposChave: '', carregandoTipos: false, erroTipos: false,
     f: { periodo: '30', gran: 'dia', medida: 'atividades', perfil: '', grupo: '', busca: '', ordem: 'total', dir: -1 },
     eq: { rasc: null, alterada: false, erro: '', salvando: false },
     imp: { arquivo: '', rel: null, erro: '', novos: null, conferindo: false, gravando: false, remover: null },
@@ -50,7 +49,7 @@
     try {
       const [eq, ev] = await Promise.all([
         st.sb.from('produtividade_equipe').select('nome_bi,perfil,grupo,ordem,ativo').order('ordem').order('nome_bi'),
-        st.sb.from('produtividade_envios').select('id,enviado_em,enviado_por,arquivo,periodo_ini,periodo_fim,lidas,da_lista,novas,total_bi,ano_anterior').order('id', { ascending: false }).limit(40),
+        st.sb.from('produtividade_envios').select('id,enviado_em,enviado_por,arquivo,periodo_ini,periodo_fim,lidas,da_lista,novas,total_bi').order('id', { ascending: false }).limit(40),
       ]);
       if (eq.error) throw eq.error;
       if (ev.error) throw ev.error;
@@ -73,37 +72,7 @@
       s.primeiro = todos[0] || null; s.dataFim = todos[todos.length - 1] || null;
     } catch (e) { console.error(e); s.erroDados = true; s.dias = s.dias || []; s.procs = s.procs || []; s.dadosEnvio = ultimo; }
     s.carregando = false;
-    s.tiposChave = '';
     if (st.area === 'produtividade') render();
-  }
-
-  // Tipos de atividade do período: os meses inteiros vêm da view mensal (muito menos linhas) e só os dias das pontas, da diária.
-  async function buscarTipos(ini, fim) {
-    const dias = (a, b) => todasParalelo((x, y) => st.sb.from('produtividade_tipo_dia').select('pessoa,atividade,tipo,atividades').gte('dia', a).lte('dia', b)
-      .order('dia').order('pessoa').order('atividade').order('tipo').range(x, y));
-    const meses = (a, b) => todasParalelo((x, y) => st.sb.from('produtividade_tipo_mes').select('pessoa,atividade,tipo,atividades').gte('mes', a).lte('mes', b)
-      .order('mes').order('pessoa').order('atividade').order('tipo').range(x, y));
-    const iniCheio = ini === X.inicioMes(ini) ? ini : X.somarDias(X.fimMes(ini), 1);
-    const fimCheio = fim === X.fimMes(fim) ? fim : X.somarDias(X.inicioMes(fim), -1);
-    if (iniCheio > fimCheio) return dias(ini, fim);
-    const partes = await Promise.all([
-      meses(iniCheio, X.inicioMes(fimCheio)),
-      ini < iniCheio ? dias(ini, X.somarDias(iniCheio, -1)) : [],
-      fimCheio < fim ? dias(X.somarDias(fimCheio, 1), fim) : [],
-    ]);
-    return partes.flat();
-  }
-
-  async function garantirTipos(ini, fim) {
-    const s = S(), chave = `${ini}|${fim}|${s.dadosEnvio}`;
-    if (s.tiposChave === chave || s.carregandoTipos) return;
-    s.carregandoTipos = true;
-    try {
-      s.tipos = await buscarTipos(ini, fim);
-      s.erroTipos = false;
-    } catch (e) { console.error(e); s.erroTipos = true; s.tipos = []; }
-    s.tiposChave = chave; s.carregandoTipos = false;
-    if (st.area === 'produtividade' && st.abaProd === 'atividades') render();
   }
 
   // ---------- auxiliares de tela ----------
@@ -125,8 +94,8 @@
       .map(v => ({ v, n: conta({ perfil: f.perfil, grupo: v }) })).filter(o => o.n > 0 || o.v === f.grupo).map(o => ({ v: o.v, r: `${o.v} (${nBR(o.n)})` }));
     const extra = [];
     if (aba === 'resumo') extra.push(sel('gran', 'Agrupar por', GRANS.map(([v, r]) => ({ v, r: `Por ${r.toLowerCase()}` })), f.gran, null));
-    if (aba !== 'atividades') extra.push(`<div class="seg-tema prod-alterna" role="group" aria-label="Medida">${[['atividades', 'Atividades'], ['processos', 'Processos']].map(([v, r]) => `<button type="button" role="menuitemradio" aria-checked="${f.medida === v}" data-pacao="medida" data-v="${v}">${r}</button>`).join('')}</div>`);
-    if (aba !== 'resumo') extra.push(`<input type="search" id="prod-busca" placeholder="${aba === 'pessoas' ? 'Buscar pessoa' : 'Buscar tipo de atividade'}" value="${esc(f.busca)}" aria-label="Buscar">`);
+    extra.push(`<div class="seg-tema prod-alterna" role="group" aria-label="Medida">${[['atividades', 'Atividades'], ['processos', 'Processos']].map(([v, r]) => `<button type="button" role="menuitemradio" aria-checked="${f.medida === v}" data-pacao="medida" data-v="${v}">${r}</button>`).join('')}</div>`);
+    if (aba !== 'resumo') extra.push(`<input type="search" id="prod-busca" placeholder="Buscar pessoa" value="${esc(f.busca)}" aria-label="Buscar">`);
     return `<div class="filtros prod-filtros">${periodo}${perfis.length ? sel('perfil', 'Perfil', perfis, f.perfil, 'Todos os perfis') : ''}${gs.length ? sel('grupo', 'Grupo', gs, f.grupo, 'Todos os grupos') : ''}${extra.join('')}${aba === 'pessoas' ? '<div class="direita"><button class="btn" type="button" data-pacao="csv">Baixar CSV</button></div>' : ''}</div>`;
   }
 
@@ -217,32 +186,6 @@
     return '﻿' + linhas.join('\r\n');
   }
 
-  // ---------- por atividade ----------
-  function telaAtividades(s, ctx) {
-    const f = s.f, gs = grupos(s), per = ctx.periodo(f), eq = new Map(s.equipe.map(p => [norm(p.nome_bi), p]));
-    garantirTipos(per.ini, per.fim);
-    if (s.tiposChave !== `${per.ini}|${per.fim}|${s.dadosEnvio}`) return vazio('Carregando atividades…', 'Buscando os tipos de atividade do período.');
-    if (s.erroTipos) return `<div class="aviso erro">Não foi possível carregar os tipos de atividade agora.</div>`;
-    const busca = norm(f.busca), linhas = new Map(), tot = { total: 0 };
-    for (const r of s.tipos || []) {
-      const p = eq.get(norm(r.pessoa));
-      if (!p || p.ativo === false || (f.perfil && p.perfil !== f.perfil) || (f.grupo && p.grupo !== f.grupo)) continue;
-      if (busca && !norm(r.tipo).includes(busca)) continue;
-      const k = r.atividade + '|' + r.tipo;
-      const l = linhas.get(k) || linhas.set(k, { atividade: r.atividade, tipo: r.tipo, total: 0, g: {} }).get(k);
-      const g = p.grupo || '—'; l.g[g] = (l.g[g] || 0) + r.atividades; l.total += r.atividades; tot.total += r.atividades;
-      tot[r.atividade] = (tot[r.atividade] || 0) + r.atividades;
-    }
-    const ls = [...linhas.values()].sort((a, b) => b.total - a.total || a.tipo.localeCompare(b.tipo, 'pt-BR'));
-    const cartoes = `<div class="contagens prod-contagens">${ATIV.map(a => `<div class="tile"><span>${a === X.ATIV_DOC ? 'Documentos Minutados' : a === X.ATIV_RETIF ? 'Retificações' : 'Tarefas'}</span><b>${nBR(tot[a])}</b></div>`).join('')}<div class="tile"><span>Total de atividades</span><b>${nBR(tot.total)}</b></div><div class="tile"><span>Tipos diferentes</span><b>${nBR(ls.length)}</b></div></div>`;
-    const gcols = gs.filter(g => ls.some(l => l.g[g]));
-    const corpo = ls.slice(0, 300).map(l => `<tr><td>${esc(l.atividade)}</td><td>${esc(l.tipo || '—')}</td>${gcols.map(g => `<td class="n">${l.g[g] ? nBR(l.g[g]) : '·'}</td>`).join('')}<td class="n"><b>${nBR(l.total)}</b></td><td class="n">${tot.total ? ((l.total / tot.total) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : 0}%</td></tr>`).join('');
-    return cartoes + `<section class="painel largo"><h3>Tipos de atividade (${dBR(per.ini)} a ${dBR(per.fim)})</h3>
-      <div class="tabela-wrap"><table class="prod-tabela"><thead><tr><th>Atividade</th><th>Tipo</th>${gcols.map(g => `<th class="n"><i class="prod-ponto" style="background:${cor(gs, g)}"></i>${esc(g)}</th>`).join('')}<th class="n">Total</th><th class="n">%</th></tr></thead>
-      <tbody>${corpo || `<tr><td colspan="${4 + gcols.length}" class="muted">Nenhuma atividade com esse filtro.</td></tr>`}</tbody></table></div>
-      ${ls.length > 300 ? `<p class="small muted">Mostrando os 300 tipos mais frequentes de ${nBR(ls.length)}.</p>` : ''}</section>`;
-  }
-
   // ---------- contexto de cálculo da área ----------
   function contexto(s) {
     const f = s.f, cob = X.cobertura(s.envios);
@@ -280,7 +223,7 @@
     const aba = st.abaProd, ctx = contexto(s);
     const ultimo = s.envios[0];
     const atual = `<p class="atualizacao">Dados do BI de ${dBR(s.primeiro)} a ${dBR(s.dataFim)} · último envio em ${esc(dataHoraBR(Date.parse(ultimo.enviado_em)))} · só as pessoas da lista da equipe.</p>`;
-    const corpo = aba === 'pessoas' ? telaPessoas(s, ctx) : aba === 'atividades' ? telaAtividades(s, ctx) : telaResumo(s, ctx);
+    const corpo = aba === 'pessoas' ? telaPessoas(s, ctx) : telaResumo(s, ctx);
     v.innerHTML = (s.erroDados ? '<div class="aviso erro">Não foi possível carregar todos os dados agora. Os números podem estar incompletos.</div>' : '') + filtros(s, aba, ctx) + atual + corpo;
     if (foco === 'prod-busca') { const b = $('#prod-busca'); if (b) { b.focus(); if (pos != null) b.setSelectionRange(pos, pos); } }
   };
@@ -420,7 +363,7 @@
       <td>${i.remover === e.id ? `<button class="btn perigo" type="button" data-acao="pr-env-remover" data-id="${e.id}">Confirmar remoção</button> <button class="btn discreto" type="button" data-acao="pr-env-cancelar">Cancelar</button>` : `<button class="btn discreto" type="button" data-acao="pr-env-pedir" data-id="${e.id}">Remover</button>`}</td></tr>`).join('');
     return `<section class="painel" id="painel-prod-envio">
       <h2>Enviar produtividade do BI</h2>
-      <p>No Portal BI (painel “Atuação de Magistrados e Servidores”, aba “Produtividade dos Servidores”), filtre pela serventia <b>PB - 2ª Vara Federal</b> e exporte a tabela “Atividades por Usuário” em Excel, com as colunas Usuário, Número Processo, Atividade, Tipo Atividade e Data Atividade. Os envios se acumulam: o que já está guardado não é contado de novo, então não há problema em repetir dias. Para a carga inicial, envie em partes (por exemplo, um mês ou um trimestre por arquivo, na ordem que preferir): cada arquivo leva menos de um minuto e dá para conferir os totais de cada parte.</p>
+      <p>No Portal BI (painel “Atuação de Magistrados e Servidores”, aba “Produtividade dos Servidores”), filtre pela serventia <b>PB - 2ª Vara Federal</b> e exporte a tabela “Atividades por Usuário” em Excel, com as colunas Usuário, Número Processo, Atividade, Tipo Atividade, Data Atividade e Total Atividades. Os envios se acumulam: o que já está guardado não é contado de novo, então não há problema em repetir dias. Para a carga inicial, envie em partes (por exemplo, um mês ou um trimestre por arquivo, na ordem que preferir): cada arquivo leva menos de um minuto e dá para conferir os totais de cada parte.</p>
       <label class="campo"><span>Relatório (.xlsx)</span><input type="file" id="pr-arq" accept=".xlsx"></label>
       ${previa}
       <div class="linha-botoes">
@@ -445,7 +388,7 @@
       id = ins.data.id;
       let novas = 0;
       for (let k = 0; k < r.eventos.length; k += LOTE) {
-        const lote = r.eventos.slice(k, k + LOTE).map(e => ({ chave: e.chave, envio_id: id, pessoa: e.pessoa, processo: e.processo, atividade: e.atividade, tipo: e.tipo, ocorreu_em: e.ocorreu_em, total: e.total }));
+        const lote = r.eventos.slice(k, k + LOTE).map(e => ({ chave: e.chave, envio_id: id, pessoa: e.pessoa, processo: e.processo, atividade: e.atividade, ocorreu_em: e.ocorreu_em, total: e.total }));
         const g = await st.sb.from('produtividade_eventos').upsert(lote, { onConflict: 'chave', ignoreDuplicates: true }).select('chave');
         if (g.error) throw g.error;
         novas += (g.data || []).length;
@@ -454,7 +397,7 @@
       const up = await st.sb.from('produtividade_envios').update({ novas }).eq('id', id);
       if (up.error) throw up.error;
       s.imp = { arquivo: '', rel: null, erro: '', novos: null, conferindo: false, gravando: false, remover: null };
-      s.dadosEnvio = null; s.dias = null; s.tiposChave = '';
+      s.dadosEnvio = null; s.dias = null;
       await P.carregar(); toast(`Produtividade gravada: ${nBR(novas)} registros novos.`);
     } catch (e) {
       if (id != null) { try { await st.sb.from('produtividade_envios').delete().eq('id', id); } catch (e2) { console.error(e2); } }
@@ -465,7 +408,7 @@
   async function removerEnvio(id) {
     const { error } = await st.sb.from('produtividade_envios').delete().eq('id', id);
     if (error) throw error;
-    const s = S(); s.imp.remover = null; s.dadosEnvio = null; s.dias = null; s.tiposChave = '';
+    const s = S(); s.imp.remover = null; s.dadosEnvio = null; s.dias = null;
     toast('Envio removido.'); await P.carregar(); render();
   }
 

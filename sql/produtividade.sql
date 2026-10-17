@@ -1,7 +1,8 @@
 -- Produtividade da Vara: atividades da equipe a partir do relatório "Atividades por Usuário" do Portal BI.
 -- Quem lê: gestor, diretor e magistrado (NÃO servidor, estagiário, residente nem visitante). Quem grava: só o gestor.
 -- Nenhum nome de pessoa fica neste arquivo: a lista da equipe é carregada pela aba Gestão do painel.
--- Aplicado em produção como migração `produtividade` (17/10/2026).
+-- Aplicado em produção como migração `produtividade` (17/10/2026) e depois `produtividade_limpeza`, que tirou o que a aba "Por atividade" usava
+-- (views por tipo e a coluna `tipo`) e a coluna `ano_anterior`. Este arquivo já reflete o estado final.
 
 -- Lista de pessoas da equipe (nome exatamente como o BI escreve), com a classificação própria desta área.
 create table if not exists public.produtividade_equipe (
@@ -23,8 +24,7 @@ create table if not exists public.produtividade_envios (
   lidas integer not null default 0,        -- linhas de atividade lidas no arquivo
   da_lista integer not null default 0,     -- linhas de pessoas da lista
   novas integer not null default 0,        -- eventos que ainda não estavam guardados
-  total_bi integer,                        -- célula "Totais" do arquivo formatado (vara toda)
-  ano_anterior jsonb                       -- opcional: {documentos, retificacoes, tarefas, total}
+  total_bi integer                         -- total da vara no BI: célula "Totais" do arquivo formatado ou calculado pela regra do BI
 );
 
 -- Eventos já tratados pela regra de contagem do BI. `chave` evita contar duas vezes o que se repete entre envios.
@@ -35,7 +35,6 @@ create table if not exists public.produtividade_eventos (
   pessoa text not null,                    -- nome_bi
   processo text not null default '',
   atividade text not null,                 -- Documento Minutado, Tarefa ou Retificação
-  tipo text not null default '',
   ocorreu_em timestamp not null,           -- horário do BI, sem fuso
   total integer not null default 1
 );
@@ -79,16 +78,4 @@ create or replace view public.produtividade_processos_dia with (security_invoker
   from public.produtividade_eventos
   group by pessoa, ocorreu_em::date;
 
--- Por tipo de atividade, por dia (o dashboard pede só o período escolhido).
-create or replace view public.produtividade_tipo_dia with (security_invoker = true) as
-  select pessoa, ocorreu_em::date as dia, atividade, tipo, sum(total)::integer as atividades
-  from public.produtividade_eventos
-  group by pessoa, ocorreu_em::date, atividade, tipo;
-
--- Por tipo de atividade, por mês: para períodos longos o dashboard usa os meses inteiros daqui e só os dias das pontas da view diária.
-create or replace view public.produtividade_tipo_mes with (security_invoker = true) as
-  select pessoa, date_trunc('month', ocorreu_em)::date as mes, atividade, tipo, sum(total)::integer as atividades
-  from public.produtividade_eventos
-  group by pessoa, date_trunc('month', ocorreu_em)::date, atividade, tipo;
-
-grant select on public.produtividade_dia, public.produtividade_processos_dia, public.produtividade_tipo_dia, public.produtividade_tipo_mes to authenticated;
+grant select on public.produtividade_dia, public.produtividade_processos_dia to authenticated;
