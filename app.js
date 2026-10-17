@@ -418,7 +418,7 @@
     const ok = st.estado === 'ok';
     const area = AREAS[ok ? st.area : 'fila'];
     $('#sou').hidden = !ok;
-    document.title = ok ? area.pagina : 'Acesso restrito';
+    document.title = ok ? area.pagina : 'Autenticação do usuário';
     $('#marca-nome').hidden = !ok; // título e subtítulo só aparecem depois de validado o acesso
     $('#marca-nome h1').textContent = area.titulo;
     $('#subtitulo').textContent = area.subtitulo;
