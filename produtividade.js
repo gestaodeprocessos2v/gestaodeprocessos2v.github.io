@@ -76,6 +76,8 @@
     if (!porNome.size) throw new Error('A lista da equipe está vazia. Cadastre as pessoas na Gestão antes de enviar o relatório.');
 
     const docs = new Map(), outros = new Map();
+    // Total da vara pela regra do BI, com TODOS os usuários do arquivo (não só a equipe): serve de conferência e substitui a célula "Totais" quando ela não vem.
+    const docsVara = new Set(), somaVara = { [ATIV_TAREFA]: 0, [ATIV_RETIF]: 0 };
     let lidas = 0, daLista = 0, invalidas = 0, totalBi = null, ini = null, fim = null;
     for (let i = h + 1; i < l.length; i++) {
       const r = l[i] || [];
@@ -88,6 +90,9 @@
       if (ms == null) { invalidas++; continue; }
       if (ini == null || ms < ini) ini = ms;
       if (fim == null || ms > fim) fim = ms;
+      const ativVara = atividadeCanonica(r[col.atividade]);
+      if (ativVara === ATIV_DOC) docsVara.add(`${proc}|${Math.floor(ms / 1000)}`);
+      else if (ativVara in somaVara) { const t = Number(r[col.totalatividades]); somaVara[ativVara] += isFinite(t) ? t : 0; }
       const pessoa = porNome.get(normTexto(nome));
       if (!pessoa) continue;                                   // fora da lista: descartado sem aviso
       daLista++;
@@ -106,7 +111,15 @@
       }
     }
     const eventos = [...docs.values(), ...outros.values()].sort((a, b) => a.ms - b.ms).map(({ ms, ...e }) => e);
-    return { eventos, lidas, daLista, invalidas, totalBi, periodoIni: ini == null ? null : dia(ini), periodoFim: fim == null ? null : dia(fim) };
+    const totalCalculado = lidas - invalidas > 0 ? docsVara.size + somaVara[ATIV_TAREFA] + somaVara[ATIV_RETIF] : null;
+    const totalCelula = totalBi;
+    return {
+      eventos, lidas, daLista, invalidas,
+      totalBi: totalCelula != null ? totalCelula : totalCalculado,        // a célula "Totais", quando vem; senão, o cálculo pela regra do BI
+      totalOrigem: totalCelula != null ? 'celula' : totalCalculado != null ? 'calculado' : null,
+      totalCelula, totalCalculado,
+      periodoIni: ini == null ? null : dia(ini), periodoFim: fim == null ? null : dia(fim),
+    };
   }
 
   // Contagem do BI para um conjunto de linhas (todos os usuários; usado para conferir com a célula "Totais").
@@ -158,10 +171,14 @@
     if (preset === 'mesAnterior') { const fa = somarDias(inicioMes(fim), -1); return { ini: inicioMes(fa), fim: fa }; }
     if (preset === '90') return { ini: somarDias(fim, -89), fim };
     if (preset === 'ano') return { ini: fim.slice(0, 4) + '-01-01', fim };
+    if (preset === 'anoAnterior') { const a = +fim.slice(0, 4) - 1; return { ini: `${a}-01-01`, fim: `${a}-12-31` }; }
     if (preset === 'tudo') return { ini: primeiro || fim, fim };
     return { ini: somarDias(fim, -29), fim };                                   // '30' (padrão)
   }
   const periodoAnterior = (ini, fim) => { const n = diasEntre(ini, fim) + 1; return { ini: somarDias(ini, -n), fim: somarDias(ini, -1) }; };
+  // Mesmo período um ano antes (mesmo dia e mês; 29/02 vira 28/02).
+  const umAnoAntes = d => { const a = +d.slice(0, 4) - 1, mmdd = d.slice(5); return `${a}-${mmdd === '02-29' ? '02-28' : mmdd}`; };
+  const periodoAnoAnterior = (ini, fim) => ({ ini: umAnoAntes(ini), fim: umAnoAntes(fim) });
 
   // Cobertura dos envios: intervalos [periodo_ini, periodo_fim] unidos (dias consecutivos ou sobrepostos viram um só).
   function cobertura(envios) {
@@ -234,6 +251,6 @@
 
   root.Produtividade = {
     ATIVIDADES, ATIV_DOC, ATIV_TAREFA, ATIV_RETIF, serialParaMs, textoParaMs, iso, dia, atividadeCanonica, lerEquipe, lerRelatorio, contagemBI,
-    somarDias, diasEntre, inicioSemana, inicioMes, fimMes, inicioBucket, fimBucket, rotuloBucket, periodoPreset, periodoAnterior, cobertura, coberto, agregar,
+    somarDias, diasEntre, inicioSemana, inicioMes, fimMes, inicioBucket, fimBucket, rotuloBucket, periodoPreset, periodoAnterior, periodoAnoAnterior, cobertura, coberto, agregar,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

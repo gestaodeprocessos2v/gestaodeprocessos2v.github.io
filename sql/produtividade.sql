@@ -85,4 +85,10 @@ create or replace view public.produtividade_tipo_dia with (security_invoker = tr
   from public.produtividade_eventos
   group by pessoa, ocorreu_em::date, atividade, tipo;
 
-grant select on public.produtividade_dia, public.produtividade_processos_dia, public.produtividade_tipo_dia to authenticated;
+-- Por tipo de atividade, por mês: para períodos longos o dashboard usa os meses inteiros daqui e só os dias das pontas da view diária.
+create or replace view public.produtividade_tipo_mes with (security_invoker = true) as
+  select pessoa, date_trunc('month', ocorreu_em)::date as mes, atividade, tipo, sum(total)::integer as atividades
+  from public.produtividade_eventos
+  group by pessoa, date_trunc('month', ocorreu_em)::date, atividade, tipo;
+
+grant select on public.produtividade_dia, public.produtividade_processos_dia, public.produtividade_tipo_dia, public.produtividade_tipo_mes to authenticated;

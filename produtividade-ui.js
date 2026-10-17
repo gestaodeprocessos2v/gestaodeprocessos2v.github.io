@@ -11,7 +11,8 @@
   const txt = v => String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
   const norm = R.normTexto;
   const ATIV = [X.ATIV_DOC, X.ATIV_RETIF, X.ATIV_TAREFA];
-  const PERIODOS = [['30', 'Últimos 30 dias'], ['mes', 'Mês atual'], ['mesAnterior', 'Mês anterior'], ['90', 'Últimos 90 dias'], ['ano', 'Ano'], ['tudo', 'Tudo']];
+  const PERIODOS = [['30', 'Últimos 30 dias'], ['mes', 'Mês atual'], ['mesAnterior', 'Mês anterior'], ['90', 'Últimos 90 dias'], ['ano', 'Este ano'], ['anoAnterior', 'Ano passado'], ['tudo', 'Tudo']];
+  const LOTE = 1000;   // registros por envio ao banco
   const GRANS = [['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês']];
   const dBR = d => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : '—');
   const dCurta = d => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '—');
@@ -24,8 +25,24 @@
     tipos: null, tiposChave: '', carregandoTipos: false, erroTipos: false,
     f: { periodo: '30', gran: 'dia', medida: 'atividades', perfil: '', grupo: '', busca: '', ordem: 'total', dir: -1 },
     eq: { rasc: null, alterada: false, erro: '', salvando: false },
-    imp: { arquivo: '', rel: null, erro: '', novos: null, conferindo: false, ano: {}, gravando: false, remover: null },
+    imp: { arquivo: '', rel: null, erro: '', novos: null, conferindo: false, gravando: false, remover: null },
   });
+
+  // Lê todas as páginas de uma consulta (o banco devolve no máximo 1.000 linhas por vez), pedindo algumas páginas ao mesmo tempo.
+  async function todasParalelo(fabrica, simultaneas = 4) {
+    const T = 1000, out = [];
+    const primeira = await fabrica(0, T - 1);
+    if (primeira.error) throw primeira.error;
+    out.push(...primeira.data);
+    if (primeira.data.length < T) return out;
+    for (let i = T; ; i += T * simultaneas) {
+      const rs = await Promise.all(Array.from({ length: simultaneas }, (_, k) => fabrica(i + k * T, i + (k + 1) * T - 1)));
+      let fim = false;
+      for (const r of rs) { if (r.error) throw r.error; out.push(...r.data); if (r.data.length < T) fim = true; }
+      if (fim) break;
+    }
+    return out;
+  }
 
   // ---------- dados (equipe e envios sempre; o resto só quando a área é aberta) ----------
   P.carregarProd = async function () {
@@ -48,8 +65,8 @@
     s.carregando = true;
     try {
       const [d, p] = await Promise.all([
-        todas((a, b) => st.sb.from('produtividade_dia').select('pessoa,dia,atividade,atividades').order('dia').order('pessoa').order('atividade').range(a, b)),
-        todas((a, b) => st.sb.from('produtividade_processos_dia').select('pessoa,dia,processos').order('dia').order('pessoa').range(a, b)),
+        todasParalelo((a, b) => st.sb.from('produtividade_dia').select('pessoa,dia,atividade,atividades').order('dia').order('pessoa').order('atividade').range(a, b)),
+        todasParalelo((a, b) => st.sb.from('produtividade_processos_dia').select('pessoa,dia,processos').order('dia').order('pessoa').range(a, b)),
       ]);
       s.dias = d; s.procs = p; s.dadosEnvio = ultimo; s.erroDados = false;
       const todos = d.map(r => r.dia).concat(p.map(r => r.dia)).sort();
@@ -60,13 +77,29 @@
     if (st.area === 'produtividade') render();
   }
 
+  // Tipos de atividade do período: os meses inteiros vêm da view mensal (muito menos linhas) e só os dias das pontas, da diária.
+  async function buscarTipos(ini, fim) {
+    const dias = (a, b) => todasParalelo((x, y) => st.sb.from('produtividade_tipo_dia').select('pessoa,atividade,tipo,atividades').gte('dia', a).lte('dia', b)
+      .order('dia').order('pessoa').order('atividade').order('tipo').range(x, y));
+    const meses = (a, b) => todasParalelo((x, y) => st.sb.from('produtividade_tipo_mes').select('pessoa,atividade,tipo,atividades').gte('mes', a).lte('mes', b)
+      .order('mes').order('pessoa').order('atividade').order('tipo').range(x, y));
+    const iniCheio = ini === X.inicioMes(ini) ? ini : X.somarDias(X.fimMes(ini), 1);
+    const fimCheio = fim === X.fimMes(fim) ? fim : X.somarDias(X.inicioMes(fim), -1);
+    if (iniCheio > fimCheio) return dias(ini, fim);
+    const partes = await Promise.all([
+      meses(iniCheio, X.inicioMes(fimCheio)),
+      ini < iniCheio ? dias(ini, X.somarDias(iniCheio, -1)) : [],
+      fimCheio < fim ? dias(X.somarDias(fimCheio, 1), fim) : [],
+    ]);
+    return partes.flat();
+  }
+
   async function garantirTipos(ini, fim) {
     const s = S(), chave = `${ini}|${fim}|${s.dadosEnvio}`;
     if (s.tiposChave === chave || s.carregandoTipos) return;
     s.carregandoTipos = true;
     try {
-      s.tipos = await todas((a, b) => st.sb.from('produtividade_tipo_dia').select('pessoa,dia,atividade,tipo,atividades').gte('dia', ini).lte('dia', fim)
-        .order('dia').order('pessoa').order('atividade').order('tipo').range(a, b));
+      s.tipos = await buscarTipos(ini, fim);
       s.erroTipos = false;
     } catch (e) { console.error(e); s.erroTipos = true; s.tipos = []; }
     s.tiposChave = chave; s.carregandoTipos = false;
@@ -97,20 +130,22 @@
     return `<div class="filtros prod-filtros">${periodo}${perfis.length ? sel('perfil', 'Perfil', perfis, f.perfil, 'Todos os perfis') : ''}${gs.length ? sel('grupo', 'Grupo', gs, f.grupo, 'Todos os grupos') : ''}${extra.join('')}${aba === 'pessoas' ? '<div class="direita"><button class="btn" type="button" data-pacao="csv">Baixar CSV</button></div>' : ''}</div>`;
   }
 
-  const delta = (atual, ant, temAnt, rotAnt) => {
-    if (!temAnt) return '<small class="prod-delta muted">sem período anterior completo</small>';
-    if (!ant) return `<small class="prod-delta muted" data-balao="${esc(rotAnt)}" tabindex="0" role="note">antes: 0</small>`;
+  // Variação sobre outro período (o imediatamente anterior ou o mesmo período do ano passado), só quando os envios cobrem esse período.
+  const delta = (atual, ant, tem, rot, rotulo) => {
+    if (!tem) return '';
+    if (!ant) return `<small class="prod-delta muted" data-balao="${esc(rot)}" tabindex="0" role="note">${rotulo}: sem registros</small>`;
     const p = Math.round(((atual - ant) / ant) * 100);
-    return `<small class="prod-delta ${p >= 0 ? 'sobe' : 'desce'}" data-balao="${esc(`${rotAnt}\nAntes: ${nBR(ant)}`)}" tabindex="0" role="note">${p >= 0 ? '▲' : '▼'} ${Math.abs(p)}% sobre o período anterior</small>`;
+    return `<small class="prod-delta ${p >= 0 ? 'sobe' : 'desce'}" data-balao="${esc(`${rot}\nAntes: ${nBR(ant)}`)}" tabindex="0" role="note">${p >= 0 ? '▲' : '▼'} ${Math.abs(p)}% ${rotulo}</small>`;
   };
 
   // ---------- visão geral ----------
   function telaResumo(s, ctx) {
-    const f = s.f, ag = ctx.ag(f), ant = ctx.anterior(f);
+    const f = s.f, ag = ctx.ag(f), ant = ctx.anterior(f), anoAnt = ctx.anoPassado(f);
     const gs = grupos(s), medida = f.medida;
-    const tile = (rot, v, a) => `<div class="tile"><span>${rot}</span><b>${nBR(v)}</b>${delta(v, a, ctx.temAnt, ctx.rotAnt)}</div>`;
-    const t = ag.totais, ta = ant ? ant.totais : {};
-    const cartoes = `<div class="contagens prod-contagens">${tile('Documentos Minutados', t[X.ATIV_DOC], ta[X.ATIV_DOC])}${tile('Retificações', t[X.ATIV_RETIF], ta[X.ATIV_RETIF])}${tile('Tarefas', t[X.ATIV_TAREFA], ta[X.ATIV_TAREFA])}${tile('Total de atividades', t.total, ta.total)}${tile('Processos', t.processos, ta.processos)}</div>`;
+    const semComp = !ctx.temAnt && !ctx.temAno;
+    const tile = (rot, v, a, b) => `<div class="tile"><span>${rot}</span><b>${nBR(v)}</b>${delta(v, a, ctx.temAnt, ctx.rotAnt, 'sobre o período anterior')}${delta(v, b, ctx.temAno, ctx.rotAno, 'sobre o mesmo período do ano passado')}${semComp ? '<small class="prod-delta muted">sem período para comparar</small>' : ''}</div>`;
+    const t = ag.totais, ta = ant ? ant.totais : {}, tb = anoAnt ? anoAnt.totais : {};
+    const cartoes = `<div class="contagens prod-contagens">${tile('Documentos Minutados', t[X.ATIV_DOC], ta[X.ATIV_DOC], tb[X.ATIV_DOC])}${tile('Retificações', t[X.ATIV_RETIF], ta[X.ATIV_RETIF], tb[X.ATIV_RETIF])}${tile('Tarefas', t[X.ATIV_TAREFA], ta[X.ATIV_TAREFA], tb[X.ATIV_TAREFA])}${tile('Total de atividades', t.total, ta.total, tb.total)}${tile('Processos', t.processos, ta.processos, tb.processos)}</div>`;
 
     // Totais da vara no BI (último envio que trouxe a célula "Totais")
     const env = s.envios.find(e => e.total_bi != null);
@@ -118,10 +153,7 @@
     if (env) {
       const doEnvio = ctx.agPeriodo(env.periodo_ini, env.periodo_fim);
       const parte = env.total_bi ? Math.round((doEnvio.totais.total / env.total_bi) * 100) : null;
-      const aa = env.ano_anterior || {};
-      const linhasAA = ['documentos', 'retificacoes', 'tarefas', 'total'].filter(k => aa[k] != null && aa[k] !== '').length
-        ? ` Ano anterior no BI: ${[['documentos', 'documentos'], ['retificacoes', 'retificações'], ['tarefas', 'tarefas'], ['total', 'total']].filter(([k]) => aa[k] != null && aa[k] !== '').map(([k, r]) => `${r} ${nBR(aa[k])}`).join(', ')}.` : '';
-      bi = `<section class="painel prod-bi"><h3>Vara toda no BI</h3><p>Entre ${dBR(env.periodo_ini)} e ${dBR(env.periodo_fim)} o BI registrou <b class="mono">${nBR(env.total_bi)}</b> atividades na 2ª Vara. A equipe da lista responde por <b class="mono">${nBR(doEnvio.totais.total)}</b>${parte != null ? ` (${parte}%)` : ''}.${esc(linhasAA)}</p></section>`;
+      bi = `<section class="painel prod-bi"><h3>Vara toda no BI</h3><p>Entre ${dBR(env.periodo_ini)} e ${dBR(env.periodo_fim)} o BI registrou <b class="mono">${nBR(env.total_bi)}</b> atividades na 2ª Vara. A equipe da lista responde por <b class="mono">${nBR(doEnvio.totais.total)}</b>${parte != null ? ` (${parte}%)` : ''}.</p></section>`;
     }
 
     // Evolução: colunas empilhadas por grupo
@@ -223,9 +255,14 @@
       anterior: fl => { const p = periodo(fl); if (!p.ini) return null; const a = X.periodoAnterior(p.ini, p.fim); return X.coberto(a.ini, a.fim, cob) ? agBase(fl, a, 'mes') : null; },
       contar: filtro => X.agregar({ dias: s.dias, procs: s.procs, equipe: s.equipe, filtro, ini: periodo(f).ini, fim: periodo(f).fim, gran: 'mes' }).totais.total,
     };
-    const per = periodo(f), a = per.ini ? X.periodoAnterior(per.ini, per.fim) : null;
+    ctx.anoPassado = fl => { const p = periodo(fl); if (!p.ini) return null; const a = X.periodoAnoAnterior(p.ini, p.fim); return X.coberto(a.ini, a.fim, cob) ? agBase(fl, a, 'mes') : null; };
+    const per = periodo(f), a = per.ini ? X.periodoAnterior(per.ini, per.fim) : null, b = per.ini ? X.periodoAnoAnterior(per.ini, per.fim) : null;
     ctx.temAnt = !!(a && X.coberto(a.ini, a.fim, cob));
     ctx.rotAnt = a ? `Período anterior: ${dBR(a.ini)} a ${dBR(a.fim)}` : '';
+    ctx.temAno = !!(b && X.coberto(b.ini, b.fim, cob));
+    ctx.rotAno = b ? `Mesmo período do ano passado: ${dBR(b.ini)} a ${dBR(b.fim)}` : '';
+    // Períodos de um ano (ou iguais): o "período anterior" repetiria a comparação com o ano passado, então mostra só esta.
+    if (a && b && ((a.ini === b.ini && a.fim === b.fim) || X.diasEntre(per.ini, per.fim) >= 359)) ctx.temAnt = false;
     return ctx;
   }
 
@@ -253,7 +290,10 @@
   let buscaTimer = null;
   vp.addEventListener('change', e => {
     const c = e.target.dataset && e.target.dataset.pf; if (!c) return;
-    S().f[c] = e.target.value; render();
+    const s = S(); s.f[c] = e.target.value;
+    // Sugere o agrupamento pelo tamanho do período (continua valendo a escolha manual depois): até 45 dias por dia; até ~7 meses por semana; mais que isso por mês.
+    if (c === 'periodo' && s.dataFim) { const p = X.periodoPreset(s.f.periodo, s.dataFim, s.primeiro), n = X.diasEntre(p.ini, p.fim) + 1; s.f.gran = n <= 45 ? 'dia' : n <= 210 ? 'semana' : 'mes'; }
+    render();
   });
   vp.addEventListener('input', e => {
     if (e.target.id !== 'prod-busca') return;
@@ -340,13 +380,16 @@
   }
 
   // ---------- Envio do relatório do BI ----------
-  const ANO = [['documentos', 'Documentos Minutados'], ['retificacoes', 'Retificações'], ['tarefas', 'Tarefas'], ['total', 'Total de atividades']];
   async function conferirNovos(rel) {
     const s = S(), i = s.imp;
     if (!rel.eventos.length || !rel.periodoIni) { i.novos = { novos: 0, guardados: 0 }; return; }
     i.conferindo = true; render();
     try {
-      const ja = new Set((await todas((a, b) => st.sb.from('produtividade_eventos').select('chave').gte('ocorreu_em', rel.periodoIni + 'T00:00:00').lte('ocorreu_em', rel.periodoFim + 'T23:59:59.999').order('id').range(a, b))).map(r => r.chave));
+      const faixa = q => q.gte('ocorreu_em', rel.periodoIni + 'T00:00:00').lte('ocorreu_em', rel.periodoFim + 'T23:59:59.999');
+      // Atalho: se não há nada guardado nesse período (carga inicial), todos os registros são novos e não precisa listar as chaves.
+      const cont = await faixa(st.sb.from('produtividade_eventos').select('id', { count: 'exact', head: true }));
+      if (!cont.error && cont.count === 0) { i.novos = { novos: rel.eventos.length, guardados: 0 }; i.conferindo = false; return; }
+      const ja = new Set((await todas((a, b) => faixa(st.sb.from('produtividade_eventos').select('chave')).order('id').range(a, b))).map(r => r.chave));
       const guardados = rel.eventos.filter(e => ja.has(e.chave)).length;
       i.novos = { novos: rel.eventos.length - guardados, guardados };
     } catch (e) { console.warn(e); i.novos = null; }
@@ -370,19 +413,15 @@
     const previa = i.erro ? `<div class="aviso erro">${esc(i.erro)}</div>` : r ? `<div class="previa">
         <div><b>${nBR(r.eventos.length)} registros das pessoas da lista</b> em “${esc(i.arquivo)}”, de ${dBR(r.periodoIni)} a ${dBR(r.periodoFim)}.</div>
         <div class="small">Atividades pela regra do BI: ${ATIV.map(a => `${a === X.ATIV_DOC ? 'documentos' : a === X.ATIV_RETIF ? 'retificações' : 'tarefas'} <b class="mono">${nBR(por[a])}</b>`).join(' · ')} · total <b class="mono">${nBR(Object.values(por).reduce((x, y) => x + y, 0))}</b>.</div>
-        <div class="small">${r.totalBi != null ? `Total da vara no BI: <b class="mono">${nBR(r.totalBi)}</b> (célula “Totais”). ` : 'O arquivo não traz a linha “Totais” (relatório sem formatação). '}${i.conferindo ? 'Conferindo o que já está guardado…' : i.novos ? `Novos: <b class="mono">${nBR(i.novos.novos)}</b> · já guardados: <b class="mono">${nBR(i.novos.guardados)}</b>.` : ''}</div>
+        <div class="small">${r.totalBi != null ? `Total da vara no BI: <b class="mono">${nBR(r.totalBi)}</b> ${r.totalOrigem === 'celula' ? '(célula “Totais” do arquivo' + (r.totalCalculado != null && r.totalCalculado !== r.totalCelula ? `; o cálculo pela regra do BI deu ${nBR(r.totalCalculado)}` : ', conferido pelo cálculo da regra do BI') + ')' : '(calculado pela regra do BI: tarefas e retificações somadas e documentos distintos por processo e segundo; o arquivo não traz a linha “Totais”)'}. ` : ''}${i.conferindo ? 'Conferindo o que já está guardado…' : i.novos ? `Novos: <b class="mono">${nBR(i.novos.novos)}</b> · já guardados: <b class="mono">${nBR(i.novos.guardados)}</b>.` : ''}</div>
         ${r.invalidas ? `<div class="aviso novo">${r.invalidas} linhas com data inválida foram ignoradas.</div>` : ''}
       </div>` : '';
-    const campoAno = ([k, rot]) => `<label class="campo"><span>${rot}</span><input type="number" min="0" step="1" inputmode="numeric" id="pr-ano-${k}" data-ano="${k}" value="${esc((i.ano || {})[k] == null ? '' : i.ano[k])}"></label>`;
     const hist = s.envios.slice(0, 8).map(e => `<tr><td>${esc(dataHoraBR(Date.parse(e.enviado_em)))}</td><td>${dBR(e.periodo_ini)} a ${dBR(e.periodo_fim)}</td><td class="n">${nBR(e.da_lista)}</td><td class="n">${nBR(e.novas)}</td><td class="n">${e.total_bi == null ? '—' : nBR(e.total_bi)}</td>
       <td>${i.remover === e.id ? `<button class="btn perigo" type="button" data-acao="pr-env-remover" data-id="${e.id}">Confirmar remoção</button> <button class="btn discreto" type="button" data-acao="pr-env-cancelar">Cancelar</button>` : `<button class="btn discreto" type="button" data-acao="pr-env-pedir" data-id="${e.id}">Remover</button>`}</td></tr>`).join('');
     return `<section class="painel" id="painel-prod-envio">
       <h2>Enviar produtividade do BI</h2>
-      <p>No Portal BI (painel “Atuação de Magistrados e Servidores”, aba “Produtividade dos Servidores”), filtre pela serventia <b>PB - 2ª Vara Federal</b> e exporte a tabela “Atividades por Usuário” em Excel, com as colunas Usuário, Número Processo, Atividade, Tipo Atividade e Data Atividade. Os envios se acumulam: o que já está guardado não é contado de novo.</p>
+      <p>No Portal BI (painel “Atuação de Magistrados e Servidores”, aba “Produtividade dos Servidores”), filtre pela serventia <b>PB - 2ª Vara Federal</b> e exporte a tabela “Atividades por Usuário” em Excel, com as colunas Usuário, Número Processo, Atividade, Tipo Atividade e Data Atividade. Os envios se acumulam: o que já está guardado não é contado de novo, então não há problema em repetir dias. Para a carga inicial, envie em partes (por exemplo, um mês ou um trimestre por arquivo, na ordem que preferir): cada arquivo leva menos de um minuto e dá para conferir os totais de cada parte.</p>
       <label class="campo"><span>Relatório (.xlsx)</span><input type="file" id="pr-arq" accept=".xlsx"></label>
-      <h3>Ano anterior (opcional)</h3>
-      <p class="small muted">Os quatro números “Ano Anterior” dos cartões do BI, para a comparação na Visão geral.</p>
-      <div class="campos">${ANO.map(campoAno).join('')}</div>
       ${previa}
       <div class="linha-botoes">
         <button class="btn primario" type="button" data-acao="pr-env-gravar" ${r && !i.gravando && !i.conferindo ? '' : 'disabled'}>${i.gravando ? 'Gravando…' : 'Gravar produtividade'}</button>
@@ -398,24 +437,23 @@
     i.gravando = true; render();
     let id = null;
     try {
-      const ano = {};
-      for (const [k] of ANO) { const v = i.ano && i.ano[k]; if (v !== '' && v != null && isFinite(Number(v))) ano[k] = Number(v); }
       const ins = await st.sb.from('produtividade_envios').insert({
         enviado_por: st.email, arquivo: i.arquivo, periodo_ini: r.periodoIni, periodo_fim: r.periodoFim,
-        lidas: r.lidas, da_lista: r.daLista, novas: 0, total_bi: r.totalBi, ano_anterior: Object.keys(ano).length ? ano : null,
+        lidas: r.lidas, da_lista: r.daLista, novas: 0, total_bi: r.totalBi,
       }).select('id').single();
       if (ins.error) throw ins.error;
       id = ins.data.id;
       let novas = 0;
-      for (let k = 0; k < r.eventos.length; k += 500) {
-        const lote = r.eventos.slice(k, k + 500).map(e => ({ chave: e.chave, envio_id: id, pessoa: e.pessoa, processo: e.processo, atividade: e.atividade, tipo: e.tipo, ocorreu_em: e.ocorreu_em, total: e.total }));
+      for (let k = 0; k < r.eventos.length; k += LOTE) {
+        const lote = r.eventos.slice(k, k + LOTE).map(e => ({ chave: e.chave, envio_id: id, pessoa: e.pessoa, processo: e.processo, atividade: e.atividade, tipo: e.tipo, ocorreu_em: e.ocorreu_em, total: e.total }));
         const g = await st.sb.from('produtividade_eventos').upsert(lote, { onConflict: 'chave', ignoreDuplicates: true }).select('chave');
         if (g.error) throw g.error;
         novas += (g.data || []).length;
+        const b = document.querySelector('[data-acao="pr-env-gravar"]'); if (b) b.textContent = `Gravando… ${Math.min(100, Math.round(((k + LOTE) / r.eventos.length) * 100))}%`;
       }
       const up = await st.sb.from('produtividade_envios').update({ novas }).eq('id', id);
       if (up.error) throw up.error;
-      s.imp = { arquivo: '', rel: null, erro: '', novos: null, conferindo: false, ano: {}, gravando: false, remover: null };
+      s.imp = { arquivo: '', rel: null, erro: '', novos: null, conferindo: false, gravando: false, remover: null };
       s.dadosEnvio = null; s.dias = null; s.tiposChave = '';
       await P.carregar(); toast(`Produtividade gravada: ${nBR(novas)} registros novos.`);
     } catch (e) {
@@ -435,7 +473,6 @@
   const vg = $('#v-gestao');
   vg.addEventListener('input', e => {
     if (e.target.dataset && e.target.dataset.eq && e.target.type !== 'checkbox') editarEquipe(e.target);
-    else if (e.target.dataset && e.target.dataset.ano) { const i = S().imp; i.ano = i.ano || {}; i.ano[e.target.dataset.ano] = e.target.value; }
   });
   vg.addEventListener('change', e => {
     if (e.target.id === 'pr-lista-arq') lerLista(e.target.files && e.target.files[0]);
@@ -451,7 +488,7 @@
       else if (acao === 'pr-eq-descartar') { eq.rasc = null; eq.alterada = false; eq.erro = ''; render(); toast('Alterações na equipe descartadas.'); }
       else if (acao === 'pr-eq-salvar') await salvarEquipe();
       else if (acao === 'pr-env-gravar') await gravarEnvio();
-      else if (acao === 'pr-env-limpar') { s.imp = { arquivo: '', rel: null, erro: '', novos: null, conferindo: false, ano: {}, gravando: false, remover: null }; render(); }
+      else if (acao === 'pr-env-limpar') { s.imp = { arquivo: '', rel: null, erro: '', novos: null, conferindo: false, gravando: false, remover: null }; render(); }
       else if (acao === 'pr-env-pedir') { s.imp.remover = Number(a.dataset.id); render(); }
       else if (acao === 'pr-env-cancelar') { s.imp.remover = null; render(); }
       else if (acao === 'pr-env-remover') await removerEnvio(Number(a.dataset.id));
