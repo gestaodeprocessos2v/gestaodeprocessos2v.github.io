@@ -397,6 +397,11 @@ button.tile:focus-visible { outline: 2px solid currentColor; outline-offset: 2px
 /* As primeiras linhas não têm espaço acima (o painel corta o que passa do topo): o balão abre para baixo */
 .prod-rank-lin:nth-child(-n+4)[data-balao]::after { bottom: auto; top: calc(100% + 6px); }
 .prod-tabela th.n { text-align: right; }
+/* Pares Atividades e Processos (total e média por dia ativo): faixa suave no primeiro par, linha fina separando o segundo */
+.prod-tabela th.prod-par { text-align: center; border-bottom: 0; padding-bottom: 0; }
+.prod-tabela td.prod-par-a, .prod-tabela th.prod-par-a { background: color-mix(in srgb, var(--sunken) 70%, var(--surface)); }
+.prod-tabela .prod-ini { border-left: 1px solid var(--line); }
+.prod-tabela td.prod-media { color: var(--muted); }
 .prod-th { font: inherit; font-weight: 600; background: none; border: 0; cursor: pointer; color: inherit; padding: 0; text-align: inherit; }
 .prod-tabela .prod-total td { border-top: 2px solid var(--line); font-weight: 600; }
 /* Filtros de perfil e grupo: chips que ligam e desligam (cor do grupo = cor do gráfico) */

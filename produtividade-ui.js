@@ -178,14 +178,17 @@
   }
 
   // ---------- por pessoa ----------
-  const CAMPOS_TAB = [['pessoa', 'Pessoa'], ['perfil', 'Perfil'], ['grupo', 'Grupo'], [X.ATIV_DOC, 'Documentos'], [X.ATIV_RETIF, 'Retificações'], [X.ATIV_TAREFA, 'Tarefas'], ['total', 'Atividades'], ['processos', 'Processos'], ['diasAtivos', 'Dias ativos'], ['media', 'Média por dia ativo']];
+  const CAB_CSV = ['Pessoa', 'Perfil', 'Grupo', 'Documentos', 'Retificações', 'Tarefas', 'Dias ativos', 'Atividades', 'Média de atividades por dia ativo', 'Processos', 'Média de processos por dia ativo'];
   const media = p => (p.diasAtivos ? p.total / p.diasAtivos : 0);
+  const mediaProc = p => (p.diasAtivos ? p.processos / p.diasAtivos : 0);
+  const um = n => Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });   // sempre uma casa decimal
+  const valorOrdem = (p, k) => (k === 'media' ? media(p) : k === 'mediaProc' ? mediaProc(p) : p[k]);
   function linhasPessoas(s, ctx) {
     const f = s.f, busca = norm(f.busca);
     let ps = ctx.ag(f).pessoas.filter(p => !busca || norm(p.pessoa).includes(busca));
     const k = f.ordem, d = f.dir;
     ps.sort((a, b) => {
-      const va = k === 'media' ? media(a) : a[k], vb = k === 'media' ? media(b) : b[k];
+      const va = valorOrdem(a, k), vb = valorOrdem(b, k);
       const c = typeof va === 'string' ? va.localeCompare(vb, 'pt-BR') : (va || 0) - (vb || 0);
       return c ? c * d : a.pessoa.localeCompare(b.pessoa, 'pt-BR');   // empate: sempre por nome, de A a Z
     });
@@ -201,20 +204,23 @@
       return `<div class="prod-rank-lin" tabindex="0" role="note" data-balao="${esc(balao)}" aria-label="${esc(balao.replace(/\n/g, '. '))}"><span class="prod-nome">${esc(p.pessoa)}<small>${esc(p.grupo || '—')}</small></span><span class="prod-barra"><i style="width:${(v(p) / max) * 100}%;background:${cor(gs, p.grupo || '—')}"></i></span><b class="mono">${nBR(v(p))}</b></div>`;
     }).join('');
     const tot = ps.reduce((a, p) => { for (const c of ATIV.concat(['total', 'processos'])) a[c] = (a[c] || 0) + p[c]; return a; }, {});
-    const cab = CAMPOS_TAB.map(([c, r]) => `<th class="${['pessoa', 'perfil', 'grupo'].includes(c) ? '' : 'n'}" aria-sort="${f.ordem === c ? (f.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" class="prod-th" data-pacao="ordem" data-campo="${esc(c)}">${r}${f.ordem === c ? (f.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`).join('');
-    const corpo = ps.map(p => `<tr><td>${esc(p.pessoa)}</td><td>${esc(rotPerfil(p.perfil))}</td><td>${esc(p.grupo)}</td><td class="n">${nBR(p[X.ATIV_DOC])}</td><td class="n">${nBR(p[X.ATIV_RETIF])}</td><td class="n">${nBR(p[X.ATIV_TAREFA])}</td><td class="n"><b>${nBR(p.total)}</b></td><td class="n">${nBR(p.processos)}</td><td class="n">${nBR(p.diasAtivos)}</td><td class="n">${media(p).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</td></tr>`).join('');
-    const rodape = `<tr class="prod-total"><td colspan="3">Total (${ps.length} ${ps.length === 1 ? 'pessoa' : 'pessoas'})</td><td class="n">${nBR(tot[X.ATIV_DOC])}</td><td class="n">${nBR(tot[X.ATIV_RETIF])}</td><td class="n">${nBR(tot[X.ATIV_TAREFA])}</td><td class="n"><b>${nBR(tot.total)}</b></td><td class="n">${nBR(tot.processos)}</td><td></td><td></td></tr>`;
+    const th = (c, r, extra = '', cls = '') => `<th class="${(c === 'pessoa' ? '' : 'n ') + cls}" ${extra} aria-sort="${f.ordem === c ? (f.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" class="prod-th" data-pacao="ordem" data-campo="${esc(c)}">${r}${f.ordem === c ? (f.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`;
+    const cab = `<tr>${th('pessoa', 'Pessoa', 'rowspan="2"')}${th(X.ATIV_DOC, 'Documentos', 'rowspan="2"')}${th(X.ATIV_RETIF, 'Retificações', 'rowspan="2"')}${th(X.ATIV_TAREFA, 'Tarefas', 'rowspan="2"')}${th('diasAtivos', 'Dias ativos', 'rowspan="2"')}<th class="prod-par prod-par-a" colspan="2" scope="colgroup">Atividades</th><th class="prod-par prod-par-p prod-ini" colspan="2" scope="colgroup">Processos</th></tr>` +
+      `<tr>${th('total', 'Total', '', 'prod-par-a')}${th('media', 'Média/dia', '', 'prod-par-a')}${th('processos', 'Total', '', 'prod-par-p prod-ini')}${th('mediaProc', 'Média/dia', '', 'prod-par-p')}</tr>`;
+    const corpo = ps.map(p => `<tr><td data-balao="${esc(`${rotPerfil(p.perfil || '—')} · ${p.grupo || '—'}`)}">${esc(p.pessoa)}</td><td class="n">${nBR(p[X.ATIV_DOC])}</td><td class="n">${nBR(p[X.ATIV_RETIF])}</td><td class="n">${nBR(p[X.ATIV_TAREFA])}</td><td class="n">${nBR(p.diasAtivos)}</td><td class="n prod-par-a"><b>${nBR(p.total)}</b></td><td class="n prod-par-a prod-media">${um(media(p))}</td><td class="n prod-par-p prod-ini"><b>${nBR(p.processos)}</b></td><td class="n prod-par-p prod-media">${um(mediaProc(p))}</td></tr>`).join('');
+    const rodape = `<tr class="prod-total"><td>Total (${ps.length} ${ps.length === 1 ? 'pessoa' : 'pessoas'})</td><td class="n">${nBR(tot[X.ATIV_DOC])}</td><td class="n">${nBR(tot[X.ATIV_RETIF])}</td><td class="n">${nBR(tot[X.ATIV_TAREFA])}</td><td></td><td class="n prod-par-a">${nBR(tot.total)}</td><td class="prod-par-a"></td><td class="n prod-par-p prod-ini">${nBR(tot.processos)}</td><td class="prod-par-p"></td></tr>`;
     return `<section class="painel largo"><h3>Ranking de ${f.medida === 'processos' ? 'processos' : 'atividades'} por pessoa</h3>
         <div class="prod-rank">${barras || '<p class="muted">Nenhuma pessoa com esse filtro.</p>'}</div>
         <div class="prod-legenda">${gs.filter(g => filtroEfetivo(s).grupos.includes(g)).map(g => `<span class="prod-leg"><i style="background:${cor(gs, g)}"></i>${esc(g)}</span>`).join('')}</div></section>
       <section class="painel largo"><h3>Detalhe por pessoa</h3>
-        <div class="tabela-wrap"><table class="prod-tabela"><thead><tr>${cab}</tr></thead><tbody>${corpo || '<tr><td colspan="10" class="muted">Nenhuma pessoa com esse filtro.</td></tr>'}${ps.length ? rodape : ''}</tbody></table></div>
-        <p class="small muted">Processos: soma, por pessoa, dos processos distintos de cada dia (o mesmo processo em dias diferentes conta mais de uma vez).</p></section>`;
+        <div class="tabela-wrap"><table class="prod-tabela"><thead>${cab}</thead><tbody>${corpo || '<tr><td colspan="9" class="muted">Nenhuma pessoa com esse filtro.</td></tr>'}${ps.length ? rodape : ''}</tbody></table></div>
+        <p class="small muted">Processos: soma, por pessoa, dos processos distintos de cada dia (o mesmo processo em dias diferentes conta mais de uma vez). Médias: total dividido pelos dias ativos (dias com ao menos uma atividade).</p></section>`;
   }
   function csvPessoas(s, ctx) {
     const q = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
     const ps = linhasPessoas(s, ctx);
-    const linhas = [CAMPOS_TAB.map(([, r]) => r).join(';')].concat(ps.map(p => [p.pessoa, rotPerfil(p.perfil), p.grupo, p[X.ATIV_DOC], p[X.ATIV_RETIF], p[X.ATIV_TAREFA], p.total, p.processos, p.diasAtivos, media(p).toFixed(1).replace('.', ',')].map(q).join(';')));
+    const dec = n => n.toFixed(1).replace('.', ',');
+    const linhas = [CAB_CSV.join(';')].concat(ps.map(p => [p.pessoa, rotPerfil(p.perfil), p.grupo, p[X.ATIV_DOC], p[X.ATIV_RETIF], p[X.ATIV_TAREFA], p.diasAtivos, p.total, dec(media(p)), p.processos, dec(mediaProc(p))].map(q).join(';')));
     return '﻿' + linhas.join('\r\n');
   }
 
