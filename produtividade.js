@@ -202,8 +202,11 @@
     const passa = nome => {
       const p = eq.get(normTexto(nome));
       if (!p || p.ativo === false) return false;
+      const perfil = p.perfil || '—', grupo = p.grupo || '—';          // perfil ou grupo em branco aparece como "—"
       if (f.perfil && p.perfil !== f.perfil) return false;
       if (f.grupo && p.grupo !== f.grupo) return false;
+      if (Array.isArray(f.perfis) && !f.perfis.includes(perfil)) return false;   // lista presente e vazia = ninguém; ausente = todos
+      if (Array.isArray(f.grupos) && !f.grupos.includes(grupo)) return false;
       if (f.pessoa && normTexto(f.pessoa) !== normTexto(nome)) return false;
       return true;
     };

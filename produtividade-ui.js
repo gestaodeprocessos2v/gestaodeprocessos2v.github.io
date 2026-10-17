@@ -22,7 +22,7 @@
   const S = () => st.prod || (st.prod = {
     equipe: [], envios: [], carregado: false, erro: false,
     dias: null, procs: null, dadosEnvio: null, carregando: false, erroDados: false, dataFim: null, primeiro: null,
-    f: { periodo: '30', gran: 'dia', medida: 'atividades', perfil: '', grupo: '', busca: '', ordem: 'total', dir: -1 },
+    f: { periodo: '30', gran: 'dia', medida: 'atividades', perfisOff: null, gruposOff: [], busca: '', ordem: 'total', dir: -1 },   // perfisOff = null: ainda vai receber o padrão
     eq: { rasc: null, alterada: false, erro: '', salvando: false },
     imp: { arquivo: '', rel: null, erro: '', novos: null, conferindo: false, gravando: false, remover: null },
   });
@@ -77,26 +77,57 @@
 
   // ---------- auxiliares de tela ----------
   const vazio = (titulo, p) => `<div class="vazio"><h2>${esc(titulo)}</h2><p>${p}</p></div>`;
-  const grupos = s => [...new Set(s.equipe.filter(p => p.ativo !== false).map(p => p.grupo || '—'))];
-  const cor = (gs, g) => `var(--prod-${Math.max(0, gs.indexOf(g)) % 8})`;
+  // Cores e ordem fixas por nome do grupo ou do perfil (não dependem da ordem da lista da equipe). Tons suaves, definidos em estilo.css (--prod-0..7).
+  const chaveNome = n => norm(n).replace(/[^a-z]/g, '');
+  const FAMILIA = [['secretaria', 0], ['triagem', 1], ['assessoria', 2], ['digitos', 3], ['estagi', 4], ['residente', 5]];   // começo do nome -> cor
+  const ORDEM_GRUPOS = ['secretaria', 'triagem', 'digitos', 'assessoria', 'estagi', 'residente'];
+  const ORDEM_PERFIS = ['secretaria', 'assessoria', 'estagi'];
+  const posicao = (lista, n) => { const k = chaveNome(n), i = lista.findIndex(x => k.startsWith(x)); return i < 0 ? lista.length : i; };
+  const ordenar = (nomes, lista) => nomes.slice().sort((a, b) => posicao(lista, a) - posicao(lista, b) || a.localeCompare(b, 'pt-BR'));
+  const grupos = s => ordenar([...new Set(s.equipe.filter(p => p.ativo !== false).map(p => p.grupo || '—'))], ORDEM_GRUPOS);
+  const slotCor = n => { const k = chaveNome(n), f = FAMILIA.find(([x]) => k.startsWith(x)); return f ? f[1] : 6 + (k.length % 2); };
+  const cor = (gs, g) => `var(--prod-${slotCor(g)})`;
+  const rotPerfil = p => (/^estagi/.test(chaveNome(p)) ? 'Estagiários' : p);
   // vazioRot = texto da opção "todos"; null = sem essa opção (período e agrupamento sempre têm um valor).
   const opts = (lista, atual, vazioRot) => (vazioRot == null ? '' : `<option value="">${vazioRot}</option>`) + lista.map(o => `<option value="${esc(o.v)}"${o.v === atual ? ' selected' : ''}>${esc(o.r)}</option>`).join('');
 
+  // ---------- filtros de perfil e grupo (chips, seleção múltipla) ----------
+  // O estado guarda o que está DESLIGADO: assim um perfil ou grupo novo na lista da equipe entra ligado. Padrão ao abrir: todos os perfis,
+  // menos os estagiários. Os grupos seguem os perfis ligados (só aparecem os grupos deles).
+  const ehEstagiario = p => /^estagi/.test(norm(p));
+  const perfisTodos = s => ordenar([...new Set(s.equipe.filter(p => p.ativo !== false).map(p => p.perfil || '—'))], ORDEM_PERFIS);
+  const gruposDosPerfis = (s, perfis) => ordenar([...new Set(s.equipe.filter(p => p.ativo !== false && perfis.includes(p.perfil || '—')).map(p => p.grupo || '—'))], ORDEM_GRUPOS);
+  function iniciarFiltros(s) { if (s.f.perfisOff == null) { s.f.perfisOff = perfisTodos(s).filter(ehEstagiario); s.f.gruposOff = []; } }
+  function filtroEfetivo(s) {
+    iniciarFiltros(s);
+    const perfis = perfisTodos(s).filter(p => !s.f.perfisOff.includes(p));
+    return { perfis, grupos: gruposDosPerfis(s, perfis).filter(g => !s.f.gruposOff.includes(g)) };
+  }
+  function noPadrao(s) {
+    iniciarFiltros(s);
+    const padrao = perfisTodos(s).filter(ehEstagiario);
+    return s.f.gruposOff.length === 0 && s.f.perfisOff.length === padrao.length && padrao.every(p => s.f.perfisOff.includes(p));
+  }
+
   function filtros(s, aba, ctx) {
-    const f = s.f;
+    const f = s.f, ef = filtroEfetivo(s), gs = grupos(s);
     const sel = (campo, rot, lista, atual, vazioRot) => `<select data-pf="${campo}" aria-label="${rot}">${opts(lista, atual, vazioRot)}</select>`;
     const periodo = sel('periodo', 'Período', PERIODOS.map(([v, r]) => ({ v, r })), f.periodo, null);
-    // Regra dos filtros do painel: só opções com dados, com a quantidade (atividades no período), contadas com os outros filtros.
-    const conta = (extra) => ctx.contar(Object.assign({ perfil: f.perfil, grupo: f.grupo }, extra));
-    const perfis = [...new Set(s.equipe.filter(p => p.ativo !== false).map(p => p.perfil).filter(Boolean))]
-      .map(v => ({ v, n: conta({ perfil: v, grupo: f.grupo }) })).filter(o => o.n > 0 || o.v === f.perfil).map(o => ({ v: o.v, r: `${o.v} (${nBR(o.n)})` }));
-    const gs = grupos(s).filter(g => g !== '—')
-      .map(v => ({ v, n: conta({ perfil: f.perfil, grupo: v }) })).filter(o => o.n > 0 || o.v === f.grupo).map(o => ({ v: o.v, r: `${o.v} (${nBR(o.n)})` }));
+    // Só aparecem as opções com atividade no período (regra dos filtros do painel), contadas na equipe inteira para o chip não sumir ao ser desligado; a quantidade fica no balão.
+    const chip = (tipo, v, ligado, cor, n, rotulo = v) => `<button type="button" class="prod-chip" aria-pressed="${ligado}" data-pacao="chip" data-tipo="${tipo}" data-v="${esc(v)}" style="--c:${cor}" data-balao="${esc(`${rotulo}: ${nBR(n)} atividades no período`)}"><i></i>${esc(rotulo)}</button>`;
+    const chipsPerfil = perfisTodos(s).map(v => [v, ctx.contar({ perfis: [v] })]).filter(([, n]) => n > 0)
+      .map(([v, n]) => chip('perfil', v, ef.perfis.includes(v), cor(gs, v), n, rotPerfil(v))).join('');
+    const chipsGrupo = gruposDosPerfis(s, ef.perfis).map(v => [v, ctx.contar({ grupos: [v] })]).filter(([, n]) => n > 0)
+      .map(([v, n]) => chip('grupo', v, ef.grupos.includes(v), cor(gs, v), n)).join('');
+    const chips = `<div class="prod-chips">
+      <div class="prod-chips-bloco"><span class="prod-chips-rot" id="rot-perfil">Perfil</span><div class="prod-chips-lista" role="group" aria-labelledby="rot-perfil">${chipsPerfil}</div></div>
+      <div class="prod-chips-bloco"><span class="prod-chips-rot" id="rot-grupo">Grupo</span><div class="prod-chips-lista" role="group" aria-labelledby="rot-grupo">${chipsGrupo || '<span class="muted small">Nenhum perfil ligado</span>'}</div></div>
+      ${noPadrao(s) ? '' : '<button class="btn discreto" type="button" data-pacao="chips-padrao">Restaurar padrão</button>'}</div>`;
     const extra = [];
     if (aba === 'resumo') extra.push(sel('gran', 'Agrupar por', GRANS.map(([v, r]) => ({ v, r: `Por ${r.toLowerCase()}` })), f.gran, null));
     extra.push(`<div class="seg-tema prod-alterna" role="group" aria-label="Medida">${[['atividades', 'Atividades'], ['processos', 'Processos']].map(([v, r]) => `<button type="button" role="menuitemradio" aria-checked="${f.medida === v}" data-pacao="medida" data-v="${v}">${r}</button>`).join('')}</div>`);
     if (aba !== 'resumo') extra.push(`<input type="search" id="prod-busca" placeholder="Buscar pessoa" value="${esc(f.busca)}" aria-label="Buscar">`);
-    return `<div class="filtros prod-filtros">${periodo}${perfis.length ? sel('perfil', 'Perfil', perfis, f.perfil, 'Todos os perfis') : ''}${gs.length ? sel('grupo', 'Grupo', gs, f.grupo, 'Todos os grupos') : ''}${extra.join('')}${aba === 'pessoas' ? '<div class="direita"><button class="btn" type="button" data-pacao="csv">Baixar CSV</button></div>' : ''}</div>`;
+    return chips + `<div class="filtros prod-filtros">${periodo}${extra.join('')}${aba === 'pessoas' ? '<div class="direita"><button class="btn" type="button" data-pacao="csv">Baixar CSV</button></div>' : ''}</div>`;
   }
 
   // Variação sobre outro período (o imediatamente anterior ou o mesmo período do ano passado), só quando os envios cobrem esse período.
@@ -122,7 +153,7 @@
     if (env) {
       const doEnvio = ctx.agPeriodo(env.periodo_ini, env.periodo_fim);
       const parte = env.total_bi ? Math.round((doEnvio.totais.total / env.total_bi) * 100) : null;
-      bi = `<section class="painel prod-bi"><h3>Vara toda no BI</h3><p>Entre ${dBR(env.periodo_ini)} e ${dBR(env.periodo_fim)} o BI registrou <b class="mono">${nBR(env.total_bi)}</b> atividades na 2ª Vara. A equipe da lista responde por <b class="mono">${nBR(doEnvio.totais.total)}</b>${parte != null ? ` (${parte}%)` : ''}.</p></section>`;
+      bi = `<section class="painel prod-bi"><h3>Vara toda no BI</h3><p>Entre ${dBR(env.periodo_ini)} e ${dBR(env.periodo_fim)} o BI registrou <b class="mono">${nBR(env.total_bi)}</b> atividades na 2ª Vara. A equipe da lista (todos os perfis) responde por <b class="mono">${nBR(doEnvio.totais.total)}</b>${parte != null ? ` (${parte}%)` : ''}.</p></section>`;
     }
 
     // Evolução: colunas empilhadas por grupo
@@ -137,7 +168,8 @@
       const seg = partes.map(([g, v]) => `<i class="prod-seg" style="flex:${v};background:${cor(gs, g)}"></i>`).join('');
       return `<div class="prod-col${b.parcial ? ' parcial' : ''}" tabindex="0" role="note" data-balao="${esc(balao)}" aria-label="${esc(balao.replace(/\n/g, '. '))}"><div class="prod-pilha" style="height:${(val(b) / max) * 100}%">${seg}</div><span class="prod-rot">${i % passo === 0 ? esc(b.rotulo) : ''}</span></div>`;
     }).join('');
-    const legenda = gs.map(g => `<span class="prod-leg"><i style="background:${cor(gs, g)}"></i>${esc(g)}</span>`).join('');
+    const ligados = filtroEfetivo(s).grupos;
+    const legenda = gs.filter(g => ligados.includes(g)).map(g => `<span class="prod-leg"><i style="background:${cor(gs, g)}"></i>${esc(g)}</span>`).join('');
     const nome = { dia: 'por dia', semana: 'por semana (segunda a domingo)', mes: 'por mês' }[f.gran];
     const grafico = `<section class="painel largo"><h3>${medida === 'processos' ? 'Processos' : 'Atividades'} ${nome}</h3>
       <div class="prod-grafico-wrap"><span class="prod-max mono">${nBR(max)}</span><div class="prod-grafico">${colunas}</div></div>
@@ -165,16 +197,16 @@
     const ranking = ps.slice().sort((a, b) => v(b) - v(a) || a.pessoa.localeCompare(b.pessoa, 'pt-BR'));
     const max = Math.max(1, ...ranking.map(v));
     const barras = ranking.map(p => {
-      const balao = [p.pessoa, `${p.perfil || '—'} · ${p.grupo || '—'}`, `Documentos: ${nBR(p[X.ATIV_DOC])}`, `Retificações: ${nBR(p[X.ATIV_RETIF])}`, `Tarefas: ${nBR(p[X.ATIV_TAREFA])}`, `Atividades: ${nBR(p.total)}`, `Processos: ${nBR(p.processos)}`, `Dias com atividade: ${nBR(p.diasAtivos)}`].join('\n');
+      const balao = [p.pessoa, `${rotPerfil(p.perfil || '—')} · ${p.grupo || '—'}`, `Documentos: ${nBR(p[X.ATIV_DOC])}`, `Retificações: ${nBR(p[X.ATIV_RETIF])}`, `Tarefas: ${nBR(p[X.ATIV_TAREFA])}`, `Atividades: ${nBR(p.total)}`, `Processos: ${nBR(p.processos)}`, `Dias com atividade: ${nBR(p.diasAtivos)}`].join('\n');
       return `<div class="prod-rank-lin" tabindex="0" role="note" data-balao="${esc(balao)}" aria-label="${esc(balao.replace(/\n/g, '. '))}"><span class="prod-nome">${esc(p.pessoa)}<small>${esc(p.grupo || '—')}</small></span><span class="prod-barra"><i style="width:${(v(p) / max) * 100}%;background:${cor(gs, p.grupo || '—')}"></i></span><b class="mono">${nBR(v(p))}</b></div>`;
     }).join('');
     const tot = ps.reduce((a, p) => { for (const c of ATIV.concat(['total', 'processos'])) a[c] = (a[c] || 0) + p[c]; return a; }, {});
     const cab = CAMPOS_TAB.map(([c, r]) => `<th class="${['pessoa', 'perfil', 'grupo'].includes(c) ? '' : 'n'}" aria-sort="${f.ordem === c ? (f.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" class="prod-th" data-pacao="ordem" data-campo="${esc(c)}">${r}${f.ordem === c ? (f.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`).join('');
-    const corpo = ps.map(p => `<tr><td>${esc(p.pessoa)}</td><td>${esc(p.perfil)}</td><td>${esc(p.grupo)}</td><td class="n">${nBR(p[X.ATIV_DOC])}</td><td class="n">${nBR(p[X.ATIV_RETIF])}</td><td class="n">${nBR(p[X.ATIV_TAREFA])}</td><td class="n"><b>${nBR(p.total)}</b></td><td class="n">${nBR(p.processos)}</td><td class="n">${nBR(p.diasAtivos)}</td><td class="n">${media(p).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td></tr>`).join('');
+    const corpo = ps.map(p => `<tr><td>${esc(p.pessoa)}</td><td>${esc(rotPerfil(p.perfil))}</td><td>${esc(p.grupo)}</td><td class="n">${nBR(p[X.ATIV_DOC])}</td><td class="n">${nBR(p[X.ATIV_RETIF])}</td><td class="n">${nBR(p[X.ATIV_TAREFA])}</td><td class="n"><b>${nBR(p.total)}</b></td><td class="n">${nBR(p.processos)}</td><td class="n">${nBR(p.diasAtivos)}</td><td class="n">${media(p).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td></tr>`).join('');
     const rodape = `<tr class="prod-total"><td colspan="3">Total (${ps.length} ${ps.length === 1 ? 'pessoa' : 'pessoas'})</td><td class="n">${nBR(tot[X.ATIV_DOC])}</td><td class="n">${nBR(tot[X.ATIV_RETIF])}</td><td class="n">${nBR(tot[X.ATIV_TAREFA])}</td><td class="n"><b>${nBR(tot.total)}</b></td><td class="n">${nBR(tot.processos)}</td><td></td><td></td></tr>`;
     return `<section class="painel largo"><h3>Ranking de ${f.medida === 'processos' ? 'processos' : 'atividades'} por pessoa</h3>
         <div class="prod-rank">${barras || '<p class="muted">Nenhuma pessoa com esse filtro.</p>'}</div>
-        <div class="prod-legenda">${gs.map(g => `<span class="prod-leg"><i style="background:${cor(gs, g)}"></i>${esc(g)}</span>`).join('')}</div></section>
+        <div class="prod-legenda">${gs.filter(g => filtroEfetivo(s).grupos.includes(g)).map(g => `<span class="prod-leg"><i style="background:${cor(gs, g)}"></i>${esc(g)}</span>`).join('')}</div></section>
       <section class="painel largo"><h3>Detalhe por pessoa</h3>
         <div class="tabela-wrap"><table class="prod-tabela"><thead><tr>${cab}</tr></thead><tbody>${corpo || '<tr><td colspan="10" class="muted">Nenhuma pessoa com esse filtro.</td></tr>'}${ps.length ? rodape : ''}</tbody></table></div>
         <p class="small muted">Processos: soma, por pessoa, dos processos distintos de cada dia (o mesmo processo em dias diferentes conta mais de uma vez).</p></section>`;
@@ -182,7 +214,7 @@
   function csvPessoas(s, ctx) {
     const q = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
     const ps = linhasPessoas(s, ctx);
-    const linhas = [CAMPOS_TAB.map(([, r]) => r).join(';')].concat(ps.map(p => [p.pessoa, p.perfil, p.grupo, p[X.ATIV_DOC], p[X.ATIV_RETIF], p[X.ATIV_TAREFA], p.total, p.processos, p.diasAtivos, media(p).toFixed(1).replace('.', ',')].map(q).join(';')));
+    const linhas = [CAMPOS_TAB.map(([, r]) => r).join(';')].concat(ps.map(p => [p.pessoa, rotPerfil(p.perfil), p.grupo, p[X.ATIV_DOC], p[X.ATIV_RETIF], p[X.ATIV_TAREFA], p.total, p.processos, p.diasAtivos, media(p).toFixed(1).replace('.', ',')].map(q).join(';')));
     return '﻿' + linhas.join('\r\n');
   }
 
@@ -190,7 +222,7 @@
   function contexto(s) {
     const f = s.f, cob = X.cobertura(s.envios);
     const periodo = fl => X.periodoPreset(fl.periodo, s.dataFim, s.primeiro);
-    const agBase = (fl, per, gran) => X.agregar({ dias: s.dias, procs: s.procs, equipe: s.equipe, filtro: { perfil: fl.perfil, grupo: fl.grupo }, ini: per.ini, fim: per.fim, gran: gran || 'dia', cob });
+    const agBase = (fl, per, gran) => X.agregar({ dias: s.dias, procs: s.procs, equipe: s.equipe, filtro: filtroEfetivo(s), ini: per.ini, fim: per.fim, gran: gran || 'dia', cob });
     const ctx = {
       periodo,
       ag: fl => agBase(fl, periodo(fl), fl.gran),
@@ -220,12 +252,17 @@
     garantirDados();
     if (!s.dias || s.dadosEnvio !== s.envios[0].id) { v.innerHTML = vazio('Carregando a produtividade…', 'Buscando os dados da equipe.'); return; }
     const foco = document.activeElement && document.activeElement.id, pos = foco === 'prod-busca' ? document.activeElement.selectionStart : null;
+    const ae = document.activeElement, chipFoco = ae && ae.matches && ae.matches('.prod-chip') ? [ae.dataset.tipo, ae.dataset.v] : null;
     const aba = st.abaProd, ctx = contexto(s);
     const ultimo = s.envios[0];
     const atual = `<p class="atualizacao">Dados do BI de ${dBR(s.primeiro)} a ${dBR(s.dataFim)} · último envio em ${esc(dataHoraBR(Date.parse(ultimo.enviado_em)))} · só as pessoas da lista da equipe.</p>`;
-    const corpo = aba === 'pessoas' ? telaPessoas(s, ctx) : telaResumo(s, ctx);
+    const ef = filtroEfetivo(s);
+    const corpo = !ef.perfis.length ? vazio('Selecione ao menos um perfil', 'Ligue um dos perfis acima para ver os números da equipe.')
+      : !ef.grupos.length ? vazio('Selecione ao menos um grupo', 'Ligue um dos grupos acima para ver os números da equipe.')
+      : aba === 'pessoas' ? telaPessoas(s, ctx) : telaResumo(s, ctx);
     v.innerHTML = (s.erroDados ? '<div class="aviso erro">Não foi possível carregar todos os dados agora. Os números podem estar incompletos.</div>' : '') + filtros(s, aba, ctx) + atual + corpo;
     if (foco === 'prod-busca') { const b = $('#prod-busca'); if (b) { b.focus(); if (pos != null) b.setSelectionRange(pos, pos); } }
+    if (chipFoco) { const c = [...v.querySelectorAll('.prod-chip')].find(x => x.dataset.tipo === chipFoco[0] && x.dataset.v === chipFoco[1]); if (c) c.focus(); }
   };
 
   // eventos da área
@@ -246,6 +283,12 @@
     const a = e.target.closest('[data-pacao]'); if (!a) return;
     const s = S(), f = s.f;
     if (a.dataset.pacao === 'medida') { f.medida = a.dataset.v; render(); }
+    else if (a.dataset.pacao === 'chip') {
+      iniciarFiltros(s);
+      const lista = a.dataset.tipo === 'perfil' ? f.perfisOff : f.gruposOff, v = a.dataset.v, i = lista.indexOf(v);
+      if (i >= 0) lista.splice(i, 1); else lista.push(v);
+      render();
+    } else if (a.dataset.pacao === 'chips-padrao') { f.perfisOff = null; f.gruposOff = []; render(); }
     else if (a.dataset.pacao === 'ordem') {
       const c = a.dataset.campo, texto = ['pessoa', 'perfil', 'grupo'].includes(c);
       if (f.ordem === c) f.dir = -f.dir; else { f.ordem = c; f.dir = texto ? 1 : -1; }

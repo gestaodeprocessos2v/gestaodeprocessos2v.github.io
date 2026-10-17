@@ -20,7 +20,7 @@
   --novo: #1d5fbf;  --novo-bg: #e3edfc;
   --ok: #2c7339;    --ok-bg: #e3f2e6;
   --jd: #c2189a;    --jd-bg: #fbe4f5;   --jd-ink: #ffffff;
-  --prod-0: #1d6b64; --prod-1: #d1812a; --prod-2: #3f6fcf; --prod-3: #a64d9c; --prod-4: #5b9a3d; --prod-5: #8c6a3b; --prod-6: #6b5bc7; --prod-7: #c4574f;
+  --prod-0: #7bc2b6; --prod-1: #8fb3e8; --prod-2: #c3a3e3; --prod-3: #a8d08d; --prod-4: #d9b8a0; --prod-5: #b5bdc9; --prod-6: #e6c682; --prod-7: #dda0c8;
   --shadow: 0 1px 2px rgba(15, 53, 51, .06), 0 6px 18px rgba(15, 53, 51, .07);
   --font-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
   --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -34,7 +34,7 @@
     --urg: #ff8f80; --urg-bg: #4a2f2c; --urg-ink: #2a0b08; --pri: #f0b45e; --pri-bg: #4a3b1e; --dev: #c5a8f6; --dev-bg: #3d3258;
     --novo: #8fb9f8; --novo-bg: #2a4166; --ok: #7fd08e; --ok-bg: #2c4a33;
     --jd: #ff6bd6; --jd-bg: #55294a; --jd-ink: #1a0615;
-    --prod-0: #5fc0b4; --prod-1: #f0b45e; --prod-2: #8fb9f8; --prod-3: #e08ad4; --prod-4: #8fd17a; --prod-5: #c9a46b; --prod-6: #b3a6f0; --prod-7: #f08a82;
+    --prod-0: #6fb0a5; --prod-1: #86a6da; --prod-2: #b496d4; --prod-3: #9ac080; --prod-4: #c9a790; --prod-5: #a6aeba; --prod-6: #d6b873; --prod-7: #cd93b9;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .2);
     color-scheme: dark;
   }
@@ -45,7 +45,7 @@
   --urg: #ff8f80; --urg-bg: #4a2f2c; --urg-ink: #2a0b08; --pri: #f0b45e; --pri-bg: #4a3b1e; --dev: #c5a8f6; --dev-bg: #3d3258;
   --novo: #8fb9f8; --novo-bg: #2a4166; --ok: #7fd08e; --ok-bg: #2c4a33;
   --jd: #ff6bd6; --jd-bg: #55294a; --jd-ink: #1a0615;
-    --prod-0: #5fc0b4; --prod-1: #f0b45e; --prod-2: #8fb9f8; --prod-3: #e08ad4; --prod-4: #8fd17a; --prod-5: #c9a46b; --prod-6: #b3a6f0; --prod-7: #f08a82;
+    --prod-0: #6fb0a5; --prod-1: #86a6da; --prod-2: #b496d4; --prod-3: #9ac080; --prod-4: #c9a790; --prod-5: #a6aeba; --prod-6: #d6b873; --prod-7: #cd93b9;
   --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .2);
   color-scheme: dark;
 }
@@ -399,4 +399,18 @@ button.tile:focus-visible { outline: 2px solid currentColor; outline-offset: 2px
 .prod-tabela th.n { text-align: right; }
 .prod-th { font: inherit; font-weight: 600; background: none; border: 0; cursor: pointer; color: inherit; padding: 0; text-align: inherit; }
 .prod-tabela .prod-total td { border-top: 2px solid var(--line); font-weight: 600; }
+/* Filtros de perfil e grupo: chips que ligam e desligam (cor do grupo = cor do gráfico) */
+.prod-chips { background: var(--surface); border-radius: var(--r); box-shadow: var(--shadow); padding: 12px 16px; margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 12px 36px; align-items: flex-start; }
+.prod-chips-bloco { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.prod-chips-rot { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.prod-chips-lista { display: flex; flex-wrap: wrap; gap: 6px; }
+.prod-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 13px; border-radius: 999px; border: 1px solid var(--line); background: var(--sunken); color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .12s, border-color .12s; }
+.prod-chip i { display: none; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.prod-chip:hover { border-color: color-mix(in srgb, var(--c) 70%, transparent); }
+.prod-chip[aria-pressed="true"] { border-color: color-mix(in srgb, var(--c) 70%, transparent); background: color-mix(in srgb, var(--c) 24%, var(--surface)); color: var(--ink); }
+.prod-chip[aria-pressed="true"] i { display: inline-block; }
+.prod-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.prod-chip[data-balao]::after { bottom: auto; top: calc(100% + 6px); }
+.prod-chips > .btn { align-self: flex-end; margin-left: auto; }
+@media (max-width: 560px) { .prod-chips > .btn { margin-left: 0; } }
 @media (max-width: 560px) { .prod-rank-lin { grid-template-columns: 1fr 4rem; } .prod-rank-lin .prod-barra { grid-column: 1 / -1; order: 3; } .prod-grafico { height: 200px; } }
