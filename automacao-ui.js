@@ -12,9 +12,10 @@
   const ALVOS = {
     pjer: { rotulo: 'PJe+R', input: '#imp-arquivo', arquivo: /^[\w .+()-]{1,120}\.csv$/i, balao: 'Abre o Edge do painel e baixa o relatório do PJe+R sozinho (o login no PJe continua seu). Precisa do atalho instalado neste computador.' },
     jd: { rotulo: 'JD', input: '#jd-arquivo', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i, balao: 'Lê no JD as RPV/PRC das 8 situações (só leitura, nada é alterado no JD) e monta a planilha sozinho; leva alguns minutos. O login no JD continua seu. Precisa do atalho instalado neste computador.' },
-    'bi-produtividade': { rotulo: 'Produtividade do BI', input: '#pr-arq', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i, balao: 'Abre o Portal BI, escolhe a 2ª Vara, o período (desde a última extração, no mínimo 14 dias) e as colunas, exporta a tabela "Atividades por Usuário" e confere os totais com a tela do BI. O login no Portal BI continua seu. Precisa do atalho instalado neste computador.' },
-    // Metas: dois arquivos (Resumo e Pendentes por Meta, exportados na mesma execução) e a "Última Carga" do BI
-    'bi-metas': { rotulo: 'Metas do BI', input: '#metas-arq-resumo', campos: { resumo: '#metas-arq-resumo', pendentes: '#metas-arq-pend' }, carga: '#metas-carga', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i, balao: 'Abre o Portal BI, escolhe a 2ª Vara e exporta os relatórios "Resumo" e "Pendentes por Meta" na mesma execução; a "Última Carga" do BI também é preenchida. O login no Portal BI continua seu. Precisa do atalho instalado neste computador.' },
+    // BI: as duas partes não têm barra própria (só recebem os arquivos); o botão é o do painel único "Atualizar dados do BI" (alvo "bi").
+    'bi-produtividade': { oculto: true, input: '#pr-arq', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i },
+    'bi-metas': { oculto: true, input: '#metas-arq-resumo', campos: { resumo: '#metas-arq-resumo', pendentes: '#metas-arq-pend' }, carga: '#metas-carga', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i },
+    bi: { painel: true, partes: { produtividade: 'bi-produtividade', metas: 'bi-metas' }, rotuloBotao: 'Extrair tudo do BI', balao: 'Abre o Portal BI, escolhe a 2ª Vara e extrai a Produtividade da equipe (Atividades por Usuário) e as Metas CNJ (Resumo, Pendentes por Meta e as contagens da Meta 3); leva uns 3 minutos. O login no Portal BI continua seu. Precisa do atalho instalado neste computador.' },
   };
   const SUPORTE = typeof window.showDirectoryPicker === 'function';
   const ESPERA_MAX = 12 * 60 * 1000, INTERVALO = 3000;
@@ -58,8 +59,28 @@
   async function lerTodosStatus() { for (const a of Object.keys(ALVOS)) S.status[a] = await lerStatus(a); }
 
   const pausa = ms => new Promise(r => setTimeout(r, ms));
+  async function esperar(cond, ms = 20000) {
+    const fim = Date.now() + ms;
+    while (Date.now() < fim) { if (cond()) return true; await pausa(500); }
+    return cond();
+  }
+  // BI: entrega cada parte que deu certo (arquivo da Produtividade; Resumo, Pendentes e Última Carga das Metas; e as contagens da Meta 3, que vêm do script)
+  async function entregarBI(alvo, status) {
+    const cfg = ALVOS[alvo], partes = status.partes || {};
+    let entregues = 0;
+    for (const [chave, alvoParte] of Object.entries(cfg.partes)) {
+      const p = partes[chave];
+      if (!p || p.estado !== 'concluido') continue;
+      if (chave === 'metas' && P.metasDefinirM3) P.metasDefinirM3(p.meta3 || {});   // Meta 3 lida do BI (não há mais campos para digitar)
+      await entregar(alvoParte, p);
+      entregues++;
+    }
+    if (!entregues) throw new Error(status.mensagem || 'Nenhuma parte da extração do BI terminou.');
+    S.carregado[alvo] = status.gerado_em;
+  }
   async function entregar(alvo, status) {
     const cfg = ALVOS[alvo];
+    if (cfg.partes) return entregarBI(alvo, status);
     // [seletor do campo, nome do arquivo]: um campo só, ou vários (Metas)
     const campos = cfg.campos ? Object.entries(cfg.campos).map(([k, sel]) => [sel, (status.arquivos || {})[k]]) : [[cfg.input, status.arquivo]];
     for (const [sel, nome] of campos) {   // confere tudo antes de mexer na tela
@@ -98,9 +119,15 @@
       const pedido = S.aguardando[alvo];
       const recente = st.gerado_em && Date.parse(st.gerado_em) >= pedido - 5000;
       try {
-        if (st.estado === 'concluido' && recente) { await entregar(alvo, st); S.msg[alvo] = ''; parar(alvo); }
+        if ((st.estado === 'concluido' || st.estado === 'parcial') && recente) { await entregar(alvo, st); S.msg[alvo] = st.estado === 'parcial' ? (st.mensagem || 'Parte da extração falhou.') : ''; parar(alvo); }
         else if (st.estado === 'erro' || st.estado === 'cancelado') { if (Date.parse(st.atualizado_em) >= pedido - 5000) { S.msg[alvo] = st.mensagem || 'A extração não terminou.'; parar(alvo); } }
-        else if (st.estado === 'em_andamento') S.msg[alvo] = (st.mensagem || 'Extraindo') + '…';
+        else if (st.estado === 'em_andamento') {
+          let det = st.mensagem || 'Extraindo';
+          if (ALVOS[alvo].partes) {   // andamento fino da parte que está rodando
+            for (const sub of Object.values(ALVOS[alvo].partes)) { const x = await lerStatus(sub); if (x && x.estado === 'em_andamento' && Date.parse(x.atualizado_em) >= pedido - 5000) det += ' — ' + (x.mensagem || ''); }
+          }
+          S.msg[alvo] = det + '…';
+        }
       } catch (e) { S.msg[alvo] = e.message || 'Não consegui carregar o arquivo.'; parar(alvo); }
       montar();
     }, INTERVALO);
@@ -115,7 +142,7 @@
     if (!S.pasta) return 'Escolha a pasta de entrada (a pasta “entrada” dentro da pasta “extrator”) para o painel receber o arquivo.';
     if (!liberada()) return 'Libere o acesso à pasta de entrada para o painel receber o arquivo.';
     const st = S.status[alvo];
-    if (st && st.estado === 'concluido') return `Última extração: ${hora(st.gerado_em)}${st.mensagem ? ' — ' + st.mensagem : ''}`;
+    if (st && (st.estado === 'concluido' || st.estado === 'parcial')) return `Última extração: ${hora(st.gerado_em)}${st.mensagem ? ' — ' + st.mensagem : ''}`;
     return '';
   }
   function botao(texto, aut, balao, extra) {
@@ -128,23 +155,71 @@
     const cfg = ALVOS[alvo], div = document.createElement('div');
     div.className = 'automacao'; div.dataset.alvo = alvo;
     const a = document.createElement('a');
-    a.className = 'btn primario'; a.href = `painel://extrair?alvo=${alvo}`; a.textContent = 'Extrair agora'; a.dataset.aut = 'extrair';
+    a.className = 'btn primario'; a.href = `painel://extrair?alvo=${alvo}`; a.textContent = cfg.rotuloBotao || 'Extrair agora'; a.dataset.aut = 'extrair';
     a.dataset.balao = cfg.balao;
     div.append(a);
     if (SUPORTE) {
       const rot = !S.pasta ? 'Escolher pasta de entrada' : liberada() ? 'Trocar pasta' : 'Liberar pasta';
       div.append(botao(rot, !S.pasta || liberada() ? 'pasta' : 'liberar', 'A pasta onde o script grava os arquivos extraídos (extrator/entrada, no OneDrive). O painel só lê essa pasta.'));
       const st = S.status[alvo];
-      if (liberada() && st && st.estado === 'concluido' && S.carregado[alvo] !== st.gerado_em) div.append(botao('Carregar a última extração', 'carregar', 'Põe o último arquivo extraído na prévia abaixo.'));
+      if (liberada() && st && (st.estado === 'concluido' || st.estado === 'parcial') && S.carregado[alvo] !== st.gerado_em) div.append(botao('Carregar a última extração', 'carregar', 'Põe o último arquivo extraído na prévia abaixo.'));
     }
     const m = document.createElement('span');
     m.className = 'automacao-msg small muted'; m.setAttribute('role', 'status'); m.textContent = resumo(alvo);
     div.append(m);
     return div;
   }
+  // ---------- painel "Atualizar dados do BI" (um botão só para a Produtividade e as Metas) ----------
+  P.painelBIGestao = function () {
+    return `<section class="painel" id="painel-bi">
+      <h2>Atualizar dados do BI</h2>
+      <p>Um clique extrai do Portal BI, para a 2ª Vara, a <b>Produtividade</b> da equipe e as <b>Metas CNJ</b> (Resumo, Pendentes por Meta e as contagens da Meta 3). Depois confira as prévias dos dois painéis abaixo e use <b>Gravar tudo</b>. Os campos de arquivo dos painéis continuam valendo para o envio manual.</p>
+      <div class="automacao" data-alvo="bi"></div>
+      <div class="automacao" id="bi-gravar"></div>
+    </section>`;
+  };
+  function criarGravar() {
+    const div = document.createElement('div');
+    div.className = 'automacao'; div.id = 'bi-gravar';
+    const pode = !!((P.prodPronto && P.prodPronto()) || (P.metasPronto && P.metasPronto()));
+    const b = botao(S.gravando ? 'Gravando…' : 'Gravar tudo', 'gravar-tudo', 'Grava a Produtividade e as Metas que já estão nas prévias abaixo. O que não estiver pronto, ou já tiver sido enviado, é pulado e o motivo aparece aqui.', 'primario');
+    b.disabled = !pode || S.gravando;
+    const m = document.createElement('span');
+    m.className = 'automacao-msg small muted'; m.setAttribute('role', 'status');
+    m.textContent = S.msgGravar || (pode ? '' : 'As prévias ainda não estão prontas.');
+    div.append(b, m);
+    return div;
+  }
+  async function gravarTudo() {
+    if (S.gravando) return;
+    S.gravando = true; S.msgGravar = ''; montar();
+    const linhas = [];
+    try {
+      if (P.prodGravar) {
+        await esperar(() => !P.prodMotivo || !/conferindo/.test(P.prodMotivo()), 30000);   // a prévia ainda confere os registros já guardados
+        if (P.prodPronto()) linhas.push((await P.prodGravar()) ? 'Produtividade gravada.' : 'Produtividade: não foi gravada (veja o aviso do painel).');
+        else linhas.push('Produtividade: ' + (P.prodMotivo() || 'não está pronta') + '.');
+      }
+      if (P.metasGravar) {
+        if (P.metasPronto()) linhas.push((await P.metasGravar()) ? 'Metas gravadas.' : 'Metas: não foram gravadas (veja o aviso do painel).');
+        else linhas.push('Metas: ' + (P.metasMotivo() || 'não estão prontas') + '.');
+      }
+    } catch (e) { linhas.push('Erro ao gravar: ' + ((e && e.message) || e)); }
+    S.msgGravar = linhas.join(' '); S.gravando = false; montar();
+  }
+
   function montar() {
     for (const alvo of Object.keys(ALVOS)) {
-      const input = document.querySelector(ALVOS[alvo].input);
+      const cfg = ALVOS[alvo];
+      if (cfg.oculto) continue;
+      if (cfg.painel) {   // o painel único traz o próprio contêiner; só preenche
+        const barra = document.querySelector(`.automacao[data-alvo="${alvo}"]`);
+        if (barra) { const nova = criarBarra(alvo); if (barra.innerHTML !== nova.innerHTML) barra.replaceChildren(...nova.childNodes); }
+        const grav = document.getElementById('bi-gravar');
+        if (grav) { const ng = criarGravar(); if (grav.innerHTML !== ng.innerHTML) grav.replaceChildren(...ng.childNodes); }
+        continue;
+      }
+      const input = document.querySelector(cfg.input);
       const campo = input && input.closest('.campo');
       if (!campo) continue;
       const atual = campo.previousElementSibling && campo.previousElementSibling.classList.contains('automacao') ? campo.previousElementSibling : null;
@@ -158,6 +233,7 @@
   document.addEventListener('click', async e => {
     const el = e.target.closest && e.target.closest('[data-aut]');
     if (!el) return;
+    if (el.dataset.aut === 'gravar-tudo') { gravarTudo(); return; }
     const alvo = el.closest('.automacao') && el.closest('.automacao').dataset.alvo;
     if (!alvo) return;
     const aut = el.dataset.aut;
@@ -174,7 +250,7 @@
         await lerTodosStatus();
       } else if (aut === 'carregar') {
         const st = await lerStatus(alvo); S.status[alvo] = st;
-        if (!st || st.estado !== 'concluido') S.msg[alvo] = 'Ainda não há extração concluída.';
+        if (!st || (st.estado !== 'concluido' && st.estado !== 'parcial')) S.msg[alvo] = 'Ainda não há extração concluída.';
         else { await entregar(alvo, st); S.msg[alvo] = ''; }
       }
     } catch (err) {

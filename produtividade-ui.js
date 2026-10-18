@@ -509,4 +509,9 @@
       else if (acao === 'pr-env-recalcular') await recalcularTudo();
     } catch (err) { falha(err); }
   });
+
+  // Ganchos do painel "Atualizar dados do BI" ("Gravar tudo")
+  P.prodPronto = () => { const i = S().imp; return !!(i.rel && !i.gravando && !i.conferindo); };
+  P.prodMotivo = () => { const i = S().imp; return i.erro ? i.erro : !i.rel ? 'o relatório ainda não foi lido' : i.conferindo ? 'conferindo os registros já guardados' : ''; };
+  P.prodGravar = async () => { if (!P.prodPronto()) return false; await gravarEnvio(); return !S().imp.rel; };
 })();

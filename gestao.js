@@ -47,6 +47,7 @@
       ${painelImportar()}
       ${P.painelJDGestao ? P.painelJDGestao() : ''}
       ${P.painelEquipeGestao ? P.painelEquipeGestao() : ''}
+      ${P.painelBIGestao ? P.painelBIGestao() : ''}
       ${P.painelProdGestao ? P.painelProdGestao() : ''}
       ${P.painelMetasGestao ? P.painelMetasGestao() : ''}
       ${painelUrgencia()}

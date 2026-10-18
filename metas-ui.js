@@ -233,6 +233,13 @@
     return { contagens, erro };
   }
 
+  // Meta 3 lida do BI pelo script de extração (não há mais campos para digitar): mostra o que veio.
+  function linhaM3(m3) {
+    const itens = Object.entries((m3 && m3.contagens) || {});
+    if (!itens.length) return (imp().resumo || imp().pendentes) ? '<p class="small muted">Meta 3: sem contagens do BI neste envio (o cartão da Meta 3 fica sem a estimativa).</p>' : '';
+    return `<p class="small">Meta 3 (lida do BI): ${itens.map(([inst, v]) => `${esc(inst)}: <b class="mono">${v.h.toLocaleString('pt-BR')}</b> homologatórias em <b class="mono">${v.s.toLocaleString('pt-BR')}</b> sentenças`).join(' · ')}.</p>`;
+  }
+
   async function lerPlanilha(papel, arquivo) {
     const s = imp(), campo = papel === 'resumo' ? 'resumo' : 'pendentes', erro = papel === 'resumo' ? 'erroResumo' : 'erroPendentes';
     s[campo] = null; s[erro] = '';
@@ -271,7 +278,6 @@
     const avisos = avisosEnvio();
     const m3 = lerM3();
     const pronto = r && p && cargaMs() != null && !jaEnviada() && !s.gravando && !m3.erro;
-    const campoM3 = (rotulo, id) => `<label class="campo"><span>${rotulo}</span><input type="number" min="0" step="1" inputmode="numeric" id="m3-${id}" value="${esc((s.m3 || {})[id] == null ? '' : (s.m3 || {})[id])}"></label>`;
     const prevRes = s.erroResumo ? `<div class="aviso erro">${esc(s.erroResumo)}</div>` : r ? `<div class="previa"><div class="small"><b>Resumo:</b> “${esc(r.arquivo)}”, 2ª Vara${r.criadoEm ? `, gerado em ${esc(dataHoraBR(r.criadoEm))}` : ''}.</div>${tabelaPrevia(r)}</div>` : '';
     if (p && !st.metas.outrosLido && !st.metas.carregandoOutros) { st.metas.carregandoOutros = true; carregarOutros().then(() => { st.metas.carregandoOutros = false; render(); }); }
     const semLista = p && st.metas.outrosLido ? M.cruzarPendentes(p.dados.itens, st.filas, servidores(), st.metas.outros).filter(it => !it.lista) : [];
@@ -287,11 +293,7 @@
       <label class="campo"><span>Relatório “Resumo” (.xlsx)</span><input type="file" id="metas-arq-resumo" accept=".xlsx"></label>
       <label class="campo"><span>Relatório “Pendentes por Meta” (.xlsx)</span><input type="file" id="metas-arq-pend" accept=".xlsx"></label>
       <label class="campo"><span>Última Carga do Portal BI (data e hora)</span><input type="datetime-local" id="metas-carga" value="${esc(s.carga)}"></label>
-      <h3>Meta 3: estimativa de homologatórias (opcional)</h3>
-      <p class="small muted">Para o cartão da Meta 3 mostrar quantas sentenças homologatórias faltam, informe as contagens da <b>aba Detalhamento</b> do Portal BI, filtrada por Meta 3, ano 2026, serventia PB - 2ª Vara Federal e, uma de cada vez, instância 1º Grau e JEF (cartões “Sent. Homologatórias” e “Sentenças”). Em branco, o cartão fica sem estimativa.</p>
-      <div class="campos">
-        ${campoM3('1º Grau: sent. homologatórias', 'g1h')}${campoM3('1º Grau: sentenças', 'g1s')}${campoM3('JEF: sent. homologatórias', 'jefh')}${campoM3('JEF: sentenças', 'jefs')}
-      </div>
+      ${linhaM3(m3)}
       ${m3.erro ? `<div class="aviso erro">${esc(m3.erro)}</div>` : ''}
       ${prevRes}${prevPend}${alertaSem}
       ${jaEnviada() ? '<div class="aviso erro">Essa carga já foi enviada. Se for um reenvio, remova antes o envio anterior da lista abaixo.</div>' : ''}
@@ -309,7 +311,7 @@
     if (!s.resumo || !s.pendentes || cargaMs() == null || s.gravando || jaEnviada() || lerM3().erro) return;
     s.gravando = true; render();
     const sb = st.sb;
-    let id = null;
+    let id = null, gravou = false;
     try {
       const pd = s.pendentes.dados;
       const envio = {
@@ -328,11 +330,13 @@
       toast('Metas CNJ gravadas.');
       st.metasImp = null; st.metas.pend = null; st.metas.pendEnvio = null;
       await P.carregar();
+      gravou = true;
     } catch (e) {
       if (id != null) { try { await sb.from('metas_envios').delete().eq('id', id); } catch (e2) { console.error(e2); } }
       falha(e); s.gravando = false;
     }
     render();
+    return gravou;
   }
 
   async function removerEnvio(id) {
@@ -342,6 +346,18 @@
     toast('Envio removido.'); await P.carregar(); render();
   }
 
+  // Ganchos do painel "Atualizar dados do BI" (extração única e "Gravar tudo")
+  P.metasDefinirM3 = c => { const o = {}; for (const k of ['g1h', 'g1s', 'jefh', 'jefs']) if (c && c[k] != null) o[k] = String(c[k]); imp().m3 = o; };
+  P.metasPronto = () => { const s = imp(); return !!(s.resumo && s.pendentes && cargaMs() != null && !jaEnviada() && !s.gravando && !lerM3().erro); };
+  P.metasMotivo = () => {
+    const s = imp();
+    if (!s.resumo || !s.pendentes) return 'os dois relatórios ainda não foram lidos';
+    if (cargaMs() == null) return 'falta a Última Carga do BI';
+    if (jaEnviada()) return 'essa carga do BI já foi enviada';
+    const e = lerM3().erro; return e || '';
+  };
+  P.metasGravar = async () => { if (!P.metasPronto()) return false; return !!(await gravarMetas()); };
+
   const vg = $('#v-gestao');
   vg.addEventListener('change', e => {
     if (e.target.id === 'metas-arq-resumo') lerPlanilha('resumo', e.target.files && e.target.files[0]);
@@ -350,9 +366,7 @@
   });
   vg.addEventListener('input', e => {
     if (e.target.id === 'metas-carga') imp().carga = e.target.value;
-    else if (/^m3-(g1|jef)[hs]$/.test(e.target.id)) imp().m3[e.target.id.slice(3)] = e.target.value;
   });
-  vg.addEventListener('change', e => { if (/^m3-(g1|jef)[hs]$/.test(e.target.id)) render(); });
   vg.addEventListener('click', async e => {
     const a = e.target.closest('[data-acao]'); if (!a || !a.dataset.acao.startsWith('metas-')) return;
     try {
