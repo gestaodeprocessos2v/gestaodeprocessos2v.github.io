@@ -419,3 +419,8 @@ button.tile:focus-visible { outline: 2px solid currentColor; outline-offset: 2px
 .prod-chips > .btn { align-self: flex-end; margin-left: auto; }
 @media (max-width: 560px) { .prod-chips > .btn { margin-left: 0; } }
 @media (max-width: 560px) { .prod-rank-lin { grid-template-columns: 1fr 4rem; } .prod-rank-lin .prod-barra { grid-column: 1 / -1; order: 3; } .prod-grafico { height: 200px; } }
+/* Botões de extração automática (aba Gestão) */
+.automacao { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 12px; }
+.automacao a.btn { text-decoration: none; color: inherit; display: inline-block; }
+.automacao a.btn.primario { color: var(--accent-ink); }
+.automacao-msg { flex: 1 1 14rem; }
