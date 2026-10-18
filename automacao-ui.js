@@ -12,6 +12,9 @@
   const ALVOS = {
     pjer: { rotulo: 'PJe+R', input: '#imp-arquivo', arquivo: /^[\w .+()-]{1,120}\.csv$/i, balao: 'Abre o Edge do painel e baixa o relatório do PJe+R sozinho (o login no PJe continua seu). Precisa do atalho instalado neste computador.' },
     jd: { rotulo: 'JD', input: '#jd-arquivo', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i, balao: 'Lê no JD as RPV/PRC das 8 situações (só leitura, nada é alterado no JD) e monta a planilha sozinho; leva alguns minutos. O login no JD continua seu. Precisa do atalho instalado neste computador.' },
+    'bi-produtividade': { rotulo: 'Produtividade do BI', input: '#pr-arq', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i, balao: 'Abre o Portal BI, escolhe a 2ª Vara, o período (desde a última extração, no mínimo 14 dias) e as colunas, exporta a tabela "Atividades por Usuário" e confere os totais com a tela do BI. O login no Portal BI continua seu. Precisa do atalho instalado neste computador.' },
+    // Metas: dois arquivos (Resumo e Pendentes por Meta, exportados na mesma execução) e a "Última Carga" do BI
+    'bi-metas': { rotulo: 'Metas do BI', input: '#metas-arq-resumo', campos: { resumo: '#metas-arq-resumo', pendentes: '#metas-arq-pend' }, carga: '#metas-carga', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i, balao: 'Abre o Portal BI, escolhe a 2ª Vara e exporta os relatórios "Resumo" e "Pendentes por Meta" na mesma execução; a "Última Carga" do BI também é preenchida. O login no Portal BI continua seu. Precisa do atalho instalado neste computador.' },
   };
   const SUPORTE = typeof window.showDirectoryPicker === 'function';
   const ESPERA_MAX = 12 * 60 * 1000, INTERVALO = 3000;
@@ -54,15 +57,29 @@
   }
   async function lerTodosStatus() { for (const a of Object.keys(ALVOS)) S.status[a] = await lerStatus(a); }
 
+  const pausa = ms => new Promise(r => setTimeout(r, ms));
   async function entregar(alvo, status) {
-    const cfg = ALVOS[alvo], input = document.querySelector(cfg.input);
-    if (!input) throw new Error('O campo de arquivo não está na tela.');
-    if (!cfg.arquivo.test(status.arquivo || '')) throw new Error('Nome de arquivo inesperado no status da extração.');
+    const cfg = ALVOS[alvo];
+    // [seletor do campo, nome do arquivo]: um campo só, ou vários (Metas)
+    const campos = cfg.campos ? Object.entries(cfg.campos).map(([k, sel]) => [sel, (status.arquivos || {})[k]]) : [[cfg.input, status.arquivo]];
+    for (const [sel, nome] of campos) {   // confere tudo antes de mexer na tela
+      if (!document.querySelector(sel)) throw new Error('O campo de arquivo não está na tela.');
+      if (!cfg.arquivo.test(nome || '')) throw new Error('Nome de arquivo inesperado no status da extração.');
+    }
     const dir = await S.pasta.getDirectoryHandle(alvo);
-    const arquivo = await (await dir.getFileHandle(status.arquivo)).getFile();
-    const dt = new DataTransfer(); dt.items.add(arquivo);
-    input.files = dt.files;
-    input.dispatchEvent(new Event('change', { bubbles: true }));   // o painel trata como um arquivo escolhido à mão (prévia)
+    if (cfg.carga && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(status.carga_bi || '')) {   // "Última Carga" do BI, lida pelo script
+      const c = document.querySelector(cfg.carga);
+      if (c) { c.value = status.carga_bi; c.dispatchEvent(new Event('input', { bubbles: true })); c.dispatchEvent(new Event('change', { bubbles: true })); await pausa(300); }
+    }
+    for (const [sel, nome] of campos) {
+      const input = document.querySelector(sel);   // consulta de novo: a tela pode ter sido redesenhada
+      if (!input) throw new Error('O campo de arquivo não está na tela.');
+      const arquivo = await (await dir.getFileHandle(nome)).getFile();
+      const dt = new DataTransfer(); dt.items.add(arquivo);
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));   // o painel trata como um arquivo escolhido à mão (prévia)
+      await pausa(400);
+    }
     S.carregado[alvo] = status.gerado_em;
   }
 
