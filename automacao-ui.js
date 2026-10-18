@@ -10,7 +10,8 @@
 
   // alvo -> campo de arquivo da Gestão que recebe o arquivo. Cada alvo só entra aqui quando o script dele existe.
   const ALVOS = {
-    pjer: { rotulo: 'PJe+R', input: '#imp-arquivo', arquivo: /^[\w .+()-]{1,120}\.csv$/i },
+    pjer: { rotulo: 'PJe+R', input: '#imp-arquivo', arquivo: /^[\w .+()-]{1,120}\.csv$/i, balao: 'Abre o Edge do painel e baixa o relatório do PJe+R sozinho (o login no PJe continua seu). Precisa do atalho instalado neste computador.' },
+    jd: { rotulo: 'JD', input: '#jd-arquivo', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i, balao: 'Lê no JD as RPV/PRC das 8 situações (só leitura, nada é alterado no JD) e monta a planilha sozinho; leva alguns minutos. O login no JD continua seu. Precisa do atalho instalado neste computador.' },
   };
   const SUPORTE = typeof window.showDirectoryPicker === 'function';
   const ESPERA_MAX = 12 * 60 * 1000, INTERVALO = 3000;
@@ -97,7 +98,7 @@
     if (!S.pasta) return 'Escolha a pasta de entrada (a pasta “entrada” dentro da pasta “extrator”) para o painel receber o arquivo.';
     if (!liberada()) return 'Libere o acesso à pasta de entrada para o painel receber o arquivo.';
     const st = S.status[alvo];
-    if (st && st.estado === 'concluido') return `Última extração: ${hora(st.gerado_em)}${st.linhas ? ` — ${Number(st.linhas).toLocaleString('pt-BR')} processos` : ''}${st.atualizado_em_pje ? ` (dados do PJe de ${hora(st.atualizado_em_pje)})` : ''}.`;
+    if (st && st.estado === 'concluido') return `Última extração: ${hora(st.gerado_em)}${st.mensagem ? ' — ' + st.mensagem : ''}`;
     return '';
   }
   function botao(texto, aut, balao, extra) {
@@ -111,7 +112,7 @@
     div.className = 'automacao'; div.dataset.alvo = alvo;
     const a = document.createElement('a');
     a.className = 'btn primario'; a.href = `painel://extrair?alvo=${alvo}`; a.textContent = 'Extrair agora'; a.dataset.aut = 'extrair';
-    a.dataset.balao = `Abre o Edge do painel e baixa o relatório do ${cfg.rotulo} sozinho, sem você entrar no sistema (o login continua seu). Precisa do atalho instalado neste computador.`;
+    a.dataset.balao = cfg.balao;
     div.append(a);
     if (SUPORTE) {
       const rot = !S.pasta ? 'Escolher pasta de entrada' : liberada() ? 'Trocar pasta' : 'Liberar pasta';
