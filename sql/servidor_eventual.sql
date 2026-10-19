@@ -1,6 +1,6 @@
 -- Servidor eventual: trabalha de forma eventual em Comunicação e Pagamentos, sem fila própria,
 -- e o painel registra quem concluiu cada processo (marcas.concluida_por).
--- RASCUNHO PARA REVISÃO: não foi aplicado no banco. Aplicar na ordem (partes 1 e 2 em migrações separadas,
+-- Aplicar na ordem (partes 1 e 2 em migrações separadas,
 -- porque um valor novo de enum só pode ser usado depois de confirmado). Sem nomes de pessoas.
 
 -- ============ Parte 1 (migração própria) ============
