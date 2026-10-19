@@ -33,7 +33,8 @@
 
   // Meta 3 (total da vara, 1º Grau + JEF): quantas homologatórias faltam hoje e até 19/12 (contagens digitadas na Gestão no envio).
   function estimativaHtml(e) {
-    const est = M.estimativaMeta3(e); if (!est || !est.vara) return '';
+    const est = M.estimativaMeta3(e);
+    if (!est || !est.vara) return '<div class="meta-est small muted">Sem a estimativa de homologatórias: este envio não trouxe as contagens da Meta 3 do Portal BI.</div>';
     const v = est.vara, p = est.projecao.vara, n = x => x.toLocaleString('pt-BR');
     const txtHoje = v.barreira ? 'Meta cumprida pela cláusula de barreira (IC de 8% ou mais).' : v.falta === 0 ? 'Meta cumprida pela vara.' : `faltam <b class="mono">${n(v.falta)}</b> homologatórias`;
     const ajudaHoje = 'Sentenças homologatórias a mais, com as sentenças do ano já proferidas, para o Índice de Conciliação chegar ao índice de 2024/2025 mais 0,5 ponto percentual. Cada homologatória nova conta também como sentença nova.';
