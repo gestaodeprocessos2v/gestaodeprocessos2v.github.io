@@ -262,6 +262,8 @@
     for (const r of cfg.regrasClasse || []) {
       if (r && r.responsavel && r.setores && r.setores.length && r.setores.includes(setor)) ids.add(r.responsavel);
     }
+    // Servidor eventual: pode receber urgência de Comunicação e Pagamentos, sem ter dígito nem responsabilidade fixa.
+    if (setor === 'comunicacao' || setor === 'pagamentos') for (const p of cfg.pessoas || []) if (p && p.tipo === 'eventual') ids.add(p.id);
     const ordem = (cfg.pessoas || []).map(p => p.id);
     return [...ids].sort((a, b) => (ordem.indexOf(a) + 1 || 999) - (ordem.indexOf(b) + 1 || 999));
   }

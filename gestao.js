@@ -522,7 +522,7 @@
     return `<section class="painel largo">
       <h2>Configuração</h2>
       <p>As mudanças valem para todos assim que você salvar. Urgência e prioridade de cada tarefa ficam na tabela “Tarefas do PJe”. Quem não tiver e-mail cadastrado recebe processos, mas não consegue entrar no painel.</p>
-      <h3>Pessoas com fila (servidores, estagiários e residentes)</h3>
+      <h3>Pessoas com fila (servidores, estagiários, residentes e servidores eventuais)</h3>
       ${(c.pessoas || []).length ? '<div class="pessoa-cfg cab-cfg"><span>Nome</span><span>Perfil</span><span>E-mail Google</span><span></span></div>' : ''}
       ${pessoasH || '<p class="muted">Nenhuma pessoa cadastrada.</p>'}
       <div class="linha-botoes"><input type="text" id="cfg-nova-pessoa" placeholder="Nome da nova pessoa" aria-label="Nome da nova pessoa" value="${esc(st.novaPessoa || '')}">

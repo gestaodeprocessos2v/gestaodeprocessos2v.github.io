@@ -10,14 +10,16 @@
   ];
   const NOME_SETOR = Object.fromEntries(SETORES);
   // Tipos de pessoa com fila própria. Estagiários e residentes podem devolver; servidores podem enviar.
-  const TIPOS = [['servidor', 'Servidores', 'Servidor'], ['estagiario', 'Estagiários', 'Estagiário'], ['residente', 'Residentes', 'Residente'], ['diretor', 'Diretor de Secretaria', 'Diretor de Secretaria']];
+  const TIPOS = [['servidor', 'Servidores', 'Servidor'], ['estagiario', 'Estagiários', 'Estagiário'], ['residente', 'Residentes', 'Residente'], ['diretor', 'Diretor de Secretaria', 'Diretor de Secretaria'], ['eventual', 'Servidores eventuais', 'Servidor eventual']];
   const GESTOR_ID = R.GESTOR_ID;
   const ROTULO_TIPO = Object.fromEntries(TIPOS.map(t => [t[0], t[2]]));
   const PERFIS = {
     gestor: 'Gestor', servidor: 'Servidor', estagiario: 'Estagiário', residente: 'Residente',
-    magistrado: 'Magistrado(a)', diretor: 'Diretor de Secretaria', visitante: 'Visitante',
+    magistrado: 'Magistrado(a)', diretor: 'Diretor de Secretaria', visitante: 'Visitante', eventual: 'Servidor eventual',
   };
   const COM_FILA = ['servidor', 'estagiario', 'residente', 'diretor'];
+  // Servidor eventual: sem fila própria nem divisão por dígito; trabalha os processos destes setores, de todos os servidores.
+  const SETORES_EVENTUAL = ['comunicacao', 'pagamentos'];
   const DIA = 86400000;
   const LIMITE_NORMAL = 300;
 
@@ -36,6 +38,7 @@
       fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '' },
       geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '' },
       gestor: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '' },
+      eventual: { busca: '', setor: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '' },
     },
     gOculta: false, gBase: 0, duAberta: false, novaUrgDir: { numero: '', setor: 'secretaria', responsavel: '', motivo: '' },
     anotando: null, notaRascunho: '', devolvendo: null, devMotivo: '', modal: null,
@@ -178,6 +181,7 @@
 
   function abasDisponiveis() {
     if (temFila()) return ['fila', 'geral'];
+    if (st.perfil === 'eventual') return ['eventual', 'geral'];
     if (st.perfil === 'gestor') return st.verComo ? ['fila', 'geral', 'gestao'] : ['geral', 'gestao'];
     return ['geral'];
   }
@@ -232,7 +236,7 @@
       todas((a, b) => sb.from('filas').select('lista,pessoa,itens,importado_em').order('lista').order('pessoa').range(a, b)),
       todas((a, b) => sb.from('urgencias').select('*').or(`concluida_em.is.null,concluida_em.gte.${desdeConcl}`).order('id').range(a, b)),
       todas((a, b) => sb.from('devolucoes').select('*').or(`concluida_em.is.null,concluida_em.gte.${desdeConcl}`).order('id').range(a, b)),
-      todas((a, b) => sb.from('marcas').select('pessoa,chave,em,devolvido,item,desfeito').gte('em', desdeMarcas).order('pessoa').order('chave').range(a, b)),
+      todas((a, b) => sb.from('marcas').select('pessoa,chave,em,devolvido,item,desfeito,concluida_por').gte('em', desdeMarcas).order('pessoa').order('chave').range(a, b)),
       todas((a, b) => sb.from('notas').select('pessoa,numero,texto,em').order('pessoa').order('numero').range(a, b)),
       gestor ? todas((a, b) => sb.from('acesso').select('email,nome,perfil,pessoa_id').order('email').range(a, b)) : Promise.resolve([]),
       gestor ? sb.from('acessos_negados').select('email,em').order('em', { ascending: false }).limit(200) : Promise.resolve({ data: [] }),
@@ -259,7 +263,7 @@
     }));
     st.devolucoes = dev.map(r => ({ id: r.id, item: r.item, de: r.de, para: r.para, motivo: r.motivo || '', em: ms(r.em), concluidaEm: ms(r.concluida_em) }));
     st.marcas = {};
-    for (const m of marcas) (st.marcas[m.pessoa] = st.marcas[m.pessoa] || {})[m.chave] = { em: ms(m.em), dev: !!m.devolvido, item: m.item || null, desfeito: !!m.desfeito };
+    for (const m of marcas) (st.marcas[m.pessoa] = st.marcas[m.pessoa] || {})[m.chave] = { em: ms(m.em), dev: !!m.devolvido, item: m.item || null, desfeito: !!m.desfeito, por: m.concluida_por || null };
     st.notas = {};
     for (const n of notas) (st.notas[n.pessoa] = st.notas[n.pessoa] || {})[n.numero] = { texto: n.texto, em: ms(n.em) };
     st.acessos = acessos;
@@ -319,6 +323,8 @@
       if (l.concluido) {
         const fonte = l.origem === 'urgencia' ? st.urgencias.find(x => x.id === l.id) : l.origem === 'devolucao' ? st.devolucoes.find(x => x.id === l.id) : null;
         l.concluidoEm = (fonte && fonte.concluidaEm) || (mm && !mm.desfeito ? mm.em : null) || null;
+        // quem concluiu (só é mostrado quando não é o próprio dono; ver linhaHTML)
+        l.concluidoPor = (fonte && fonte.concluidaPor) || (mm && !mm.desfeito ? mm.por : null) || null;
       } else if (mm && mm.desfeito) l.concluidoAntes = mm.em;
     }
     c.m[p] = fila;
@@ -337,6 +343,18 @@
   }
   const aplicarVisao = (modo, ls) => { const v = visaoAtiva(modo); return v ? ls.filter(l => passaVisao(v, l)) : ls; };
 
+  // Aba do servidor eventual: as urgências enviadas a ele mais os processos da lista de Comunicação e Pagamentos
+  // que já estão na fila dos servidores responsáveis (mesmas regras de distribuição; sem dono continuam de fora).
+  function linhasEventual() {
+    const out = [...filaDe(st.pessoa)];
+    for (const p of pessoas()) {
+      if (p.id === st.pessoa || (p.tipo || 'servidor') !== 'servidor') continue;
+      for (const l of filaDe(p.id)) if (l.origem === 'lista' && SETORES_EVENTUAL.includes(l.s) && (!l.foraDaLista || l.concluido)) out.push(l);
+    }
+    out.sort(R.comparar);
+    return out;
+  }
+
   function linhasGeral(pessoa) {
     const ids = pessoa ? [pessoa] : pessoas().filter(p => p.tipo !== 'diretor').map(p => p.id);
     const out = [];
@@ -353,26 +371,27 @@
     const ok = st.estado === 'ok';
     const emMetas = ok && st.area === 'metas', emProd = ok && st.area === 'produtividade';
     $('#v-estado').hidden = ok;
-    for (const a of ['fila', 'geral', 'gestao']) $('#v-' + a).hidden = !ok || emMetas || emProd || st.aba !== a;
+    for (const a of ['fila', 'geral', 'gestao', 'eventual']) $('#v-' + a).hidden = !ok || emMetas || emProd || st.aba !== a;
     $('#v-metas').hidden = !emMetas;
     $('#v-prod').hidden = !emProd;
     if (!ok) {
-      for (const a of ['fila', 'geral', 'gestao', 'metas', 'prod']) $('#v-' + a).innerHTML = '';
+      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod']) $('#v-' + a).innerHTML = '';
       renderEstado(); renderModal(); return;
     }
     $('#v-estado').innerHTML = '';
     if (emMetas) {
-      for (const a of ['fila', 'geral', 'gestao', 'prod']) $('#v-' + a).innerHTML = '';
+      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'prod']) $('#v-' + a).innerHTML = '';
       renderMetas(); renderModal(); return;
     }
     if (emProd) {
-      for (const a of ['fila', 'geral', 'gestao', 'metas']) $('#v-' + a).innerHTML = '';
+      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas']) $('#v-' + a).innerHTML = '';
       renderProd(); renderModal(); return;
     }
     $('#v-metas').innerHTML = ''; $('#v-prod').innerHTML = '';
-    for (const a of ['fila', 'geral', 'gestao']) if (a !== st.aba) $('#v-' + a).innerHTML = '';
+    for (const a of ['fila', 'geral', 'gestao', 'eventual']) if (a !== st.aba) $('#v-' + a).innerHTML = '';
     if (st.aba === 'fila') renderLista('fila');
     else if (st.aba === 'geral') renderLista('geral');
+    else if (st.aba === 'eventual') renderLista('eventual');
     else if (window.PAINEL.renderGestao) {
       const foco = document.activeElement && document.activeElement.id;
       const pos = foco === 'busca' ? document.activeElement.selectionStart : null;
@@ -437,7 +456,7 @@
     const atual = st.area === 'metas' ? st.abaMetas : st.area === 'produtividade' ? st.abaProd : st.aba;
     const nav = $('#abas');
     nav.hidden = abas.length < 2;
-    const rot = { fila: 'Fila', geral: 'Geral', gestao: 'Gestão', visao: 'Visão geral', pendentes: 'Pendentes', resumo: 'Visão geral', pessoas: 'Por pessoa' };
+    const rot = { fila: 'Fila', eventual: 'Eventual', geral: 'Geral', gestao: 'Gestão', visao: 'Visão geral', pendentes: 'Pendentes', resumo: 'Visão geral', pessoas: 'Por pessoa' };
     const nAvisos = outraArea ? 0 : urgenciasDoGestor();
     const h = abas.map(a => `<button class="aba" role="tab" id="aba-${a}" aria-selected="${a === atual}" data-aba="${a}">${rot[a]}${a === 'gestao' && nAvisos ? ` <span class="contagem">${nAvisos}</span>` : ''}</button>`).join('');
     if (nav.dataset.h !== h) { nav.innerHTML = h; nav.dataset.h = h; }
@@ -501,7 +520,7 @@
   }
 
   function linhaHTML(l, modo) {
-    const geral = modo === 'geral';
+    const geral = modo === 'geral', eventual = modo === 'eventual';
     const selos = [];
     if (l.tipo === 'urgente') selos.push('<span class="selo urgente">Urgente</span>');
     if (l.tipo === 'devolvido') selos.push('<span class="selo devolvido">Devolvido</span>');
@@ -513,7 +532,9 @@
       selos.push(`<span class="selo paralelo" tabindex="0" role="note" aria-label="Fluxo paralelo. ${esc(balaoFp)}" data-balao="${esc(balaoFp)}">Fluxo paralelo</span>`);
     }
     if (l.devolvido) selos.push('<span class="selo devolvido">Devolvido ao servidor</span>');
-    if (l.concluido) selos.push(`<span class="selo feito">Concluído${l.concluidoEm ? ' em ' + dataHoraBR(l.concluidoEm) : ''}</span>`);
+    // "por <nome>" só quando quem concluiu não é o dono do processo (o dono já aparece em "Responsável" no Geral).
+    const porQuem = l.concluidoPor && l.concluidoPor !== l.dono ? ' por ' + esc(nomeDe(l.concluidoPor)) : '';
+    if (l.concluido) selos.push(`<span class="selo feito">Concluído${porQuem}${l.concluidoEm ? ' em ' + dataHoraBR(l.concluidoEm) : ''}</span>`);
     else if (l.concluidoAntes) selos.push(`<span class="selo anterior" tabindex="0" role="note" data-balao="Esse processo foi concluído e a conclusão foi desfeita" aria-description="Esse processo foi concluído e a conclusão foi desfeita">Concluído antes em ${dataHoraBR(l.concluidoAntes)}</span>`);
     if (l.foraDaLista) {
       const balao = l.dono === st.pessoa ? 'Esse processo não apareceu mais na sua lista na última atualização.' : `Esse processo não apareceu mais na lista de ${nomeDe(l.dono)} na última atualização.`;
@@ -527,13 +548,15 @@
       else if (l.motivo) nota = `<div class="nota"><b>Urgência</b>: ${esc(l.motivo)}</div>`;
     }
     if (l.origem === 'devolucao') nota = `<div class="nota"><b>Devolvido por ${esc(nomeDe(l.de))}</b> em ${dataHoraBR(l.criadaEm)}${l.motivo ? ': ' + esc(l.motivo) : ''}</div>`;
-    const resp = geral ? `<div class="sub sub-resp">Responsável: ${esc(nomeDe(l.dono))}</div>` : '';
+    const resp = geral || eventual ? `<div class="sub sub-resp">Responsável: ${esc(nomeDe(l.dono))}</div>` : '';
     // Fila do diretor: mostra só as etiquetas da lista dele que o processo tem.
     const etqHTML = l.ed && l.ed.length ? `<div class="etiquetas" aria-label="Etiquetas do filtro">${l.ed.map(x => `<span class="chip">${esc(x)}</span>`).join('')}</div>` : '';
     let acoes = '', anot, form = '';
     const dis = st.verComo && modo !== 'gestor' ? ' disabled data-balao="Visualização somente leitura" aria-description="Visualização somente leitura"' : '';
-    if (geral) {
+    if (geral || eventual) {
       anot = l.anot ? `<span class="anot-texto">${esc(l.anot)}</span><span class="quando">${dataHoraBR(l.anotEm)}</span>` : '<span class="muted">—</span>';
+      // Servidor eventual: só marca e desfaz a conclusão (sem anotar, enviar nem devolver)
+      if (eventual) acoes = l.concluido ? '<button class="btn" data-acao="desfazer">Desfazer</button>' : '<button class="btn feito" data-acao="concluir">Marcar como concluído</button>';
     } else {
       if (l.concluido) {
         acoes = `<button class="btn" data-acao="desfazer"${dis}>Desfazer</button>`;
@@ -589,7 +612,7 @@
 
   // Seções da lista (Urgências, Devolvidos, Prioritárias, Fila). Concluídos, quando exibidos, ficam juntos no topo de cada seção.
   function htmlGrupos(modo, visiveis, f) {
-    const geral = modo === 'geral';
+    const geral = modo === 'geral' || modo === 'eventual';
     let h = '';
     const grupos = [
       ['urgente', 'Urgências', 'Por antiguidade na tarefa'],
@@ -621,15 +644,15 @@
   function renderLista(modo) {
     const v = $('#v-' + modo);
     const f = st.vis[modo];
-    const geral = modo === 'geral';
+    const geral = modo === 'geral', eventual = modo === 'eventual';
     if (!st.config) {
       v.innerHTML = `<div class="vazio"><h2>O painel ainda não foi configurado</h2><p>${st.perfil === 'gestor' ? 'Abra a aba Gestão para cadastrar as pessoas e as regras de distribuição.' : 'Aguarde o gestor cadastrar as pessoas e as regras de distribuição.'}</p></div>`;
       return;
     }
-    const todas = aplicarVisao(modo, geral ? linhasGeral(f.pessoa) : filaDe(pessoaAtiva()));
+    const todas = aplicarVisao(modo, geral ? linhasGeral(f.pessoa) : eventual ? linhasEventual() : filaDe(pessoaAtiva()));
     const abertas = todas.filter(l => !l.concluido);
     const conta = t => abertas.filter(l => l.tipo === t).length;
-    const novos = geral ? 0 : abertas.filter(l => l.novo).length;
+    const novos = geral || eventual ? 0 : abertas.filter(l => l.novo).length;
     const { campo: campoEt, lista: listaEt, especial } = etConfig(modo);
     const etiquetas = listaEt.filter(x => todas.some(l => (l[campoEt] || []).includes(x)));
     if (f.etiqueta && !etiquetas.includes(f.etiqueta)) f.etiqueta = '';
@@ -638,14 +661,19 @@
     // ign: filtro a ignorar ('tarefa' ou 'etiqueta'), para contar cada opção do filtro com os outros filtros aplicados.
     const casa = (l, ign) => {
       if (l.concluido && !f.concl) return false;
+      if (ign !== 'setor' && f.setor && l.s !== f.setor) return false;
       if (ign !== 'tarefa' && f.tarefa && l.t !== f.tarefa) return false;
       if (ign !== 'etiqueta' && f.etiqueta && !(l[campoEt] || []).includes(f.etiqueta)) return false;
       if (ign !== 'jd' && !casaJD(l, f.jd)) return false;
       if (!busca) return true;
       if (buscaDig.length >= 4 && R.soDigitos(l.n).includes(buscaDig)) return true;
-      return R.normTexto([l.n, l.c, l.t, l.cg, l.motivo, l.anot, geral ? nomeDe(l.dono) : ''].join(' ')).includes(busca);
+      return R.normTexto([l.n, l.c, l.t, l.cg, l.motivo, l.anot, geral || eventual ? nomeDe(l.dono) : ''].join(' ')).includes(busca);
     };
     const visiveis = todas.filter(l => casa(l));
+    // Filtro de setor (só na aba do servidor eventual): primeiro filtro, com a quantidade de cada setor.
+    const paraSetor = eventual ? todas.filter(l => casa(l, 'setor')) : [];
+    const opSetores = eventual ? SETORES.filter(([id]) => SETORES_EVENTUAL.includes(id))
+      .map(([x, rot]) => ({ x, rot, n: paraSetor.filter(l => l.s === x).length })).filter(o => o.n > 0 || o.x === f.setor) : [];
     // Filtros de tarefa e de etiqueta: só opções com processos, com a quantidade, considerando os outros filtros; a opção escolhida fica mesmo sem processos.
     const paraTarefa = todas.filter(l => casa(l, 'tarefa')), paraEtiqueta = todas.filter(l => casa(l, 'etiqueta'));
     const opTarefas = [...new Set(todas.map(l => l.t).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'))
@@ -663,7 +691,7 @@
     if (modo === 'fila' && st.perfil === 'diretor' && !st.verComo) h += htmlUrgenciaDiretor();
     h += `<div class="contagens">
       <button type="button" class="tile urgente" data-acao="ir" data-tipo="urgente" data-balao="Ir para esta lista" aria-description="Ir para esta lista"><span>Urgentes</span><b>${conta('urgente')}</b></button>
-      ${especial ? '' : `<button type="button" class="tile devolvido" data-acao="ir" data-tipo="devolvido" data-balao="Ir para esta lista" aria-description="Ir para esta lista"><span>Devolvidos</span><b>${conta('devolvido')}</b></button>
+      ${especial || eventual ? '' : `<button type="button" class="tile devolvido" data-acao="ir" data-tipo="devolvido" data-balao="Ir para esta lista" aria-description="Ir para esta lista"><span>Devolvidos</span><b>${conta('devolvido')}</b></button>
       <button type="button" class="tile prioritaria" data-acao="ir" data-tipo="prioritaria" data-balao="Ir para esta lista" aria-description="Ir para esta lista"><span>Prioritárias</span><b>${conta('prioritaria')}</b></button>`}
       <button type="button" class="tile" data-acao="ir" data-tipo="normal" data-balao="Ir para esta lista" aria-description="Ir para esta lista"><span>Na fila</span><b>${conta('normal')}</b></button>
       <div class="tile concluido"><span>Concluídos</span><b>${concluidos}</b></div>
@@ -673,6 +701,7 @@
       <input type="search" id="busca" placeholder="Buscar por número, classe, tarefa, cargo ou anotação" value="${esc(f.busca)}" aria-label="Buscar">
       ${geral && st.perfil !== 'visitante' ? `<select id="filtro-pessoa" aria-label="Filtrar por servidor">${opcoesPessoas(f.pessoa, 'Todos os servidores', null, { diretor: true })}</select>` : ''}
       ${(() => { const vs = visoesDe(pessoaDaVisao(modo)); return vs.length ? `<select id="filtro-visao" aria-label="Mostrar"><option value="">Painel completo</option>${vs.map(v => `<option value="${esc(idVisao(v))}"${idVisao(v) === f.visao ? ' selected' : ''}>${esc(v.nome)}</option>`).join('')}</select>` : ''; })()}
+      ${eventual ? `<select id="filtro-setor" aria-label="Filtrar por setor"><option value="">Todos os setores</option>${opSetores.map(o => `<option value="${o.x}"${o.x === f.setor ? ' selected' : ''}>${esc(o.rot)} (${o.n})</option>`).join('')}</select>` : ''}
       <select id="filtro-tarefa" aria-label="Filtrar por tarefa"><option value="">Todas as tarefas</option>${opTarefas.map(o => `<option value="${esc(o.x)}"${o.x === f.tarefa ? ' selected' : ''}>${esc(o.x)} (${o.n})</option>`).join('')}</select>
       ${etiquetas.length ? `<select id="filtro-etiqueta" aria-label="Filtrar por etiqueta"><option value="">Todas as etiquetas</option>${opEtiquetas.map(o => `<option value="${esc(o.x)}"${o.x === f.etiqueta ? ' selected' : ''}>${esc(o.x)} (${o.n})</option>`).join('')}</select>` : ''}
       ${opJD.length ? `<select id="filtro-jd" aria-label="Filtrar pela situação no JD"><option value="">Todos (JD)</option>${opJD.map(o => `<option value="${o.x}"${o.x === f.jd ? ' selected' : ''}>${esc(o.rot)} (${o.n})</option>`).join('')}</select>` : ''}
@@ -681,7 +710,7 @@
     </div>`;
 
     if (!todas.length) {
-      h += `<div class="vazio"><h2>Nenhum processo ${geral ? 'no painel' : 'na sua fila'}</h2><p>A fila é preenchida quando o gestor envia o relatório do PJe+R. Urgências e devoluções aparecem aqui assim que forem incluídas.</p></div>`;
+      h += `<div class="vazio"><h2>Nenhum processo ${geral ? 'no painel' : eventual ? 'de Comunicação ou Pagamentos' : 'na sua fila'}</h2><p>A fila é preenchida quando o gestor envia o relatório do PJe+R. Urgências e devoluções aparecem aqui assim que forem incluídas.</p></div>`;
       v.innerHTML = h; return;
     }
     h += htmlGrupos(modo, visiveis, f);
@@ -774,7 +803,8 @@
     if (item) reg.item = item;
     const { error } = await st.sb.from('marcas').upsert(reg, { onConflict: 'pessoa,chave' });
     if (error) throw error;
-    (st.marcas[pessoa] = st.marcas[pessoa] || {})[chave] = { em: agora, dev: !!dev, item: item || ((st.marcas[pessoa] || {})[chave] || {}).item || null, desfeito: false };
+    // O banco carimba quem concluiu (gatilho em marcas); aqui só se espelha, para o selo "por <nome>" aparecer na hora.
+    (st.marcas[pessoa] = st.marcas[pessoa] || {})[chave] = { em: agora, dev: !!dev, item: item || ((st.marcas[pessoa] || {})[chave] || {}).item || null, desfeito: false, por: pessoa !== st.pessoa ? st.pessoa : null };
     st.ver++;
   }
 
@@ -786,12 +816,13 @@
     st.ver++;
   }
 
-  // Conclui na fila de quem está logado: marca da lista (número + chegada) ou fecha a urgência/devolução.
+  // Conclui na fila do dono da linha (quem está logado, ou o servidor responsável quando o eventual conclui):
+  // marca da lista (número + chegada) ou fecha a urgência/devolução.
   async function concluirLinha(l) {
-    const agora = Date.now(), p = st.pessoa;
+    const agora = Date.now(), p = l.dono || st.pessoa;
     if (l.origem === 'lista') { await gravarMarca(p, l.chave, false, agora, l); return; }
     const urg = l.origem === 'urgencia';
-    const campos = urg ? { concluida_em: iso(agora), concluida_por: p } : { concluida_em: iso(agora) };
+    const campos = urg ? { concluida_em: iso(agora), concluida_por: st.pessoa } : { concluida_em: iso(agora) };
     const { error } = await st.sb.from(urg ? 'urgencias' : 'devolucoes').update(campos).eq('id', l.id);
     if (error) throw error;
     const lista = urg ? st.urgencias : st.devolucoes;
@@ -803,7 +834,7 @@
 
   // Desfaz a conclusão: apaga a marca da lista ou reabre a urgência/devolução.
   async function desfazerLinha(l) {
-    const p = st.pessoa;
+    const p = l.dono || st.pessoa;
     if (l.origem !== 'lista') {
       const urg = l.origem === 'urgencia';
       const campos = urg ? { concluida_em: null, concluida_por: null } : { concluida_em: null };
@@ -924,7 +955,8 @@
     const f = st.vis[modo];
     const li = alvo.closest('.linha');
     const chave = li && li.dataset.chave;
-    const linha = (modo === 'fila' || modo === 'gestor') && chave ? acharLinha(chave, donoDe(modo)) : null;
+    // Na aba do servidor eventual cada linha tem o seu dono (o servidor responsável), guardado na própria linha.
+    const linha = (modo === 'fila' || modo === 'gestor' || modo === 'eventual') && chave ? acharLinha(chave, modo === 'eventual' ? li.dataset.dono : donoDe(modo)) : null;
     try {
       if (acao === 'du-abrir') {
         st.duAberta = !st.duAberta; render();
@@ -958,10 +990,11 @@
       } else if (acao === 'mais') {
         f.limite += LIMITE_NORMAL; render();
       } else if (acao === 'baixar') {
-        const base = aplicarVisao(modo, modo === 'geral' ? linhasGeral(f.pessoa) : filaDe(pessoaAtiva())).filter(l => (!f.etiqueta || (l[etConfig(modo).campo] || []).includes(f.etiqueta)) && casaJD(l, f.jd));
+        const base = aplicarVisao(modo, modo === 'geral' ? linhasGeral(f.pessoa) : modo === 'eventual' ? linhasEventual() : filaDe(pessoaAtiva())).filter(l => (!f.setor || l.s === f.setor) && (!f.etiqueta || (l[etConfig(modo).campo] || []).includes(f.etiqueta)) && casaJD(l, f.jd));
         const linhas = base.filter(l => f.concl || !l.concluido);
         const hoje = new Date().toISOString().slice(0, 10);
-        baixar(`fila-${modo === 'geral' ? 'geral' : pessoaAtiva()}-${hoje}.csv`, R.paraCsv(linhas, nomes(), modo === 'geral'));
+        const porDono = modo === 'geral' || modo === 'eventual';
+        baixar(`fila-${porDono ? modo : pessoaAtiva()}-${hoje}.csv`, R.paraCsv(linhas, nomes(), porDono));
       }
     } catch (e) { falha(e); }
   }
@@ -1051,7 +1084,7 @@
       else if (a.dataset.acao === 'sair') sair();
       else if (a.dataset.acao === 'tentar') iniciarSessao();
     });
-    for (const [modo, raiz, dentro] of [['fila', '#v-fila', null], ['geral', '#v-geral', null], ['gestor', '#v-gestao', '#gestor-fila']]) {
+    for (const [modo, raiz, dentro] of [['fila', '#v-fila', null], ['geral', '#v-geral', null], ['eventual', '#v-eventual', null], ['gestor', '#v-gestao', '#gestor-fila']]) {
       const v = $(raiz);
       const meu = e => !dentro || !!e.target.closest(dentro);
       v.addEventListener('click', e => { if (meu(e)) aoClicarFila(e, modo); });
@@ -1072,6 +1105,7 @@
         }
         if (!meu(e)) return;
         const f = st.vis[modo];
+        if (e.target.id === 'filtro-setor') { f.setor = e.target.value; f.tarefa = ''; f.etiqueta = ''; f.jd = ''; f.limite = LIMITE_NORMAL; render(); }
         if (e.target.id === 'filtro-tarefa') { f.tarefa = e.target.value; render(); }
         if (e.target.id === 'filtro-etiqueta') { f.etiqueta = e.target.value; f.limite = LIMITE_NORMAL; render(); }
         if (e.target.id === 'filtro-jd') { f.jd = e.target.value; f.limite = LIMITE_NORMAL; render(); }
