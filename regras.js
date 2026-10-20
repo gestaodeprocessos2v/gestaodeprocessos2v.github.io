@@ -227,11 +227,25 @@
 
   // Urgente também quando a tarefa tem "Urgente se etiqueta" e o processo tem essa etiqueta.
   // Na importação usa as etiquetas (it.e); depois da gravação, a marca fica em it.u.
+  // Prioritária também quando o processo tem uma etiqueta com prioridade (it.p, marcado na gravação), se nada o torna urgente.
   function tipoItem(it, tabela) {
     if (it.u) return 'urgente';
     const linha = mapaTarefas(tabela).get(normTexto(it.t));
     if (linha && linha.etiquetaUrgente && temEtiqueta(it.e, linha.etiquetaUrgente)) return 'urgente';
-    return tipoTarefa(it.t, tabela);
+    const t = tipoTarefa(it.t, tabela);
+    return t === 'normal' && it.p ? 'prioritaria' : t;
+  }
+
+  // Etiquetas com caráter de urgência ou prioridade (Gestão). Urgente vence; devolve 'urgente', 'prioritaria' ou null.
+  function prioridadeDaEtiqueta(etiquetas, regras) {
+    if (!etiquetas || !regras || !regras.length) return null;
+    let achou = null;
+    for (const x of regras) {
+      if (!x || !x.e || !temEtiqueta(etiquetas, x.e)) continue;
+      if (x.t === 'urgente') return 'urgente';
+      achou = 'prioritaria';
+    }
+    return achou;
   }
 
   // Regras de exceção (classe ou etiqueta), na ordem da configuração, antes da divisão do setor.
@@ -270,9 +284,11 @@
 
   // Tarefa -> setor (tabela) -> pessoa (regras). pessoaFixa: lista inteira para um estagiário ou residente;
   // "resp" guarda o servidor que as regras indicariam, para a devolução.
-  function prepararLista(itens, tabela, config, pessoaFixa) {
+  // etPrioridade: etiquetas com caráter de urgência ou prioridade, [{ e, t: 'urgente' | 'prioritaria' }] (Gestão).
+  function prepararLista(itens, tabela, config, pessoaFixa, etPrioridade) {
     const mapa = mapaTarefas(tabela);
     const porPessoa = {}, semResponsavel = [], porSetor = {};
+    const porEtiqueta = { urgente: 0, prioritaria: 0 };
     const ignorados = { foraDaVara: 0, semEtiqueta: 0 };
     // Processos que não entram em fila de servidor (tarefas de outros setores da vara): guardados só para as Metas CNJ.
     const outros = new Map();
@@ -301,6 +317,15 @@
       for (const k of ['c', 't', 'cg', 'ch', 'sg']) if (it[k] != null) item[k] = it[k];
       if (r.pessoa) item.resp = r.pessoa;
       if (linha.etiquetaUrgente && temEtiqueta(it.e, linha.etiquetaUrgente)) item.u = true;
+      // Etiqueta com prioridade ou urgência (qualquer tarefa que entra no painel). Urgente vence; prioritária só se nada o torna urgente.
+      // porEtiqueta conta só os processos que mudaram de caráter por causa da etiqueta (não os que a tarefa já tornava urgentes/prioritários).
+      const pri = prioridadeDaEtiqueta(it.e, etPrioridade);
+      if (pri) {
+        const antes = tipoItem(item, mapa);
+        if (pri === 'urgente') item.u = true; else item.p = true;
+        const depois = tipoItem(item, mapa);
+        if (depois !== antes) porEtiqueta[depois]++;
+      }
       // Só as etiquetas escolhidas na configuração, e só em tarefas de Pagamentos, são gravadas (filtro "Etiqueta").
       if (s === 'pagamentos' && it.e) {
         const et = ((config && config.etiquetasFiltro) || []).filter(x => x && temEtiqueta(it.e, x));
@@ -312,7 +337,7 @@
       (porPessoa[pessoa] = porPessoa[pessoa] || []).push(item);
     }
     const semCadastro = [...semCad.values()].map(g => ({ t: g.t, n: g.nums.size })).sort((a, b) => b.n - a.n || a.t.localeCompare(b.t, 'pt-BR'));
-    return { porPessoa, semResponsavel, ignorados, porSetor, outros: [...outros.values()], semCadastro, semCadastroProcessos: numsSemCad.size };
+    return { porPessoa, semResponsavel, ignorados, porSetor, porEtiqueta, outros: [...outros.values()], semCadastro, semCadastroProcessos: numsSemCad.size };
   }
 
   // Filas do diretor e do gestor: escolhidas só por etiqueta, em qualquer tarefa ou setor (independem da tabela de tarefas).
@@ -435,7 +460,7 @@
       const escolhido = paralelo
         ? lista.reduce((a, b) => (ch(b) < ch(a) ? b : a))
         : lista.reduce((a, b) => ((b.ch == null ? -1 : b.ch) > (a.ch == null ? -1 : a.ch) ? b : a));
-      porNumero.set(k, paralelo ? Object.assign({}, escolhido, { fp: true, u: lista.some(x => x.u) || escolhido.u }) : escolhido);
+      porNumero.set(k, paralelo ? Object.assign({}, escolhido, { fp: true, u: lista.some(x => x.u) || escolhido.u, p: lista.some(x => x.p) || escolhido.p }) : escolhido);
     }
     const linhas = [];
     const especiais = [
@@ -494,7 +519,7 @@
   }
 
   root.Regras = {
-    lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem,
+    lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta,
     atribuir, pessoasDoSetor, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, montarFila, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos,
   };

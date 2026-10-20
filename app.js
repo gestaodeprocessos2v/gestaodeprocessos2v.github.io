@@ -29,6 +29,7 @@
     config: null, rascunho: null,
     tarefas: [], mapaTarefas: new Map(), tarefasEm: null, rascTarefas: null, tarefasAlteradas: false,
     filtroTabela: { busca: '', painel: '' },
+    etiquetasPrioridade: [], rascEtPri: [], etPriAlteradas: false,
     resumo: null, jd: null,
     filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
     ver: 0, cache: { ver: -1, m: {} },
@@ -253,6 +254,9 @@
     if (!st.rascunho && st.config) st.rascunho = JSON.parse(JSON.stringify(st.config));
     st.tarefas = porChave.tarefas ? (porChave.tarefas.valor.itens || []) : [];
     st.tarefasEm = porChave.tarefas ? ms(porChave.tarefas.atualizado_em) : null;
+    // Etiquetas com caráter de urgência ou prioridade (Gestão): [{ e, t: 'urgente' | 'prioritaria' }]
+    st.etiquetasPrioridade = porChave.etiquetas_prioridade ? (porChave.etiquetas_prioridade.valor.itens || []) : [];
+    if (!st.etPriAlteradas) st.rascEtPri = JSON.parse(JSON.stringify(st.etiquetasPrioridade));
     st.mapaTarefas = R.mapaTarefas(st.tarefas);
     if (!st.tarefasAlteradas) st.rascTarefas = JSON.parse(JSON.stringify(st.tarefas));
     st.resumo = porChave.resumo ? porChave.resumo.valor : null;
@@ -861,7 +865,7 @@
     st.ver++;
   }
 
-  const itemDe = l => { const item = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u', 'et', 'resp']) if (l[k] != null) item[k] = l[k]; return item; };
+  const itemDe = l => { const item = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u', 'p', 'et', 'resp']) if (l[k] != null) item[k] = l[k]; return item; };
   const acharLinha = (chave, pessoa) => filaDe(pessoa || pessoaAtiva()).find(l => l.chave === chave);
 
   async function enviarProcesso(l, para, motivo) {
