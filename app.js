@@ -187,14 +187,14 @@
     return ['geral'];
   }
 
-  // Áreas do painel (menu do logo). Metas CNJ: gestor, servidores, magistrado(a) e diretor de secretaria.
+  // Áreas do painel (menu do logo). Metas CNJ: gestor, servidores, magistrado(a), diretor de secretaria e servidor eventual.
   const HOJE = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   const AREAS = {
     fila: { rotulo: 'Fila de Trabalho', titulo: 'Fila de Trabalho', subtitulo: 'Gestão de Processos · 2ª Vara Federal · ' + HOJE, pagina: 'Fila de Trabalho · Gestão de Processos' },
     metas: { rotulo: 'Metas CNJ', titulo: 'Metas CNJ', subtitulo: 'Metas Nacionais 2026 · 2ª Vara Federal', pagina: 'Metas CNJ · Gestão de Processos' },
     produtividade: { rotulo: 'Produtividade da Vara', titulo: 'Produtividade da Vara', subtitulo: 'Atividades da equipe · 2ª Vara Federal', pagina: 'Produtividade da Vara · Gestão de Processos' },
   };
-  const PERFIS_METAS = ['gestor', 'servidor', 'magistrado', 'diretor'];
+  const PERFIS_METAS = ['gestor', 'servidor', 'magistrado', 'diretor', 'eventual'];
   // Produtividade da Vara (dados por pessoa): só gestor, diretor e magistrado. O banco também confere (RLS).
   const PERFIS_PRODUTIVIDADE = ['gestor', 'diretor', 'magistrado'];
   function areasDisponiveis() {
