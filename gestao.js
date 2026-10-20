@@ -147,7 +147,7 @@
     render();
   }
 
-  const itemMin = it => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u', 'p', 'et']) if (it[k] != null) o[k] = it[k]; return o; };
+  const itemMin = it => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u', 'p', 'eu', 'ep', 'et']) if (it[k] != null) o[k] = it[k]; return o; };
 
   // As urgentes da lista seguem a lista: saem quando o processo sai do relatório novo. Só ficam até o servidor concluir
   // as urgências incluídas à mão (gestor) e as enviadas para outra pessoa. Aqui some o que antigas versões gravaram como "da lista".

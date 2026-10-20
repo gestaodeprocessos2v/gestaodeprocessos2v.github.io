@@ -318,6 +318,8 @@
       if (nota && nota.texto) { l.anot = nota.texto; l.anotEm = nota.em; }
       if (l.fora) l.foraDaLista = true;
       l.dono = p;
+      // Por que é urgente ou prioritário (etiquetas gravadas na importação e tarefa); as filas do diretor e do gestor não usam a tabela de tarefas.
+      if (l.tipo === 'urgente' || l.tipo === 'prioritaria') l.criterios = R.criteriosItem(l, ehEspecial(p) ? new Map() : st.mapaTarefas);
     }
     fila.sort(R.comparar);
     const todasMarcas = st.marcas[p] || {};
@@ -544,6 +546,8 @@
       const balao = l.dono === st.pessoa ? 'Esse processo não apareceu mais na sua lista na última atualização.' : `Esse processo não apareceu mais na lista de ${nomeDe(l.dono)} na última atualização.`;
       selos.push(`<span class="selo fora" tabindex="0" role="note" aria-label="Saiu da lista. ${esc(balao)}" data-balao="${esc(balao)}">Saiu da lista</span>`);
     }
+    // Critério da urgência ou da prioridade (etiquetas em quadrinhos), logo abaixo dos selos.
+    const criteriosH = (l.criterios || []).length ? `<div class="criterios">${l.criterios.map(c => `<div class="criterio"><span class="criterio-rot">${esc(c.r)}${c.e && c.e.length ? ':' : ''}</span>${c.e && c.e.length ? ` <span class="etiquetas">${c.e.map(x => `<span class="chip">${esc(x)}</span>`).join('')}</span>` : ''}</div>`).join('')}</div>` : '';
     const d = dias(l.ch);
     let nota = '';
     if (l.origem === 'urgencia') {
@@ -599,6 +603,7 @@
       <div class="c-num">
         <button class="num" data-acao="copiar" data-n="${esc(l.n)}" data-balao="Copiar número" aria-description="Copiar número">${numeroHTML(l.n)}</button>
         ${selos.length ? `<div class="selos">${selos.join('')}</div>` : ''}
+        ${criteriosH}
         ${cardJD(l)}
         ${nota}${resp}${etqHTML}
       </div>
@@ -800,7 +805,7 @@
 
   // ---------- gravações da fila ----------
   // Guarda junto os dados do processo: assim o concluído continua aparecendo (em "Mostrar concluídos") mesmo que saia da lista nova.
-  const fotoDe = l => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'tipo', 'ed']) if (l[k] != null) o[k] = l[k]; return o; };
+  const fotoDe = l => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'tipo', 'ed', 'eu', 'ep']) if (l[k] != null) o[k] = l[k]; return o; };
   async function gravarMarca(pessoa, chave, dev, agora, linha) {
     const item = linha ? fotoDe(linha) : null;
     const reg = { pessoa, chave, em: iso(agora), devolvido: !!dev, desfeito: false };

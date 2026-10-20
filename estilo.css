@@ -275,6 +275,10 @@ td.mono { white-space: nowrap; }
 .incluir-urg-dir { margin-bottom: 12px; }
 .etiquetas { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .etiquetas .chip { font-size: .72rem; padding: 1px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--sunken); }
+/* Critério da urgência ou da prioridade, logo abaixo dos selos: rótulo discreto e as etiquetas em quadrinhos */
+.criterios { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; }
+.criterio { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--muted); font-size: 12.5px; }
+.criterio .etiquetas { margin-top: 0; }
 .pessoa-cfg { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 10rem) auto; gap: 6px; align-items: center; }
 @media (max-width: 560px) {
   .regra { grid-template-columns: 1fr 1fr; }

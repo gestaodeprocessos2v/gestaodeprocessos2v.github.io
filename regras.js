@@ -204,6 +204,18 @@
     return String(alvos).split('|').map(normTexto).filter(Boolean).some(a => lista.includes(', ' + a + ','));
   }
 
+  // Como temEtiqueta, mas devolve as alternativas de "alvos" que casaram, com o texto original (sem repetir).
+  function etiquetasQueCasam(etiquetas, alvos) {
+    if (!etiquetas || !alvos) return [];
+    const lista = ', ' + normTexto(etiquetas) + ',';
+    const achadas = [];
+    for (const alt of String(alvos).split('|')) {
+      const a = normTexto(alt), txt = alt.trim();
+      if (a && txt && lista.includes(', ' + a + ',') && !achadas.includes(txt)) achadas.push(txt);
+    }
+    return achadas;
+  }
+
   // Alternativas separadas por "|": sigla (sem espaço) casa por igualdade; nome por extenso casa por "contém".
   function casaPadrao(valor, padrao) {
     const v = normTexto(valor);
@@ -236,16 +248,42 @@
     return t === 'normal' && it.p ? 'prioritaria' : t;
   }
 
-  // Etiquetas com caráter de urgência ou prioridade (Gestão). Urgente vence; devolve 'urgente', 'prioritaria' ou null.
-  function prioridadeDaEtiqueta(etiquetas, regras) {
-    if (!etiquetas || !regras || !regras.length) return null;
-    let achou = null;
+  // Etiquetas com caráter de urgência ou prioridade (Gestão): as etiquetas do processo que casaram, por caráter.
+  function causasDeEtiqueta(etiquetas, regras) {
+    const r = { urgente: [], prioritaria: [] };
+    if (!etiquetas || !regras || !regras.length) return r;
     for (const x of regras) {
-      if (!x || !x.e || !temEtiqueta(etiquetas, x.e)) continue;
-      if (x.t === 'urgente') return 'urgente';
-      achou = 'prioritaria';
+      if (!x || !x.e) continue;
+      const k = x.t === 'urgente' ? 'urgente' : 'prioritaria';
+      for (const e of etiquetasQueCasam(etiquetas, x.e)) if (!r[k].includes(e)) r[k].push(e);
     }
-    return achou;
+    return r;
+  }
+
+  // Urgente vence; devolve 'urgente', 'prioritaria' ou null.
+  function prioridadeDaEtiqueta(etiquetas, regras) {
+    const c = causasDeEtiqueta(etiquetas, regras);
+    return c.urgente.length ? 'urgente' : c.prioritaria.length ? 'prioritaria' : null;
+  }
+
+  // Por que um processo da lista é urgente ou prioritário: [{ r: 'Urgência pela etiqueta', e: ['…'] }, { r: 'Prioridade pela tarefa' }].
+  // Etiquetas vêm gravadas na importação (l.eu, l.ep); a causa por tarefa sai da tabela de tarefas. Urgências enviadas ou
+  // incluídas à mão (origem diferente de 'lista') já têm o seu próprio aviso e ficam de fora.
+  function criteriosItem(l, tabela) {
+    const out = [];
+    if (!l || l.origem !== 'lista') return out;
+    const linha = mapaTarefas(tabela).get(normTexto(l.t));
+    if (l.tipo === 'urgente') {
+      if (linha && linha.urgente) out.push({ r: 'Urgência pela tarefa' });
+      let e = l.eu || [];
+      // Processos gravados antes de guardarmos as etiquetas: a urgência vinda de "Urgente se etiqueta" é explicada pela tarefa.
+      if (!e.length && l.u && linha && linha.etiquetaUrgente) e = String(linha.etiquetaUrgente).split('|').map(s => s.trim()).filter(Boolean);
+      if (e.length) out.push({ r: 'Urgência pela etiqueta', e });
+    } else if (l.tipo === 'prioritaria') {
+      if (linha && linha.zerar) out.push({ r: 'Prioridade pela tarefa' });
+      if (l.ep && l.ep.length) out.push({ r: 'Prioridade pela etiqueta', e: l.ep });
+    }
+    return out;
   }
 
   // Regras de exceção (classe ou etiqueta), na ordem da configuração, antes da divisão do setor.
@@ -316,13 +354,17 @@
       const item = { n: it.n, s };
       for (const k of ['c', 't', 'cg', 'ch', 'sg']) if (it[k] != null) item[k] = it[k];
       if (r.pessoa) item.resp = r.pessoa;
-      if (linha.etiquetaUrgente && temEtiqueta(it.e, linha.etiquetaUrgente)) item.u = true;
+      // "eu" e "ep": as etiquetas do processo que causaram a urgência e a prioridade (as do CSV não ficam guardadas; estas sim).
+      const cu = linha.etiquetaUrgente ? etiquetasQueCasam(it.e, linha.etiquetaUrgente) : [];
+      if (cu.length) { item.u = true; item.eu = cu; }
       // Etiqueta com prioridade ou urgência (qualquer tarefa que entra no painel). Urgente vence; prioritária só se nada o torna urgente.
       // porEtiqueta conta só os processos que mudaram de caráter por causa da etiqueta (não os que a tarefa já tornava urgentes/prioritários).
-      const pri = prioridadeDaEtiqueta(it.e, etPrioridade);
+      const causas = causasDeEtiqueta(it.e, etPrioridade);
+      const pri = causas.urgente.length ? 'urgente' : causas.prioritaria.length ? 'prioritaria' : null;
       if (pri) {
         const antes = tipoItem(item, mapa);
-        if (pri === 'urgente') item.u = true; else item.p = true;
+        if (pri === 'urgente') { item.u = true; item.eu = [...new Set([...(item.eu || []), ...causas.urgente])]; }
+        else { item.p = true; item.ep = causas.prioritaria; }
         const depois = tipoItem(item, mapa);
         if (depois !== antes) porEtiqueta[depois]++;
       }
@@ -460,7 +502,9 @@
       const escolhido = paralelo
         ? lista.reduce((a, b) => (ch(b) < ch(a) ? b : a))
         : lista.reduce((a, b) => ((b.ch == null ? -1 : b.ch) > (a.ch == null ? -1 : a.ch) ? b : a));
-      porNumero.set(k, paralelo ? Object.assign({}, escolhido, { fp: true, u: lista.some(x => x.u) || escolhido.u, p: lista.some(x => x.p) || escolhido.p }) : escolhido);
+      const uniao = campo => [...new Set(lista.flatMap(x => x[campo] || []))];
+      const eu = uniao('eu'), ep = uniao('ep');
+      porNumero.set(k, paralelo ? Object.assign({}, escolhido, { fp: true, u: lista.some(x => x.u) || escolhido.u, p: lista.some(x => x.p) || escolhido.p }, eu.length ? { eu } : {}, ep.length ? { ep } : {}) : escolhido);
     }
     const linhas = [];
     const especiais = [
@@ -498,6 +542,7 @@
       ['Número do Processo', l => l.n],
       ...(comResp ? [['Responsável', l => (nomes && nomes[l.dono]) || l.dono || '']] : []),
       ['Situação', l => ({ urgente: 'Urgente', devolvido: 'Devolvido', prioritaria: 'Prioritária', normal: '' })[l.tipo] + (l.concluido ? ' (concluído)' : '')],
+      ['Critério', l => (l.criterios || []).map(c => c.r + (c.e && c.e.length ? ': ' + c.e.join('; ') : '')).join(' | ')],
       ['Classe', l => l.c], ['Tarefa', l => l.t], ['Cargo Judicial', l => l.cg],
       ['Data de Chegada', l => l.ch ? new Date(l.ch).toLocaleDateString('pt-BR') : ''],
       ['Anotação', l => l.anot],
@@ -519,7 +564,7 @@
   }
 
   root.Regras = {
-    lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta,
+    lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, causasDeEtiqueta, etiquetasQueCasam, criteriosItem,
     atribuir, pessoasDoSetor, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, montarFila, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos,
   };
