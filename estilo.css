@@ -81,6 +81,8 @@ button.simbolo:disabled { cursor: default; opacity: 1; }
 #itens-areas { display: flex; flex-direction: column; gap: 2px; }
 #itens-areas[hidden], .menu-sep[hidden] { display: none; }
 .menu-sep { border: 0; border-top: 1px solid var(--line); margin: 6px 4px; }
+/* Linha divisória dentro de um seletor (<hr> em <select>, como no filtro de servidor/setor das Metas): cinza suave, igual à do menu do logo */
+select hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; height: 0; color: var(--line); }
 .menu-aparencia-tit { padding: 4px 12px 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .seg-tema { display: flex; gap: 2px; padding: 3px; margin: 0 4px 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--sunken); }
 .seg-tema button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: none; padding: 7px 8px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; color: var(--ink); white-space: nowrap; }
