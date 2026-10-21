@@ -551,7 +551,7 @@
       const eu = o.email === st.email;
       return `<div class="acesso-cfg">
       <input type="text" id="cfg-o-nome-${i}" value="${esc(o.nome)}" aria-label="Nome">
-      <span class="perfil-cel"><select id="cfg-o-perfil-${i}" aria-label="Perfil" ${eu ? 'disabled' : ''}>${opcPerfil(o.perfil)}</select>${o.perfil === 'magistrado' ? `<select id="cfg-o-mag-${i}" aria-label="Magistrado: titular ou substituta"><option value=""${!o.magistrado ? ' selected' : ''}>Não definido</option><option value="T"${o.magistrado === 'T' ? ' selected' : ''}>Titular</option><option value="S"${o.magistrado === 'S' ? ' selected' : ''}>Substituta</option></select>` : ''}</span>
+      <span class="perfil-cel"><select id="cfg-o-perfil-${i}" aria-label="Perfil" ${eu ? 'disabled' : ''}>${opcPerfil(o.perfil)}</select>${o.perfil === 'magistrado' ? `<select id="cfg-o-mag-${i}" aria-label="Magistrado(a): titular ou substituta"><option value=""${!o.magistrado ? ' selected' : ''}>Não definido</option><option value="T"${o.magistrado === 'T' ? ' selected' : ''}>Titular</option><option value="S"${o.magistrado === 'S' ? ' selected' : ''}>Substituta</option></select>` : ''}</span>
       <input type="text" id="cfg-o-email-${i}" value="${esc(o.email || '')}" aria-label="E-mail Google" inputmode="email" autocomplete="off" placeholder="E-mail Google (Gmail)" ${eu ? 'disabled' : ''}>
       <button class="btn" type="button" data-acao="cfg-remover-outro" data-i="${i}" ${eu ? 'disabled data-balao="Seu próprio acesso não pode ser removido" data-balao-dir="dir" aria-description="Seu próprio acesso não pode ser removido"' : ''}>Remover</button></div>`;
     }).join('');
@@ -594,7 +594,7 @@
         <select id="cfg-nova-tipo" aria-label="Perfil da nova pessoa">${opcoesTipo('servidor')}</select>
         <button class="btn" type="button" data-acao="cfg-add-pessoa">Adicionar pessoa</button></div>
       <h3>Outros acessos (sem fila própria)</h3>
-      <p class="small muted">Gestor, Magistrado e Diretor de Secretaria veem todas as filas; Visitante vê só o painel geral, sem filtrar por servidor. Só o Gestor acessa esta aba.</p>
+      <p class="small muted">Gestor, Magistrado(a) e Diretor de Secretaria veem todas as filas; Visitante vê só o painel geral, sem filtrar por servidor. Só o Gestor acessa esta aba.</p>
       ${outros.length ? '<div class="acesso-cfg cab-cfg"><span>Nome</span><span>Perfil</span><span>E-mail Google</span><span></span></div>' : ''}
       ${outrosH}
       <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-outro">Adicionar acesso</button></div>

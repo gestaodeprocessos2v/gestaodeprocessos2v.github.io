@@ -515,7 +515,7 @@
   function faixaMagHTML(f, contar, pre, idRot) {
     const off = magOffDe(f);
     const botoes = MAGISTRADOS.map(([l, nome, cargo, cor]) => { const n = contar(l); return `<button type="button" class="prod-chip" aria-pressed="${!off.includes(l)}" data-acao="${pre}mag" data-v="${l}" style="--c:var(${cor})" data-balao="${esc(`${cargo}: ${n.toLocaleString('pt-BR')} ${n === 1 ? 'processo' : 'processos'} (letra ${l})`)}"><i></i>${esc(nome)}</button>`; }).join('');
-    return `<div class="prod-chips"><div class="prod-chips-bloco"><span class="prod-chips-rot" id="${idRot}">Magistrado</span><div class="prod-chips-lista" role="group" aria-labelledby="${idRot}">${botoes}</div></div>${noPadraoMag(f) ? '' : `<button class="btn discreto" type="button" data-acao="${pre}mag-padrao">Restaurar padrão</button>`}</div>`;
+    return `<div class="prod-chips"><div class="prod-chips-bloco"><span class="prod-chips-rot" id="${idRot}">Magistrado(a)</span><div class="prod-chips-lista" role="group" aria-labelledby="${idRot}">${botoes}</div></div>${noPadraoMag(f) ? '' : `<button class="btn discreto" type="button" data-acao="${pre}mag-padrao">Restaurar padrão</button>`}</div>`;
   }
 
   function numeroHTML(n) {
@@ -754,7 +754,7 @@
       v.innerHTML = h; return;
     }
     h += htmlGrupos(modo, visiveis, f);
-    if (!visiveis.length) h += nenhumMag ? `<div class="vazio"><p>Selecione ao menos um magistrado.</p></div>` : `<div class="vazio"><h2>Nenhum processo com esse filtro</h2><p>Limpe a busca ou escolha outra tarefa.</p></div>`;
+    if (!visiveis.length) h += nenhumMag ? `<div class="vazio"><p>Selecione ao menos um(a) magistrado(a).</p></div>` : `<div class="vazio"><h2>Nenhum processo com esse filtro</h2><p>Limpe a busca ou escolha outra tarefa.</p></div>`;
     const foco = document.activeElement && document.activeElement.id;
     const pos = foco === 'busca' ? document.activeElement.selectionStart : null;
     v.innerHTML = h;
@@ -835,7 +835,7 @@
       <div class="filtros dentro"><input type="search" id="busca" placeholder="Buscar por número, classe, tarefa ou anotação" value="${esc(f.busca)}" aria-label="Buscar na fila do gestor">
       <label class="small"><input type="checkbox" id="mostrar-concluidos"${f.concl ? ' checked' : ''}> Mostrar concluídos</label></div>`;
     h += todas.length ? htmlGrupos('gestor', visiveis, f) : '<div class="vazio"><p>Nenhum processo na fila do gestor.</p></div>';
-    if (todas.length && !visiveis.length) h += `<div class="vazio"><p>${magOffDe(f).length >= MAGISTRADOS.length ? 'Selecione ao menos um magistrado.' : 'Nenhum processo com esse filtro.'}</p></div>`;
+    if (todas.length && !visiveis.length) h += `<div class="vazio"><p>${magOffDe(f).length >= MAGISTRADOS.length ? 'Selecione ao menos um(a) magistrado(a).' : 'Nenhum processo com esse filtro.'}</p></div>`;
     return h + '</div>';
   }
 

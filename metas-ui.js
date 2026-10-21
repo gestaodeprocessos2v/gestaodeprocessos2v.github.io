@@ -1,4 +1,4 @@
-﻿/* Fila de Trabalho da Vara — Parte 3: área "Metas CNJ" (telas de consulta) e o envio das planilhas do Portal BI (aba Gestão).
+/* Fila de Trabalho da Vara — Parte 3: área "Metas CNJ" (telas de consulta) e o envio das planilhas do Portal BI (aba Gestão).
    Os números vêm de duas planilhas baixadas à mão do Portal BI do TRF5; a leitura está em metas.js. */
 (function () {
   'use strict';
@@ -177,7 +177,7 @@
     // Botões de magistrado: contados com os outros filtros aplicados, para o botão não sumir nem mudar ao ser desligado.
     const baseMag = pendentesFiltrados(false, true);
     const faixaMag = faixaMagHTML(f, l => baseMag.filter(it => magDe(it) === l).length, 'metas-', 'rot-mag');
-    const nenhumMag = P.magOffDe(f).length >= P.MAGISTRADOS.length ? '<div class="vazio"><p>Selecione ao menos um magistrado.</p></div>' : '';
+    const nenhumMag = P.magOffDe(f).length >= P.MAGISTRADOS.length ? '<div class="vazio"><p>Selecione ao menos um(a) magistrado(a).</p></div>' : '';
     const opMetas = M.METAS.filter(m => m.pend).map(m => ({ m, n: qtdMeta(m.id) })).filter(x => x.n > 0 || f.meta === x.m.id)
       .map(x => `<option value="${x.m.id}"${f.meta === x.m.id ? ' selected' : ''}>${esc(x.m.nome)} (${x.n.toLocaleString('pt-BR')})</option>`).join('');
     const opInst = M.INSTANCIAS.map(i => `<option value="${esc(i)}"${f.inst === i ? ' selected' : ''}>${esc(i)}</option>`).join('');
@@ -186,7 +186,7 @@
       ...FILTROS_SETOR.map(([v, rot]) => `<option value="${v}"${f.serv === v ? ' selected' : ''}>${esc(rot)}</option>`), '<hr>', `<option value="${OUTROS}"${f.serv === OUTROS ? ' selected' : ''}>Outros setores da vara</option>`, `<option value="${SEM_LISTA}"${f.serv === SEM_LISTA ? ' selected' : ''}>Não localizados</option>`].join('');
     const todos = cruzar(st.metas.pend || []), semLista = todos.filter(it => !it.lista), nOutros = todos.filter(it => it.lista && it.lista.outro).length;
     const alertaSem = semLista.length ? `<div class="aviso novo"><b>${semLista.length.toLocaleString('pt-BR')} ${semLista.length === 1 ? 'processo pendente não foi localizado' : 'processos pendentes não foram localizados'}</b> nem nas listas dos servidores nem nas dos outros setores da vara (aparecem no fim da tabela). Pode ser processo recém-chegado ou de lista ainda não importada.${st.metas.outrosErro ? ' Não consegui ler a lista dos outros setores agora.' : !st.metas.outrosEm ? ' A lista dos outros setores só passa a existir depois do próximo envio da lista do PJe na Gestão.' : ''} ${semLista.length <= 12 ? 'Números: ' + semLista.map(it => esc(it.n)).join('; ') + '.' : 'Use o filtro “Não localizados” para ver todos.'}</div>` : '';
-    const infoOutros = nOutros ? `<p class="small muted"><b class="mono">${nOutros.toLocaleString('pt-BR')}</b> ${nOutros === 1 ? 'processo está' : 'processos estão'} em tarefas de outros setores da vara (como Assessoria, Magistrado ou Controle de prazo); nesses a coluna mostra o setor no lugar do servidor${st.metas.outrosEm ? ` (lista completa de ${esc(dataHoraBR(st.metas.outrosEm))})` : ''}.</p>` : '';
+    const infoOutros = nOutros ? `<p class="small muted"><b class="mono">${nOutros.toLocaleString('pt-BR')}</b> ${nOutros === 1 ? 'processo está' : 'processos estão'} em tarefas de outros setores da vara (como Assessoria, Magistrado(a) ou Controle de prazo); nesses a coluna mostra o setor no lugar do servidor${st.metas.outrosEm ? ` (lista completa de ${esc(dataHoraBR(st.metas.outrosEm))})` : ''}.</p>` : '';
     const linhas = mostrar.map(it => `<tr${it.lista ? '' : ' class="sem-lista"'}><td><button type="button" class="num" data-acao="copiar" data-n="${esc(it.n)}" data-balao="Copiar número" aria-description="Copiar número">${esc(it.n)}${letraMag(it)}</button></td><td>${it.lista ? (it.lista.outro ? `<span class="muted" tabindex="0" role="note" data-balao="Tarefa de outro setor da vara, sem servidor responsável" aria-description="Tarefa de outro setor da vara, sem servidor responsável">${esc(nomeLista(it))}</span>` : esc(nomeLista(it))) : '<span class="muted">Não localizado</span>'}</td><td>${esc(it.lista ? it.lista.tarefa : '')}</td><td class="mono">${esc(chegadaTxt(it))}</td><td>${esc(it.i)}</td><td>${esc(M.formatarClasse((it.c || '').replace(/^\d+\s*-\s*/, '')))}</td><td class="mono">${it.d ? esc(dataBR(Date.parse(it.d + 'T12:00:00'))) : '—'}</td><td>${(it.m || []).map(id => `<span class="chip-meta">${esc(nomeCurto(id))}</span>`).join(' ')}</td></tr>`).join('');
     const aviso = !(st.metas.pend || []).length ? `<div class="vazio"><p>${st.metas.pendErro ? 'Não foi possível carregar a lista agora.' : 'Nenhum processo pendente na última carga.'}</p></div>` : '';
     const diverge = !doEnvio || doEnvio.id !== e.id;
@@ -207,7 +207,7 @@
 
   function csvPendentes() {
     const q = v => { const s = String(v == null ? '' : v); return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    const cab = ['Número do Processo', 'Magistrado', 'Servidor ou setor', 'Tarefa atual', 'Entrada na tarefa', 'Instância', 'Classe', '1ª Distribuição', 'Metas pendentes'];
+    const cab = ['Número do Processo', 'Magistrado(a)', 'Servidor ou setor', 'Tarefa atual', 'Entrada na tarefa', 'Instância', 'Classe', '1ª Distribuição', 'Metas pendentes'];
     const lin = pendentesFiltrados().map(it => [it.n, (P.MAGISTRADOS.find(x => x[0] === magDe(it)) || [])[1] || '', it.lista ? nomeLista(it) : 'Não localizado', it.lista ? it.lista.tarefa : '', it.lista && it.lista.chegada ? dataBR(it.lista.chegada) : '', it.i, M.formatarClasse(it.c), it.d ? dataBR(Date.parse(it.d + 'T12:00:00')) : '', (it.m || []).map(nomeCurto).join(', ')].map(q).join(';'));
     return '﻿' + [cab.map(q).join(';'), ...lin].join('\r\n');
   }

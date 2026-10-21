@@ -551,7 +551,7 @@
       ...(comResp ? [['Responsável', l => (nomes && nomes[l.dono]) || l.dono || '']] : []),
       ['Situação', l => ({ urgente: 'Urgente', devolvido: 'Devolvido', prioritaria: 'Prioritária', normal: '' })[l.tipo] + (l.concluido ? ' (concluído)' : '')],
       ['Critério', l => (l.criterios || []).map(c => c.r + (c.e && c.e.length ? ': ' + c.e.join('; ') : '')).join(' | ')],
-      ['Classe', l => l.c], ['Tarefa', l => l.t], ['Magistrado', l => ({ T: 'Titular', S: 'Substituta' })[magistradoDeCargo(l.cg)] || ''],
+      ['Classe', l => l.c], ['Tarefa', l => l.t], ['Magistrado(a)', l => ({ T: 'Titular', S: 'Substituta' })[magistradoDeCargo(l.cg)] || ''],
       ['Data de Chegada', l => l.ch ? new Date(l.ch).toLocaleDateString('pt-BR') : ''],
       ['Anotação', l => l.anot],
       ['Observação', l => l.motivo ? (l.origem === 'devolucao' ? 'Devolvido por ' + ((nomes && nomes[l.de]) || l.de || '') + ': ' : '') + l.motivo : ''],

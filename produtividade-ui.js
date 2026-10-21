@@ -250,7 +250,7 @@
   // ---------- tela da área ----------
   P.renderProd = function () {
     const v = $('#v-prod'), s = S();
-    if (!podeVer()) { v.innerHTML = vazio('Produtividade da Vara', 'Esta área é restrita ao gestor, ao diretor e aos magistrados.'); return; }
+    if (!podeVer()) { v.innerHTML = vazio('Produtividade da Vara', 'Esta área é restrita ao gestor, ao diretor e ao(à) magistrado(a).'); return; }
     if (!s.carregado) { v.innerHTML = vazio('Produtividade da Vara', 'Carregando…'); return; }
     if (s.erro) { v.innerHTML = `<div class="aviso erro">Não foi possível carregar os dados da Produtividade agora. Tente de novo em instantes.</div>`; return; }
     if (!s.equipe.length) { v.innerHTML = vazio('A lista da equipe ainda não foi cadastrada', st.perfil === 'gestor' ? 'Cadastre as pessoas em <b>Gestão → Equipe da Produtividade</b> e depois envie o relatório do BI.' : 'O gestor ainda precisa cadastrar a equipe.'); return; }
@@ -319,7 +319,7 @@
       <td><button class="btn discreto" type="button" data-acao="pr-eq-excluir" data-i="${i}">Excluir</button></td></tr>`).join('');
     return `<section class="painel largo" id="painel-equipe-prod">
       <h2>Equipe da Produtividade</h2>
-      <p>Pessoas que entram no dashboard “Produtividade da Vara”. O <b>nome no BI</b> precisa ser igual ao que o relatório traz (maiúsculas e acentos não importam). Quem não está na lista é descartado quando o relatório é enviado. Se mudar o nome de alguém, os dados já guardados continuam com o nome antigo. Os dados dessa área só são visíveis para o gestor, o diretor e os magistrados.</p>
+      <p>Pessoas que entram no dashboard “Produtividade da Vara”. O <b>nome no BI</b> precisa ser igual ao que o relatório traz (maiúsculas e acentos não importam). Quem não está na lista é descartado quando o relatório é enviado. Se mudar o nome de alguém, os dados já guardados continuam com o nome antigo. Os dados dessa área só são visíveis para o gestor, o diretor e o(a) magistrado(a).</p>
       ${eq.erro ? `<div class="aviso erro">${esc(eq.erro)}</div>` : ''}
       <label class="campo"><span>Importar lista (.xlsx com Servidor, Perfil e Grupo)</span><input type="file" id="pr-lista-arq" accept=".xlsx"></label>
       <datalist id="eq-perfis">${distintos('perfil').map(v => `<option value="${esc(v)}">`).join('')}</datalist>
