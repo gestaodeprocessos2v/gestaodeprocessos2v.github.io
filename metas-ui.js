@@ -143,15 +143,9 @@
   // Magistrado (titular ou substituta), vindo da lista do PJe: servidor -> cargo judicial do item; outros setores -> letra gravada na importação.
   // Devolve 'T', 'S' ou null (sem informação: não localizado, ou lista de outros setores anterior à letra).
   const magDe = it => !it.lista ? null : it.lista.outro ? (it.lista.mag || null) : P.R.magistradoDeCargo(it.lista.cg);
-  // O titular é homem e a substituta é mulher: os textos do painel vão no masculino e no feminino, respectivamente.
-  const MAGISTRADOS = [['T', 'Titular', 'Juiz Federal Titular', '--prod-1'], ['S', 'Substituta', 'Juíza Federal Substituta', '--prod-4']];
-  // Padrão ao abrir: quem entra como magistrado (titular ou substituta, cadastrado na Gestão) vê só os seus processos, com o botão do outro
-  // desligado; os demais perfis, e magistrado sem cadastro de titular/substituta, abrem com os dois ligados. Nada é lembrado entre acessos.
-  const magPadrao = () => st.perfil === 'magistrado' && (st.magistrado === 'T' || st.magistrado === 'S') ? MAGISTRADOS.map(x => x[0]).filter(l => l !== st.magistrado) : [];
-  const magOffAtual = () => st.fMetas.magOff || (st.fMetas.magOff = magPadrao());
-  const noPadraoMag = () => { const off = magOffAtual(), pad = magPadrao(); return off.length === pad.length && off.every(l => pad.includes(l)); };
-  // Botões ligados/desligados: o que está desligado fica em magOff. Sem informação de magistrado só aparece com os dois ligados.
-  const magPassa = it => { const off = magOffAtual(); if (!off.length) return true; const m = magDe(it); return m ? !off.includes(m) : false; };
+  // Botões Titular e Substituta, padrão por perfil e letra: iguais aos da Fila e do Geral, definidos em app.js (P.MAGISTRADOS, P.magPadrao, ...).
+  const { magPadrao, alternarMag, faixaMagHTML, letraMagHTML } = P;
+  const magPassa = it => P.magPassa(st.fMetas, magDe(it));
 
   // semMeta: ignora o filtro de meta (usado para contar os processos de cada meta no próprio filtro).
   // semMag: ignora os botões de magistrado (usado para contar os processos de cada botão).
@@ -165,8 +159,8 @@
       .sort((a, b) => -tem(a.lista, b.lista) || (a.lista ? -tem(a.lista.chegada, b.lista.chegada) || (a.lista.chegada || 0) - (b.lista.chegada || 0) : 0) || a.n.localeCompare(b.n));
   }
   const chegadaTxt = it => it.lista && it.lista.chegada ? dataBR(it.lista.chegada) : '—';
-  // Letra do magistrado colada ao fim do número; o cargo por extenso só no balão. Fica fora de data-n: copiar leva só o número.
-  const letraMag = it => { const l = magDe(it), m = MAGISTRADOS.find(x => x[0] === l); return m ? `<span class="mag" data-balao="${esc(m[2])}">${l}</span>` : ''; };
+  // Letra do magistrado colada ao fim do número; fica fora de data-n: copiar leva só o número.
+  const letraMag = it => letraMagHTML(magDe(it));
 
   function telaPendentes() {
     const e = ultimo();
@@ -181,10 +175,9 @@
     // só metas com processos (com os demais filtros aplicados), cada uma com a quantidade; a meta escolhida fica na lista mesmo sem processos
     const base = pendentesFiltrados(true), qtdMeta = id => base.filter(it => (it.m || []).includes(id)).length;
     // Botões de magistrado: contados com os outros filtros aplicados, para o botão não sumir nem mudar ao ser desligado.
-    const baseMag = pendentesFiltrados(false, true), off = magOffAtual();
-    const botoesMag = MAGISTRADOS.map(([l, nome, cargo, cor]) => `<button type="button" class="prod-chip" aria-pressed="${!off.includes(l)}" data-acao="metas-mag" data-v="${l}" style="--c:var(${cor})" data-balao="${esc(`${cargo}: ${baseMag.filter(it => magDe(it) === l).length.toLocaleString('pt-BR')} ${baseMag.filter(it => magDe(it) === l).length === 1 ? 'processo' : 'processos'} (letra ${l})`)}"><i></i>${esc(nome)}</button>`).join('');
-    const faixaMag = `<div class="prod-chips"><div class="prod-chips-bloco"><span class="prod-chips-rot" id="rot-mag">Magistrado</span><div class="prod-chips-lista" role="group" aria-labelledby="rot-mag">${botoesMag}</div></div>${noPadraoMag() ? '' : '<button class="btn discreto" type="button" data-acao="metas-mag-padrao">Restaurar padrão</button>'}</div>`;
-    const nenhumMag = off.length >= MAGISTRADOS.length ? '<div class="vazio"><p>Selecione ao menos um magistrado.</p></div>' : '';
+    const baseMag = pendentesFiltrados(false, true);
+    const faixaMag = faixaMagHTML(f, l => baseMag.filter(it => magDe(it) === l).length, 'metas-', 'rot-mag');
+    const nenhumMag = P.magOffDe(f).length >= P.MAGISTRADOS.length ? '<div class="vazio"><p>Selecione ao menos um magistrado.</p></div>' : '';
     const opMetas = M.METAS.filter(m => m.pend).map(m => ({ m, n: qtdMeta(m.id) })).filter(x => x.n > 0 || f.meta === x.m.id)
       .map(x => `<option value="${x.m.id}"${f.meta === x.m.id ? ' selected' : ''}>${esc(x.m.nome)} (${x.n.toLocaleString('pt-BR')})</option>`).join('');
     const opInst = M.INSTANCIAS.map(i => `<option value="${esc(i)}"${f.inst === i ? ' selected' : ''}>${esc(i)}</option>`).join('');
@@ -215,7 +208,7 @@
   function csvPendentes() {
     const q = v => { const s = String(v == null ? '' : v); return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
     const cab = ['Número do Processo', 'Magistrado', 'Servidor ou setor', 'Tarefa atual', 'Entrada na tarefa', 'Instância', 'Classe', '1ª Distribuição', 'Metas pendentes'];
-    const lin = pendentesFiltrados().map(it => [it.n, (MAGISTRADOS.find(x => x[0] === magDe(it)) || [])[1] || '', it.lista ? nomeLista(it) : 'Não localizado', it.lista ? it.lista.tarefa : '', it.lista && it.lista.chegada ? dataBR(it.lista.chegada) : '', it.i, M.formatarClasse(it.c), it.d ? dataBR(Date.parse(it.d + 'T12:00:00')) : '', (it.m || []).map(nomeCurto).join(', ')].map(q).join(';'));
+    const lin = pendentesFiltrados().map(it => [it.n, (P.MAGISTRADOS.find(x => x[0] === magDe(it)) || [])[1] || '', it.lista ? nomeLista(it) : 'Não localizado', it.lista ? it.lista.tarefa : '', it.lista && it.lista.chegada ? dataBR(it.lista.chegada) : '', it.i, M.formatarClasse(it.c), it.d ? dataBR(Date.parse(it.d + 'T12:00:00')) : '', (it.m || []).map(nomeCurto).join(', ')].map(q).join(';'));
     return '﻿' + [cab.map(q).join(';'), ...lin].join('\r\n');
   }
 
@@ -247,8 +240,8 @@
       catch (err) { const r = document.createRange(); r.selectNodeContents(a); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Número selecionado. Use Ctrl+C para copiar.'); }
     } else if (a.dataset.acao === 'metas-mag') {
       // liga/desliga o botão: guarda o que está desligado (nada é lembrado entre acessos)
-      const off = magOffAtual(), v = a.dataset.v;
-      st.fMetas.magOff = off.includes(v) ? off.filter(x => x !== v) : [...off, v]; st.fMetas.limite = LIMITE_PASSO; render();
+      const v = a.dataset.v;
+      alternarMag(st.fMetas, v); st.fMetas.limite = LIMITE_PASSO; render();
       const b = document.querySelector(`#v-metas [data-acao="metas-mag"][data-v="${v}"]`); if (b) b.focus();
     } else if (a.dataset.acao === 'metas-mag-padrao') { st.fMetas.magOff = magPadrao(); st.fMetas.limite = LIMITE_PASSO; render(); }
     else if (a.dataset.acao === 'metas-mais') { st.fMetas.limite += LIMITE_PASSO; render(); }

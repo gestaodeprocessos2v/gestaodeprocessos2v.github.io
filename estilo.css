@@ -157,14 +157,13 @@ textarea { width: 100%; resize: vertical; }
 ol.linhas { list-style: none; margin: 0; padding: 0; }
 .linha {
   display: grid;
-  grid-template-columns: 4px minmax(13.5rem, 1.25fr) minmax(6rem, .55fr) minmax(11rem, 1.3fr) minmax(8rem, .9fr) minmax(7.5rem, .65fr) minmax(10rem, 1.1fr) 8.5rem;
+  grid-template-columns: 4px minmax(13.5rem, 1.35fr) minmax(6rem, .6fr) minmax(11rem, 1.4fr) minmax(7.5rem, .7fr) minmax(10rem, 1.2fr) 8.5rem;
   gap: 4px 14px; align-items: start; border-bottom: 1px solid var(--line); padding: 10px 14px 10px 0;
 }
 .linha.cab { padding-block: 7px; background: var(--surface); font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .linha.cab:hover { background: var(--surface); }
 .rot-m { display: none; }
 .c-classe { font-family: var(--font-mono); font-size: 12.5px; }
-.c-cargo { font-size: 13px; }
 .c-chegada { font-variant-numeric: tabular-nums; }
 .c-anot { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .anot-texto { border: 0; background: var(--novo-bg); color: var(--ink); text-align: left; padding: 4px 8px; border-radius: 6px; font-size: 12.5px; white-space: pre-wrap; cursor: text; max-width: 100%; }
@@ -215,10 +214,10 @@ ol.linhas { list-style: none; margin: 0; padding: 0; }
   .tile b { font-size: 1.5rem; }
   .linha { grid-template-columns: 4px minmax(0, 1fr) auto; padding-right: 12px; }
   .linha.cab { display: none; }
-  .linha > .faixa { grid-row: 1 / span 7; }
+  .linha > .faixa { grid-row: 1 / span 6; }
   .linha > .c-num { grid-column: 2; }
   .linha > .acoes { grid-column: 3; grid-row: 1 / span 2; }
-  .linha > .c-classe, .linha > .c-tarefa, .linha > .c-cargo, .linha > .c-chegada, .linha > .c-anot { grid-column: 2 / -1; }
+  .linha > .c-classe, .linha > .c-tarefa, .linha > .c-chegada, .linha > .c-anot { grid-column: 2 / -1; }
   .rot-m { display: inline-block; min-width: 7.5rem; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); font-family: var(--font-body); }
   .c-anot { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
 }

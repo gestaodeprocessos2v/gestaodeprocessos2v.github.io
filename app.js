@@ -36,10 +36,10 @@
     aba: 'fila', verComo: '', area: 'fila', menuAreas: false,
     abaMetas: 'visao', abaProd: 'resumo', prod: null, metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null,
     vis: {
-      fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '' },
-      geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '' },
-      gestor: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '' },
-      eventual: { busca: '', setor: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '' },
+      fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
+      geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
+      gestor: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
+      eventual: { busca: '', setor: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
     },
     gOculta: false, gBase: 0, duAberta: false, novaUrgDir: { numero: '', setor: 'secretaria', responsavel: '', motivo: '' },
     anotando: null, notaRascunho: '', devolvendo: null, devMotivo: '', modal: null,
@@ -146,6 +146,8 @@
       area: 'fila', menuAreas: false, abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, metasImp: null,
       abaProd: 'resumo', prod: null,
     });
+    // o padrão dos botões de magistrado depende de quem entra: quem entrar depois não herda o filtro do usuário anterior
+    for (const k of Object.keys(st.vis)) st.vis[k].magOff = null;
     st.ver++;
   }
 
@@ -493,6 +495,29 @@
     }
   }
 
+  // ---------- magistrado (titular ou substituta) ----------
+  // A letra vem do cargo judicial da lista do PJe. O titular é homem e a substituta é mulher: os textos vão no masculino e no feminino.
+  // Letra, rótulo do botão, cargo por extenso (balão) e cor. Vale na Fila, no Geral, na aba Eventual, na fila do gestor e nas Metas (metas-ui.js).
+  const MAGISTRADOS = [['T', 'Titular', 'Juiz Federal Titular', '--prod-1'], ['S', 'Substituta', 'Juíza Federal Substituta', '--prod-4']];
+  const magDoCargo = cg => R.magistradoDeCargo(cg);
+  // Padrão ao abrir: quem entra como magistrado (titular ou substituta, cadastrado na Gestão) vê só os seus processos, com o botão do outro
+  // desligado; os demais perfis, e magistrado sem cadastro de titular/substituta, abrem com os dois ligados. Nada é lembrado entre acessos.
+  const magPadrao = () => st.perfil === 'magistrado' && (st.magistrado === 'T' || st.magistrado === 'S') ? MAGISTRADOS.map(x => x[0]).filter(l => l !== st.magistrado) : [];
+  // f: o estado de filtros da tela (st.vis[modo] ou st.fMetas); magOff guarda o que está desligado e começa no padrão do perfil.
+  const magOffDe = f => f.magOff || (f.magOff = magPadrao());
+  const noPadraoMag = f => { const off = magOffDe(f), pad = magPadrao(); return off.length === pad.length && off.every(l => pad.includes(l)); };
+  // Sem informação de magistrado (letra vazia) só aparece com os dois botões ligados.
+  const magPassa = (f, letra) => { const off = magOffDe(f); return !off.length || (!!letra && !off.includes(letra)); };
+  const alternarMag = (f, letra) => { const off = magOffDe(f); f.magOff = off.includes(letra) ? off.filter(x => x !== letra) : [...off, letra]; };
+  // Letra colada ao fim do número; o cargo por extenso só no balão. Fica fora do data-n: copiar leva só o número.
+  const letraMagHTML = letra => { const m = MAGISTRADOS.find(x => x[0] === letra); return m ? `<span class="mag" data-balao="${esc(m[2])}">${letra}</span>` : ''; };
+  // Faixa de botões liga/desliga; contar(letra) devolve a quantidade de cada botão; pre é o prefixo das ações ('' ou 'metas-').
+  function faixaMagHTML(f, contar, pre, idRot) {
+    const off = magOffDe(f);
+    const botoes = MAGISTRADOS.map(([l, nome, cargo, cor]) => { const n = contar(l); return `<button type="button" class="prod-chip" aria-pressed="${!off.includes(l)}" data-acao="${pre}mag" data-v="${l}" style="--c:var(${cor})" data-balao="${esc(`${cargo}: ${n.toLocaleString('pt-BR')} ${n === 1 ? 'processo' : 'processos'} (letra ${l})`)}"><i></i>${esc(nome)}</button>`; }).join('');
+    return `<div class="prod-chips"><div class="prod-chips-bloco"><span class="prod-chips-rot" id="${idRot}">Magistrado</span><div class="prod-chips-lista" role="group" aria-labelledby="${idRot}">${botoes}</div></div>${noPadraoMag(f) ? '' : `<button class="btn discreto" type="button" data-acao="${pre}mag-padrao">Restaurar padrão</button>`}</div>`;
+  }
+
   function numeroHTML(n) {
     let c = 0, out = '';
     for (const ch of String(n || '')) {
@@ -602,7 +627,7 @@
     return `<li class="linha t-${l.tipo}${l.concluido ? ' concluido' : ''}" data-chave="${esc(l.chave)}" data-dono="${esc(l.dono || '')}">
       <div class="faixa"></div>
       <div class="c-num">
-        <button class="num" data-acao="copiar" data-n="${esc(l.n)}" data-balao="Copiar número" aria-description="Copiar número">${numeroHTML(l.n)}</button>
+        <button class="num" data-acao="copiar" data-n="${esc(l.n)}" data-balao="Copiar número" aria-description="Copiar número">${numeroHTML(l.n)}${letraMagHTML(magDoCargo(l.cg))}</button>
         ${selos.length ? `<div class="selos">${selos.join('')}</div>` : ''}
         ${criteriosH}
         ${cardJD(l)}
@@ -610,7 +635,6 @@
       </div>
       <div class="c-classe"><span class="rot-m">Classe</span>${esc(l.c || '—')}</div>
       <div class="c-tarefa"><span class="rot-m">Tarefa</span>${esc(l.t || '—')}</div>
-      <div class="c-cargo"><span class="rot-m">Cargo judicial</span>${esc(l.cg || '—')}</div>
       <div class="c-chegada"><span class="rot-m">Chegada</span>${l.ch ? `${dataBR(l.ch)}<span class="sub"> · <span class="mono">${d}</span> ${d === 1 ? 'dia' : 'dias'}</span>` : '—'}</div>
       <div class="c-anot"><span class="rot-m">Anotação</span>${anot}</div>
       <div class="acoes">${acoes}</div>
@@ -618,7 +642,7 @@
     </li>`;
   }
 
-  const CABECALHO_LINHAS = `<li class="linha cab" aria-hidden="true"><div></div><div>Número do processo</div><div>Classe</div><div>Tarefa</div><div>Cargo judicial</div><div>Data de chegada</div><div>Anotação</div><div>Ações</div></li>`;
+  const CABECALHO_LINHAS = `<li class="linha cab" aria-hidden="true"><div></div><div>Número do processo</div><div>Classe</div><div>Tarefa</div><div>Data de chegada</div><div>Anotação</div><div>Ações</div></li>`;
 
   // Seções da lista (Urgências, Devolvidos, Prioritárias, Fila). Concluídos, quando exibidos, ficam juntos no topo de cada seção.
   function htmlGrupos(modo, visiveis, f) {
@@ -675,6 +699,7 @@
       if (ign !== 'tarefa' && f.tarefa && l.t !== f.tarefa) return false;
       if (ign !== 'etiqueta' && f.etiqueta && !(l[campoEt] || []).includes(f.etiqueta)) return false;
       if (ign !== 'jd' && !casaJD(l, f.jd)) return false;
+      if (ign !== 'mag' && !magPassa(f, magDoCargo(l.cg))) return false;
       if (!busca) return true;
       if (buscaDig.length >= 4 && R.soDigitos(l.n).includes(buscaDig)) return true;
       return R.normTexto([l.n, l.c, l.t, l.cg, l.motivo, l.anot, geral || eventual ? nomeDe(l.dono) : ''].join(' ')).includes(busca);
@@ -693,6 +718,10 @@
     const paraJD = todas.filter(l => casa(l, 'jd'));
     const opJD = st.jd && todas.some(ehPagamentos)
       ? OPCOES_JD.map(([x, rot]) => ({ x, rot, n: paraJD.filter(l => casaJD(l, x)).length })).filter(o => o.n > 0 || o.x === f.jd) : [];
+    // Botões de magistrado: contados com os outros filtros aplicados, para o botão não sumir nem mudar ao ser desligado.
+    const paraMag = todas.filter(l => casa(l, 'mag'));
+    const faixaMag = faixaMagHTML(f, letra => paraMag.filter(l => magDoCargo(l.cg) === letra).length, '', 'rot-mag-' + modo);
+    const nenhumMag = magOffDe(f).length >= MAGISTRADOS.length;
     const concluidos = todas.length - abertas.length;
     const ultimaLista = st.filas.reduce((m, r) => Math.max(m, ms(r.importado_em) || 0), 0);
 
@@ -707,8 +736,9 @@
       <div class="tile concluido"><span>Concluídos</span><b>${concluidos}</b></div>
     </div>
     <p class="atualizacao">Lista do PJe: ${ultimaLista ? dataHoraBR(ultimaLista) : 'ainda não enviada'}${st.jd && st.jd.em ? ` · JD: ${dataHoraBR(st.jd.em)}` : ''} · Clique no número para copiar.</p>
+    ${faixaMag}
     <div class="filtros">
-      <input type="search" id="busca" placeholder="Buscar por número, classe, tarefa, cargo ou anotação" value="${esc(f.busca)}" aria-label="Buscar">
+      <input type="search" id="busca" placeholder="Buscar por número, classe, tarefa ou anotação" value="${esc(f.busca)}" aria-label="Buscar">
       ${geral && st.perfil !== 'visitante' ? `<select id="filtro-pessoa" aria-label="Filtrar por servidor">${opcoesPessoas(f.pessoa, 'Todos os servidores', null, { diretor: true })}</select>` : ''}
       ${(() => { const vs = visoesDe(pessoaDaVisao(modo)); return vs.length ? `<select id="filtro-visao" aria-label="Mostrar"><option value="">Painel completo</option>${vs.map(v => `<option value="${esc(idVisao(v))}"${idVisao(v) === f.visao ? ' selected' : ''}>${esc(v.nome)}</option>`).join('')}</select>` : ''; })()}
       ${eventual ? `<select id="filtro-setor" aria-label="Filtrar por setor"><option value="">Todos os setores</option>${opSetores.map(o => `<option value="${o.x}"${o.x === f.setor ? ' selected' : ''}>${esc(o.rot)} (${o.n})</option>`).join('')}</select>` : ''}
@@ -724,7 +754,7 @@
       v.innerHTML = h; return;
     }
     h += htmlGrupos(modo, visiveis, f);
-    if (!visiveis.length) h += `<div class="vazio"><h2>Nenhum processo com esse filtro</h2><p>Limpe a busca ou escolha outra tarefa.</p></div>`;
+    if (!visiveis.length) h += nenhumMag ? `<div class="vazio"><p>Selecione ao menos um magistrado.</p></div>` : `<div class="vazio"><h2>Nenhum processo com esse filtro</h2><p>Limpe a busca ou escolha outra tarefa.</p></div>`;
     const foco = document.activeElement && document.activeElement.id;
     const pos = foco === 'busca' ? document.activeElement.selectionStart : null;
     v.innerHTML = h;
@@ -789,18 +819,23 @@
     const cab = `<div class="gestor-cab"><h2>Fila do gestor</h2><span class="contagem">${nUrg} ${nUrg === 1 ? 'urgência' : 'urgências'} · ${nFila} na fila</span>${novo ? '<span class="selo urgente">Novo processo enviado</span>' : ''}<button class="btn" type="button" data-acao="gestor-ocultar">${st.gOculta ? 'Mostrar' : 'Ocultar'}</button></div>`;
     if (st.gOculta) return `<div class="gestor-fila oculta" id="gestor-fila">${cab}</div>`;
     const busca = R.normTexto(f.busca), buscaDig = R.soDigitos(f.busca);
-    const visiveis = todas.filter(l => {
+    // casaBase: concluídos e busca; o magistrado entra por cima (e fica de fora ao contar cada botão).
+    const casaBase = l => {
       if (l.concluido && !f.concl) return false;
       if (!busca) return true;
       if (buscaDig.length >= 4 && R.soDigitos(l.n).includes(buscaDig)) return true;
       return R.normTexto([l.n, l.c, l.t, l.cg, l.motivo, l.anot].join(' ')).includes(busca);
-    });
+    };
+    const visiveis = todas.filter(l => casaBase(l) && magPassa(f, magDoCargo(l.cg)));
+    const baseMag = todas.filter(casaBase);
+    const faixaMag = faixaMagHTML(f, letra => baseMag.filter(l => magDoCargo(l.cg) === letra).length, '', 'rot-mag-gestor');
     let h = `<div class="gestor-fila" id="gestor-fila">${cab}
       <p class="small muted">Processos com a etiqueta “${esc(etiqueta)}” e os que servidores, o diretor ou você enviaram para o gestor. Por antiguidade na tarefa.</p>
-      <div class="filtros dentro"><input type="search" id="busca" placeholder="Buscar por número, classe, tarefa, cargo ou anotação" value="${esc(f.busca)}" aria-label="Buscar na fila do gestor">
+      ${faixaMag}
+      <div class="filtros dentro"><input type="search" id="busca" placeholder="Buscar por número, classe, tarefa ou anotação" value="${esc(f.busca)}" aria-label="Buscar na fila do gestor">
       <label class="small"><input type="checkbox" id="mostrar-concluidos"${f.concl ? ' checked' : ''}> Mostrar concluídos</label></div>`;
     h += todas.length ? htmlGrupos('gestor', visiveis, f) : '<div class="vazio"><p>Nenhum processo na fila do gestor.</p></div>';
-    if (todas.length && !visiveis.length) h += '<div class="vazio"><p>Nenhum processo com esse filtro.</p></div>';
+    if (todas.length && !visiveis.length) h += `<div class="vazio"><p>${magOffDe(f).length >= MAGISTRADOS.length ? 'Selecione ao menos um magistrado.' : 'Nenhum processo com esse filtro.'}</p></div>`;
     return h + '</div>';
   }
 
@@ -961,6 +996,14 @@
       return;
     }
     const modo = modoEv || st.aba;
+    if (acao === 'mag' || acao === 'mag-padrao') {
+      // botões Titular e Substituta: só mudam a tela (valem também em "Ver a fila como…")
+      const fm = st.vis[modo], v = alvo.dataset.v;
+      if (acao === 'mag') alternarMag(fm, v); else fm.magOff = magPadrao();
+      fm.limite = LIMITE_NORMAL; render();
+      const b = v && document.querySelector((modo === 'gestor' ? '#gestor-fila' : '#v-' + modo) + ` [data-acao="mag"][data-v="${v}"]`); if (b) b.focus();
+      return;
+    }
     if (st.verComo && modo !== 'gestor' && ['concluir', 'desfazer', 'devolver', 'enviar', 'anotar', 'apagar-nota', 'du-abrir'].includes(acao)) { toast('Visualização somente leitura.'); return; }
     const f = st.vis[modo];
     const li = alvo.closest('.linha');
@@ -1000,7 +1043,7 @@
       } else if (acao === 'mais') {
         f.limite += LIMITE_NORMAL; render();
       } else if (acao === 'baixar') {
-        const base = aplicarVisao(modo, modo === 'geral' ? linhasGeral(f.pessoa) : modo === 'eventual' ? linhasEventual() : filaDe(pessoaAtiva())).filter(l => (!f.setor || l.s === f.setor) && (!f.etiqueta || (l[etConfig(modo).campo] || []).includes(f.etiqueta)) && casaJD(l, f.jd));
+        const base = aplicarVisao(modo, modo === 'geral' ? linhasGeral(f.pessoa) : modo === 'eventual' ? linhasEventual() : filaDe(pessoaAtiva())).filter(l => (!f.setor || l.s === f.setor) && (!f.etiqueta || (l[etConfig(modo).campo] || []).includes(f.etiqueta)) && casaJD(l, f.jd) && magPassa(f, magDoCargo(l.cg)));
         const linhas = base.filter(l => f.concl || !l.concluido);
         const hoje = new Date().toISOString().slice(0, 10);
         const porDono = modo === 'geral' || modo === 'eventual';
@@ -1157,7 +1200,7 @@
     st.sb.auth.onAuthStateChange((evento) => {
       if (evento === 'SIGNED_OUT' && st.estado === 'ok') setTimeout(() => { reiniciarEstado(); st.estado = 'login'; render(); }, 0);
     });
-    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, atualizar, baixar, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS, PERFIS_PRODUTIVIDADE });
+    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, atualizar, baixar, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS, PERFIS_PRODUTIVIDADE, MAGISTRADOS, magDoCargo, magPadrao, magOffDe, noPadraoMag, magPassa, alternarMag, letraMagHTML, faixaMagHTML });
     iniciarSessao();
   }
   iniciar();
