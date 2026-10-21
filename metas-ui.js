@@ -130,6 +130,15 @@
   // Setor responsável da tarefa, pela tabela de tarefas (Magistrado, Assessoria, Controle de prazo…).
   const setorDe = tarefa => { const l = st.mapaTarefas && st.mapaTarefas.get(P.R.normTexto(tarefa)); return (l && (l.setor || l.painel)) || 'Outro setor'; };
   const nomeLista = it => !it.lista ? '' : it.lista.outro ? setorDe(it.lista.tarefa) : P.nomeDe(it.lista.pessoa);
+  // Filtros por setor, no mesmo seletor dos servidores: valem pela PALAVRA no setor responsável da tarefa (tabela de tarefas), seja o processo
+  // de um servidor ou de outro setor da vara; "Assessoria" também traz "Assessoria / Triagem Inicial", por exemplo. Valor, rótulo e palavra.
+  const FILTROS_SETOR = [['__set:assessoria', 'Assessoria', 'assessoria'], ['__set:magistrado', 'Magistrado(a)', 'magistrado'], ['__set:sobrestamento', 'Sobrestamento', 'sobrestamento']];
+  const casaSetor = (it, valor) => {
+    const f = FILTROS_SETOR.find(x => x[0] === valor);
+    if (!f || !it.lista || !it.lista.tarefa) return false;
+    const l = st.mapaTarefas && st.mapaTarefas.get(P.R.normTexto(it.lista.tarefa));
+    return !!l && new RegExp('(^|[^a-z0-9])' + f[2] + '([^a-z0-9]|$)').test(P.R.normTexto(l.setor));
+  };
 
   // Magistrado (titular ou substituta), vindo da lista do PJe: servidor -> cargo judicial do item; outros setores -> letra gravada na importação.
   // Devolve 'T', 'S' ou null (sem informação: não localizado, ou lista de outros setores anterior à letra).
@@ -150,7 +159,7 @@
     const f = st.fMetas, busca = f.busca.replace(/\D/g, ''), txt = f.busca.trim().toLowerCase(), serv = f.serv || '';
     const tem = (a, b) => (a != null ? 1 : 0) - (b != null ? 1 : 0);
     return cruzar(st.metas.pend || []).filter(it => (semMeta || !f.meta || (it.m || []).includes(f.meta)) && (semMag || magPassa(it)) && (!f.inst || it.i === f.inst)
-      && (!serv || (serv === SEM_LISTA ? !it.lista : serv === OUTROS ? it.lista && it.lista.outro : it.lista && it.lista.pessoa === serv))
+      && (!serv || (serv === SEM_LISTA ? !it.lista : serv === OUTROS ? it.lista && it.lista.outro : serv.startsWith('__set:') ? casaSetor(it, serv) : it.lista && it.lista.pessoa === serv))
       && (!f.busca.trim() || (busca && it.n.replace(/\D/g, '').includes(busca)) || (it.c || '').toLowerCase().includes(txt)
         || nomeLista(it).toLowerCase().includes(txt) || (it.lista && it.lista.tarefa.toLowerCase().includes(txt))))
       .sort((a, b) => -tem(a.lista, b.lista) || (a.lista ? -tem(a.lista.chegada, b.lista.chegada) || (a.lista.chegada || 0) - (b.lista.chegada || 0) : 0) || a.n.localeCompare(b.n));
@@ -179,7 +188,9 @@
     const opMetas = M.METAS.filter(m => m.pend).map(m => ({ m, n: qtdMeta(m.id) })).filter(x => x.n > 0 || f.meta === x.m.id)
       .map(x => `<option value="${x.m.id}"${f.meta === x.m.id ? ' selected' : ''}>${esc(x.m.nome)} (${x.n.toLocaleString('pt-BR')})</option>`).join('');
     const opInst = M.INSTANCIAS.map(i => `<option value="${esc(i)}"${f.inst === i ? ' selected' : ''}>${esc(i)}</option>`).join('');
-    const opServ = [`<option value="">Todos os servidores</option>`, ...servidores().map(id => `<option value="${esc(id)}"${f.serv === id ? ' selected' : ''}>${esc(P.nomeDe(id))}</option>`), `<option value="${OUTROS}"${f.serv === OUTROS ? ' selected' : ''}>Outros setores da vara</option>`, `<option value="${SEM_LISTA}"${f.serv === SEM_LISTA ? ' selected' : ''}>Não localizados</option>`].join('');
+    // servidores, linha divisória, filtros por setor, linha divisória, e por fim "Outros setores da vara" e "Não localizados"
+    const opServ = [`<option value="">Todos os servidores</option>`, ...servidores().map(id => `<option value="${esc(id)}"${f.serv === id ? ' selected' : ''}>${esc(P.nomeDe(id))}</option>`), '<hr>',
+      ...FILTROS_SETOR.map(([v, rot]) => `<option value="${v}"${f.serv === v ? ' selected' : ''}>${esc(rot)}</option>`), '<hr>', `<option value="${OUTROS}"${f.serv === OUTROS ? ' selected' : ''}>Outros setores da vara</option>`, `<option value="${SEM_LISTA}"${f.serv === SEM_LISTA ? ' selected' : ''}>Não localizados</option>`].join('');
     const todos = cruzar(st.metas.pend || []), semLista = todos.filter(it => !it.lista), nOutros = todos.filter(it => it.lista && it.lista.outro).length;
     const alertaSem = semLista.length ? `<div class="aviso novo"><b>${semLista.length.toLocaleString('pt-BR')} ${semLista.length === 1 ? 'processo pendente não foi localizado' : 'processos pendentes não foram localizados'}</b> nem nas listas dos servidores nem nas dos outros setores da vara (aparecem no fim da tabela). Pode ser processo recém-chegado ou de lista ainda não importada.${st.metas.outrosErro ? ' Não consegui ler a lista dos outros setores agora.' : !st.metas.outrosEm ? ' A lista dos outros setores só passa a existir depois do próximo envio da lista do PJe na Gestão.' : ''} ${semLista.length <= 12 ? 'Números: ' + semLista.map(it => esc(it.n)).join('; ') + '.' : 'Use o filtro “Não localizados” para ver todos.'}</div>` : '';
     const infoOutros = nOutros ? `<p class="small muted"><b class="mono">${nOutros.toLocaleString('pt-BR')}</b> ${nOutros === 1 ? 'processo está' : 'processos estão'} em tarefas de outros setores da vara (como Assessoria, Magistrado ou Controle de prazo); nesses a coluna mostra o setor no lugar do servidor${st.metas.outrosEm ? ` (lista completa de ${esc(dataHoraBR(st.metas.outrosEm))})` : ''}.</p>` : '';
