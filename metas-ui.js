@@ -198,7 +198,7 @@
         <input type="search" id="metas-busca" placeholder="Buscar por número, classe, servidor ou tarefa" aria-label="Buscar por número, classe, servidor ou tarefa" value="${esc(f.busca)}">
         <select id="metas-filtro-meta" aria-label="Filtrar por meta"><option value="">Todas as metas</option>${opMetas}</select>
         <select id="metas-filtro-inst" aria-label="Filtrar por instância"><option value="">1º Grau e JEF</option>${opInst}</select>
-        <select id="metas-filtro-serv" aria-label="Filtrar por servidor">${opServ}</select>
+        <select id="metas-filtro-serv" class="sel-linhas" aria-label="Filtrar por servidor">${opServ}</select>
         <span class="direita"><span class="small muted mono">${lista.length.toLocaleString('pt-BR')} ${lista.length === 1 ? 'processo' : 'processos'}</span><button class="btn" type="button" data-acao="metas-csv">Baixar CSV</button></span>
       </div>
       ${aviso || nenhumMag || `<section class="painel largo"><div class="tabela-wrap tabela-prioritaria"><table><thead><tr><th>Número do processo</th><th>Servidor ou setor</th><th>Tarefa atual</th><th>Entrada na tarefa</th><th>Instância</th><th>Classe</th><th>1ª distribuição</th><th>Metas pendentes</th></tr></thead><tbody>${linhas || '<tr><td colspan="8">Nenhum processo com esse filtro.</td></tr>'}</tbody></table></div>

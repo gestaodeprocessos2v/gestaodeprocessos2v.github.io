@@ -83,6 +83,18 @@ button.simbolo:disabled { cursor: default; opacity: 1; }
 .menu-sep { border: 0; border-top: 1px solid var(--line); margin: 6px 4px; }
 /* Linha divisória dentro de um seletor (<hr> em <select>, como no filtro de servidor/setor das Metas): cinza suave, igual à do menu do logo */
 select hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; height: 0; color: var(--line); }
+/* O menu nativo do Edge/Chrome ignora o estilo do <hr> e o desenha preto. Neste seletor o menu passa a ser estilizável (appearance: base-select),
+   com a linha cinza fina, a mesma do menu do logo; navegadores sem esse recurso seguem com o seletor comum. */
+@supports (appearance: base-select) {
+  .sel-linhas, .sel-linhas::picker(select) { appearance: base-select; }
+  .sel-linhas { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink); font: inherit; cursor: pointer; }
+  .sel-linhas::picker-icon { color: var(--muted); }
+  .sel-linhas::picker(select) { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r); padding: 4px; box-shadow: var(--shadow); max-height: min(60vh, 24rem); }
+  .sel-linhas option { padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+  .sel-linhas option:hover, .sel-linhas option:focus-visible { background: var(--hover); }
+  .sel-linhas option:checked { font-weight: 600; background: var(--sunken); }
+  .sel-linhas hr { margin: 4px 6px; }
+}
 .menu-aparencia-tit { padding: 4px 12px 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .seg-tema { display: flex; gap: 2px; padding: 3px; margin: 0 4px 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--sunken); }
 .seg-tema button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: none; padding: 7px 8px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; color: var(--ink); white-space: nowrap; }
