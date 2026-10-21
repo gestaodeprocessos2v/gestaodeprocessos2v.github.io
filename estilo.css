@@ -307,6 +307,7 @@ body { margin: 0; }
 .modal select, .modal input[type="text"] { width: 100%; }
 .sub-resp { margin-top: 4px; }
 .acoes .btn { white-space: normal; text-align: center; }
+.perfil-cel { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .acesso-cfg { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 10rem) minmax(0, 1.3fr) auto; gap: 6px; align-items: center; }
 .pessoa-cfg { grid-template-columns: minmax(0, 1fr) minmax(0, 10rem) minmax(0, 1.3fr) auto; }
 .cab-cfg { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .02em; }

@@ -19,7 +19,7 @@
     if (st.rascOutros) return;
     const porPessoa = Object.fromEntries(st.acessos.filter(a => a.pessoa_id).map(a => [a.pessoa_id, a.email]));
     for (const p of st.rascunho.pessoas || []) if (p.email == null) p.email = porPessoa[p.id] || '';
-    st.rascOutros = st.acessos.filter(a => !a.pessoa_id).map(a => ({ nome: a.nome, email: a.email, perfil: a.perfil }));
+    st.rascOutros = st.acessos.filter(a => !a.pessoa_id).map(a => ({ nome: a.nome, email: a.email, perfil: a.perfil, magistrado: a.magistrado || '' }));
   }
 
   // Guarda o que o gestor digitou antes de redesenhar (os dados recarregam a qualquer momento).
@@ -551,7 +551,7 @@
       const eu = o.email === st.email;
       return `<div class="acesso-cfg">
       <input type="text" id="cfg-o-nome-${i}" value="${esc(o.nome)}" aria-label="Nome">
-      <select id="cfg-o-perfil-${i}" aria-label="Perfil" ${eu ? 'disabled' : ''}>${opcPerfil(o.perfil)}</select>
+      <span class="perfil-cel"><select id="cfg-o-perfil-${i}" aria-label="Perfil" ${eu ? 'disabled' : ''}>${opcPerfil(o.perfil)}</select>${o.perfil === 'magistrado' ? `<select id="cfg-o-mag-${i}" aria-label="Magistrado: titular ou substituta"><option value=""${!o.magistrado ? ' selected' : ''}>Não definido</option><option value="T"${o.magistrado === 'T' ? ' selected' : ''}>Titular</option><option value="S"${o.magistrado === 'S' ? ' selected' : ''}>Substituta</option></select>` : ''}</span>
       <input type="text" id="cfg-o-email-${i}" value="${esc(o.email || '')}" aria-label="E-mail Google" inputmode="email" autocomplete="off" placeholder="E-mail Google (Gmail)" ${eu ? 'disabled' : ''}>
       <button class="btn" type="button" data-acao="cfg-remover-outro" data-i="${i}" ${eu ? 'disabled data-balao="Seu próprio acesso não pode ser removido" data-balao-dir="dir" aria-description="Seu próprio acesso não pode ser removido"' : ''}>Remover</button></div>`;
     }).join('');
@@ -645,6 +645,7 @@
     (st.rascOutros || []).forEach((o, i) => {
       const nome = val(`cfg-o-nome-${i}`); if (nome != null) o.nome = nome.trim();
       const perfil = val(`cfg-o-perfil-${i}`); if (perfil) o.perfil = perfil;
+      const mag = val(`cfg-o-mag-${i}`); if (mag != null) o.magistrado = mag;
       const email = val(`cfg-o-email-${i}`); if (email != null) o.email = email.trim();
     });
     (c.regrasClasse || []).forEach((r, i) => {
@@ -697,13 +698,14 @@
       for (const p of c.pessoas || []) {
         if (!p.nome) throw new Error('Há uma pessoa sem nome.');
         const e = checa(p.nome, p.email, p.nome);
-        if (e) desejados.push({ email: e, nome: p.nome, perfil: p.tipo || 'servidor', pessoa_id: p.id });
+        if (e) desejados.push({ email: e, nome: p.nome, perfil: p.tipo || 'servidor', pessoa_id: p.id, magistrado: null });
       }
       for (const o of outros) {
         if (!o.email && !o.nome) continue;
         if (!o.nome) throw new Error('Há um acesso sem nome.');
         if (!o.email) throw new Error(`Informe o e-mail de ${o.nome}.`);
-        desejados.push({ email: checa(o.nome, o.email, o.nome), nome: o.nome, perfil: o.perfil, pessoa_id: null });
+        // magistrado: 'T' (titular) ou 'S' (substituta), só para o perfil Magistrado(a); define o padrão do filtro das Metas
+        desejados.push({ email: checa(o.nome, o.email, o.nome), nome: o.nome, perfil: o.perfil, pessoa_id: null, magistrado: o.perfil === 'magistrado' && (o.magistrado === 'T' || o.magistrado === 'S') ? o.magistrado : null });
       }
     } catch (e) { toast(e.message); return; }
     const eu = desejados.find(d => d.email === st.email);
@@ -792,7 +794,7 @@
     else if (id === 'tf-filtro-painel') { st.filtroTabela.painel = e.target.value; render(); }
     else if (id === 'urg-setor') sugerirResponsavel();
     else if (id === 'urg-resp' || id === 'urg-motivo') st.novaUrgencia = Object.assign(st.novaUrgencia || {}, { responsavel: $('#urg-resp').value, motivo: $('#urg-motivo').value });
-    else if (/^cfg-s-.*-modo$/.test(id)) { lerRascunho(); render(); }
+    else if (/^cfg-s-.*-modo$/.test(id) || /^cfg-o-perfil-\d+$/.test(id)) { lerRascunho(); render(); }   // o perfil Magistrado(a) mostra o seletor titular/substituta
     else if (/^cfg-v-tipo-\d+$/.test(id)) {
       lerRascunho();
       const v = st.rascunho.visoes[Number(id.split('-').pop())];

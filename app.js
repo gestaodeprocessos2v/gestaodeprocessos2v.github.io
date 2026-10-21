@@ -25,7 +25,7 @@
 
   const st = {
     sb: null, estado: 'carregando', erro: '',
-    email: '', perfil: '', nome: '', pessoa: '',
+    email: '', perfil: '', nome: '', pessoa: '', magistrado: '',
     config: null, rascunho: null,
     tarefas: [], mapaTarefas: new Map(), tarefasEm: null, rascTarefas: null, tarefasAlteradas: false,
     filtroTabela: { busca: '', painel: '' },
@@ -140,7 +140,7 @@
 
   function reiniciarEstado() {
     Object.assign(st, {
-      email: '', perfil: '', nome: '', pessoa: '', config: null, rascunho: null, tarefas: [], mapaTarefas: new Map(), rascTarefas: null,
+      email: '', perfil: '', nome: '', pessoa: '', magistrado: '', fMetas: { meta: '', inst: '', busca: '', limite: 300 }, config: null, rascunho: null, tarefas: [], mapaTarefas: new Map(), rascTarefas: null,
       tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
       anotando: null, devolvendo: null, modal: null, importacao: null,
       area: 'fila', menuAreas: false, abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, metasImp: null,
@@ -160,9 +160,10 @@
     st.email = String(session.user.email || '').toLowerCase();
     st.estado = 'carregando'; render();
     try {
-      const { data, error } = await st.sb.from('acesso').select('nome,perfil,pessoa_id').eq('email', st.email).maybeSingle();
+      const { data, error } = await st.sb.from('acesso').select('nome,perfil,pessoa_id,magistrado').eq('email', st.email).maybeSingle();
       if (error) throw error;
       if (!data) { st.estado = 'negado'; render(); registrarNegado(st.email); return; }
+      st.magistrado = data.magistrado || ''; // 'T' (titular) ou 'S' (substituta): só define o padrão do filtro das Metas
       st.nome = data.nome; st.perfil = data.perfil; st.pessoa = data.perfil === 'gestor' ? GESTOR_ID : (data.pessoa_id || '');
       if (window.TEMA) window.TEMA.ligar(st.sb, st.email); // aparência guardada na conta (não bloqueia o carregamento)
       const visto = Number(ler('fila.visita.' + st.email));
@@ -239,7 +240,7 @@
       todas((a, b) => sb.from('devolucoes').select('*').or(`concluida_em.is.null,concluida_em.gte.${desdeConcl}`).order('id').range(a, b)),
       todas((a, b) => sb.from('marcas').select('pessoa,chave,em,devolvido,item,desfeito,concluida_por').gte('em', desdeMarcas).order('pessoa').order('chave').range(a, b)),
       todas((a, b) => sb.from('notas').select('pessoa,numero,texto,em').order('pessoa').order('numero').range(a, b)),
-      gestor ? todas((a, b) => sb.from('acesso').select('email,nome,perfil,pessoa_id').order('email').range(a, b)) : Promise.resolve([]),
+      gestor ? todas((a, b) => sb.from('acesso').select('email,nome,perfil,pessoa_id,magistrado').order('email').range(a, b)) : Promise.resolve([]),
       gestor ? sb.from('acessos_negados').select('email,em').order('em', { ascending: false }).limit(200) : Promise.resolve({ data: [] }),
     ]);
     if (cfg.error) throw cfg.error;
