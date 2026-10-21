@@ -204,6 +204,12 @@
     return String(alvos).split('|').map(normTexto).filter(Boolean).some(a => lista.includes(', ' + a + ','));
   }
 
+  // Cargo judicial do PJe ("Juiz Federal Titular" / "Juiz Federal Substituto") -> 'T', 'S' ou null.
+  function magistradoDeCargo(cg) {
+    const t = normTexto(cg);
+    return t.includes('titular') ? 'T' : t.includes('substitut') ? 'S' : null;
+  }
+
   // Como temEtiqueta, mas devolve as alternativas de "alvos" que casaram, com o texto original (sem repetir).
   function etiquetasQueCasam(etiquetas, alvos) {
     if (!etiquetas || !alvos) return [];
@@ -330,11 +336,13 @@
     const ignorados = { foraDaVara: 0, semEtiqueta: 0 };
     // Processos que não entram em fila de servidor (tarefas de outros setores da vara): guardados só para as Metas CNJ.
     const outros = new Map();
+    // "m" = letra do magistrado (T ou S), para o filtro da aba Pendentes das Metas CNJ.
     const guardarOutro = it => {
       if (!it.n) return;
-      const k = soDigitos(it.n), ja = outros.get(k);
-      if (!ja) { const o = { n: it.n }; if (it.t) o.t = it.t; if (it.ch != null) o.ch = it.ch; outros.set(k, o); return; }
-      if (it.ch != null && (ja.ch == null || it.ch < ja.ch)) { ja.ch = it.ch; if (it.t) ja.t = it.t; }
+      const k = soDigitos(it.n), ja = outros.get(k), m = magistradoDeCargo(it.cg);
+      if (!ja) { const o = { n: it.n }; if (it.t) o.t = it.t; if (it.ch != null) o.ch = it.ch; if (m) o.m = m; outros.set(k, o); return; }
+      if (it.ch != null && (ja.ch == null || it.ch < ja.ch)) { ja.ch = it.ch; if (it.t) ja.t = it.t; if (m) ja.m = m; }
+      else if (m && !ja.m) ja.m = m;
     };
     // Tarefas que não existem na tabela (diferente de "Setor no painel = Ignorar", que é decisão do gestor): processos por tarefa.
     const semCad = new Map(), numsSemCad = new Set();
@@ -564,7 +572,7 @@
   }
 
   root.Regras = {
-    lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, causasDeEtiqueta, etiquetasQueCasam, criteriosItem,
+    lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, causasDeEtiqueta, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
     atribuir, pessoasDoSetor, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, montarFila, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos,
   };

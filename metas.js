@@ -293,18 +293,20 @@
         if (it.fora) continue;
         const k = soDig(it.n); if (!k) continue;
         const ja = mapa.get(k), ch = it.ch == null ? null : it.ch;
-        if (!ja || (ch != null && (ja.chegada == null || ch < ja.chegada))) mapa.set(k, { pessoa: r.pessoa, tarefa: it.t || '', chegada: ch });
+        // cg: cargo judicial do PJe (a letra do magistrado é calculada na tela)
+        if (!ja || (ch != null && (ja.chegada == null || ch < ja.chegada))) mapa.set(k, { pessoa: r.pessoa, tarefa: it.t || '', chegada: ch, cg: it.cg || '' });
       }
     }
     return mapa;
   }
-  // Processos de tarefas sem fila de servidor (outros setores da vara): Map número -> {tarefa, chegada}; vale a chegada mais antiga.
+  // Processos de tarefas sem fila de servidor (outros setores da vara): Map número -> {tarefa, chegada, mag}; vale a chegada mais antiga.
+  // mag: letra do magistrado (T ou S) gravada na importação (os envios anteriores a ela não têm).
   function indexarOutros(outros) {
     const mapa = new Map();
     for (const it of outros || []) {
       const k = soDig(it.n); if (!k) continue;
       const ja = mapa.get(k), ch = it.ch == null ? null : it.ch;
-      if (!ja || (ch != null && (ja.chegada == null || ch < ja.chegada))) mapa.set(k, { tarefa: it.t || '', chegada: ch });
+      if (!ja || (ch != null && (ja.chegada == null || ch < ja.chegada))) mapa.set(k, { tarefa: it.t || '', chegada: ch, mag: it.m || null });
     }
     return mapa;
   }
@@ -314,7 +316,7 @@
     const idx = indexarListas(filas, servidores), fora = indexarOutros(outros);
     return (itens || []).map(it => {
       const k = soDig(it.n), s = idx.get(k), o = s ? null : fora.get(k);
-      return Object.assign({}, it, { lista: s || (o ? { pessoa: null, outro: true, tarefa: o.tarefa, chegada: o.chegada } : null) });
+      return Object.assign({}, it, { lista: s || (o ? { pessoa: null, outro: true, tarefa: o.tarefa, chegada: o.chegada, mag: o.mag } : null) });
     });
   }
 

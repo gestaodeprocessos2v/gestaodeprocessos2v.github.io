@@ -131,17 +131,27 @@
   const setorDe = tarefa => { const l = st.mapaTarefas && st.mapaTarefas.get(P.R.normTexto(tarefa)); return (l && (l.setor || l.painel)) || 'Outro setor'; };
   const nomeLista = it => !it.lista ? '' : it.lista.outro ? setorDe(it.lista.tarefa) : P.nomeDe(it.lista.pessoa);
 
+  // Magistrado (titular ou substituto), vindo da lista do PJe: servidor -> cargo judicial do item; outros setores -> letra gravada na importação.
+  // Devolve 'T', 'S' ou null (sem informação: não localizado, ou lista de outros setores anterior à letra).
+  const magDe = it => !it.lista ? null : it.lista.outro ? (it.lista.mag || null) : P.R.magistradoDeCargo(it.lista.cg);
+  const MAGISTRADOS = [['T', 'Titular', 'Juiz Federal Titular', '--prod-1'], ['S', 'Substituto', 'Juiz Federal Substituto', '--prod-4']];
+  // Botões ligados/desligados: o que está desligado fica em magOff. Sem informação de magistrado só aparece com os dois ligados.
+  const magPassa = it => { const off = st.fMetas.magOff || []; if (!off.length) return true; const m = magDe(it); return m ? !off.includes(m) : false; };
+
   // semMeta: ignora o filtro de meta (usado para contar os processos de cada meta no próprio filtro).
-  function pendentesFiltrados(semMeta) {
+  // semMag: ignora os botões de magistrado (usado para contar os processos de cada botão).
+  function pendentesFiltrados(semMeta, semMag) {
     const f = st.fMetas, busca = f.busca.replace(/\D/g, ''), txt = f.busca.trim().toLowerCase(), serv = f.serv || '';
     const tem = (a, b) => (a != null ? 1 : 0) - (b != null ? 1 : 0);
-    return cruzar(st.metas.pend || []).filter(it => (semMeta || !f.meta || (it.m || []).includes(f.meta)) && (!f.inst || it.i === f.inst)
+    return cruzar(st.metas.pend || []).filter(it => (semMeta || !f.meta || (it.m || []).includes(f.meta)) && (semMag || magPassa(it)) && (!f.inst || it.i === f.inst)
       && (!serv || (serv === SEM_LISTA ? !it.lista : serv === OUTROS ? it.lista && it.lista.outro : it.lista && it.lista.pessoa === serv))
       && (!f.busca.trim() || (busca && it.n.replace(/\D/g, '').includes(busca)) || (it.c || '').toLowerCase().includes(txt)
         || nomeLista(it).toLowerCase().includes(txt) || (it.lista && it.lista.tarefa.toLowerCase().includes(txt))))
       .sort((a, b) => -tem(a.lista, b.lista) || (a.lista ? -tem(a.lista.chegada, b.lista.chegada) || (a.lista.chegada || 0) - (b.lista.chegada || 0) : 0) || a.n.localeCompare(b.n));
   }
   const chegadaTxt = it => it.lista && it.lista.chegada ? dataBR(it.lista.chegada) : '—';
+  // Letra do magistrado colada ao fim do número; o cargo por extenso só no balão. Fica fora de data-n: copiar leva só o número.
+  const letraMag = it => { const l = magDe(it), m = MAGISTRADOS.find(x => x[0] === l); return m ? `<span class="mag" data-balao="${esc(m[2])}">${l}</span>` : ''; };
 
   function telaPendentes() {
     const e = ultimo();
@@ -155,6 +165,11 @@
     const quando = doEnvio ? dataHoraBR(Date.parse(doEnvio.carga_bi)) : info ? dataHoraBR(Date.parse(info.em)) : '—';
     // só metas com processos (com os demais filtros aplicados), cada uma com a quantidade; a meta escolhida fica na lista mesmo sem processos
     const base = pendentesFiltrados(true), qtdMeta = id => base.filter(it => (it.m || []).includes(id)).length;
+    // Botões de magistrado: contados com os outros filtros aplicados, para o botão não sumir nem mudar ao ser desligado.
+    const baseMag = pendentesFiltrados(false, true), off = f.magOff || [];
+    const botoesMag = MAGISTRADOS.map(([l, nome, cargo, cor]) => `<button type="button" class="prod-chip" aria-pressed="${!off.includes(l)}" data-acao="metas-mag" data-v="${l}" style="--c:var(${cor})" data-balao="${esc(`${cargo}: ${baseMag.filter(it => magDe(it) === l).length.toLocaleString('pt-BR')} ${baseMag.filter(it => magDe(it) === l).length === 1 ? 'processo' : 'processos'} (letra ${l})`)}"><i></i>${esc(nome)}</button>`).join('');
+    const faixaMag = `<div class="prod-chips"><div class="prod-chips-bloco"><span class="prod-chips-rot" id="rot-mag">Magistrado</span><div class="prod-chips-lista" role="group" aria-labelledby="rot-mag">${botoesMag}</div></div>${off.length ? '<button class="btn discreto" type="button" data-acao="metas-mag-padrao">Restaurar padrão</button>' : ''}</div>`;
+    const nenhumMag = off.length >= MAGISTRADOS.length ? '<div class="vazio"><p>Selecione ao menos um magistrado.</p></div>' : '';
     const opMetas = M.METAS.filter(m => m.pend).map(m => ({ m, n: qtdMeta(m.id) })).filter(x => x.n > 0 || f.meta === x.m.id)
       .map(x => `<option value="${x.m.id}"${f.meta === x.m.id ? ' selected' : ''}>${esc(x.m.nome)} (${x.n.toLocaleString('pt-BR')})</option>`).join('');
     const opInst = M.INSTANCIAS.map(i => `<option value="${esc(i)}"${f.inst === i ? ' selected' : ''}>${esc(i)}</option>`).join('');
@@ -162,12 +177,13 @@
     const todos = cruzar(st.metas.pend || []), semLista = todos.filter(it => !it.lista), nOutros = todos.filter(it => it.lista && it.lista.outro).length;
     const alertaSem = semLista.length ? `<div class="aviso novo"><b>${semLista.length.toLocaleString('pt-BR')} ${semLista.length === 1 ? 'processo pendente não foi localizado' : 'processos pendentes não foram localizados'}</b> nem nas listas dos servidores nem nas dos outros setores da vara (aparecem no fim da tabela). Pode ser processo recém-chegado ou de lista ainda não importada.${st.metas.outrosErro ? ' Não consegui ler a lista dos outros setores agora.' : !st.metas.outrosEm ? ' A lista dos outros setores só passa a existir depois do próximo envio da lista do PJe na Gestão.' : ''} ${semLista.length <= 12 ? 'Números: ' + semLista.map(it => esc(it.n)).join('; ') + '.' : 'Use o filtro “Não localizados” para ver todos.'}</div>` : '';
     const infoOutros = nOutros ? `<p class="small muted"><b class="mono">${nOutros.toLocaleString('pt-BR')}</b> ${nOutros === 1 ? 'processo está' : 'processos estão'} em tarefas de outros setores da vara (como Assessoria, Magistrado ou Controle de prazo); nesses a coluna mostra o setor no lugar do servidor${st.metas.outrosEm ? ` (lista completa de ${esc(dataHoraBR(st.metas.outrosEm))})` : ''}.</p>` : '';
-    const linhas = mostrar.map(it => `<tr${it.lista ? '' : ' class="sem-lista"'}><td><button type="button" class="num" data-acao="copiar" data-n="${esc(it.n)}" data-balao="Copiar número" aria-description="Copiar número">${esc(it.n)}</button></td><td>${it.lista ? (it.lista.outro ? `<span class="muted" tabindex="0" role="note" data-balao="Tarefa de outro setor da vara, sem servidor responsável" aria-description="Tarefa de outro setor da vara, sem servidor responsável">${esc(nomeLista(it))}</span>` : esc(nomeLista(it))) : '<span class="muted">Não localizado</span>'}</td><td>${esc(it.lista ? it.lista.tarefa : '')}</td><td class="mono">${esc(chegadaTxt(it))}</td><td>${esc(it.i)}</td><td>${esc(M.formatarClasse((it.c || '').replace(/^\d+\s*-\s*/, '')))}</td><td class="mono">${it.d ? esc(dataBR(Date.parse(it.d + 'T12:00:00'))) : '—'}</td><td>${(it.m || []).map(id => `<span class="chip-meta">${esc(nomeCurto(id))}</span>`).join(' ')}</td></tr>`).join('');
+    const linhas = mostrar.map(it => `<tr${it.lista ? '' : ' class="sem-lista"'}><td><button type="button" class="num" data-acao="copiar" data-n="${esc(it.n)}" data-balao="Copiar número" aria-description="Copiar número">${esc(it.n)}${letraMag(it)}</button></td><td>${it.lista ? (it.lista.outro ? `<span class="muted" tabindex="0" role="note" data-balao="Tarefa de outro setor da vara, sem servidor responsável" aria-description="Tarefa de outro setor da vara, sem servidor responsável">${esc(nomeLista(it))}</span>` : esc(nomeLista(it))) : '<span class="muted">Não localizado</span>'}</td><td>${esc(it.lista ? it.lista.tarefa : '')}</td><td class="mono">${esc(chegadaTxt(it))}</td><td>${esc(it.i)}</td><td>${esc(M.formatarClasse((it.c || '').replace(/^\d+\s*-\s*/, '')))}</td><td class="mono">${it.d ? esc(dataBR(Date.parse(it.d + 'T12:00:00'))) : '—'}</td><td>${(it.m || []).map(id => `<span class="chip-meta">${esc(nomeCurto(id))}</span>`).join(' ')}</td></tr>`).join('');
     const aviso = !(st.metas.pend || []).length ? `<div class="vazio"><p>${st.metas.pendErro ? 'Não foi possível carregar a lista agora.' : 'Nenhum processo pendente na última carga.'}</p></div>` : '';
     const diverge = !doEnvio || doEnvio.id !== e.id;
     return `<p class="small muted">Processos da 2ª Vara que ainda faltam julgar em cada meta (carga do Portal BI de ${esc(quando)}), do mais antigo para o mais novo pela data de entrada na tarefa do servidor responsável. Clique no número para copiar.</p>
       ${alertaSem}${infoOutros}
       ${diverge && (st.metas.pend || []).length ? `<div class="aviso novo"><b>Atenção:</b> esta lista é de ${esc(quando)}, e não da carga mais recente dos percentuais (${esc(dataHoraBR(Date.parse(e.carga_bi)))}).${st.perfil === 'gestor' ? ' Envie os dois relatórios da mesma carga na aba Gestão.' : ''}</div>` : ''}
+      ${faixaMag}
       <div class="filtros">
         <input type="search" id="metas-busca" placeholder="Buscar por número, classe, servidor ou tarefa" aria-label="Buscar por número, classe, servidor ou tarefa" value="${esc(f.busca)}">
         <select id="metas-filtro-meta" aria-label="Filtrar por meta"><option value="">Todas as metas</option>${opMetas}</select>
@@ -175,14 +191,14 @@
         <select id="metas-filtro-serv" aria-label="Filtrar por servidor">${opServ}</select>
         <span class="direita"><span class="small muted mono">${lista.length.toLocaleString('pt-BR')} ${lista.length === 1 ? 'processo' : 'processos'}</span><button class="btn" type="button" data-acao="metas-csv">Baixar CSV</button></span>
       </div>
-      ${aviso || `<section class="painel largo"><div class="tabela-wrap tabela-prioritaria"><table><thead><tr><th>Número do processo</th><th>Servidor ou setor</th><th>Tarefa atual</th><th>Entrada na tarefa</th><th>Instância</th><th>Classe</th><th>1ª distribuição</th><th>Metas pendentes</th></tr></thead><tbody>${linhas || '<tr><td colspan="8">Nenhum processo com esse filtro.</td></tr>'}</tbody></table></div>
+      ${aviso || nenhumMag || `<section class="painel largo"><div class="tabela-wrap tabela-prioritaria"><table><thead><tr><th>Número do processo</th><th>Servidor ou setor</th><th>Tarefa atual</th><th>Entrada na tarefa</th><th>Instância</th><th>Classe</th><th>1ª distribuição</th><th>Metas pendentes</th></tr></thead><tbody>${linhas || '<tr><td colspan="8">Nenhum processo com esse filtro.</td></tr>'}</tbody></table></div>
       ${lista.length > mostrar.length ? `<div class="linha-botoes"><button class="btn" type="button" data-acao="metas-mais">Mostrar mais ${Math.min(LIMITE_PASSO, lista.length - mostrar.length)}</button><span class="small muted">Mostrando ${mostrar.length} de ${lista.length}</span></div>` : ''}</section>`}`;
   }
 
   function csvPendentes() {
     const q = v => { const s = String(v == null ? '' : v); return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    const cab = ['Número do Processo', 'Servidor ou setor', 'Tarefa atual', 'Entrada na tarefa', 'Instância', 'Classe', '1ª Distribuição', 'Metas pendentes'];
-    const lin = pendentesFiltrados().map(it => [it.n, it.lista ? nomeLista(it) : 'Não localizado', it.lista ? it.lista.tarefa : '', it.lista && it.lista.chegada ? dataBR(it.lista.chegada) : '', it.i, M.formatarClasse(it.c), it.d ? dataBR(Date.parse(it.d + 'T12:00:00')) : '', (it.m || []).map(nomeCurto).join(', ')].map(q).join(';'));
+    const cab = ['Número do Processo', 'Magistrado', 'Servidor ou setor', 'Tarefa atual', 'Entrada na tarefa', 'Instância', 'Classe', '1ª Distribuição', 'Metas pendentes'];
+    const lin = pendentesFiltrados().map(it => [it.n, (MAGISTRADOS.find(x => x[0] === magDe(it)) || [])[1] || '', it.lista ? nomeLista(it) : 'Não localizado', it.lista ? it.lista.tarefa : '', it.lista && it.lista.chegada ? dataBR(it.lista.chegada) : '', it.i, M.formatarClasse(it.c), it.d ? dataBR(Date.parse(it.d + 'T12:00:00')) : '', (it.m || []).map(nomeCurto).join(', ')].map(q).join(';'));
     return '﻿' + [cab.map(q).join(';'), ...lin].join('\r\n');
   }
 
@@ -212,7 +228,13 @@
       const n = a.dataset.n;
       try { await navigator.clipboard.writeText(n); toast('Número copiado: ' + n); }
       catch (err) { const r = document.createRange(); r.selectNodeContents(a); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Número selecionado. Use Ctrl+C para copiar.'); }
-    } else if (a.dataset.acao === 'metas-mais') { st.fMetas.limite += LIMITE_PASSO; render(); }
+    } else if (a.dataset.acao === 'metas-mag') {
+      // liga/desliga o botão: guarda o que está desligado (nada é lembrado entre acessos)
+      const off = st.fMetas.magOff || [], v = a.dataset.v;
+      st.fMetas.magOff = off.includes(v) ? off.filter(x => x !== v) : [...off, v]; st.fMetas.limite = LIMITE_PASSO; render();
+      const b = document.querySelector(`#v-metas [data-acao="metas-mag"][data-v="${v}"]`); if (b) b.focus();
+    } else if (a.dataset.acao === 'metas-mag-padrao') { st.fMetas.magOff = []; st.fMetas.limite = LIMITE_PASSO; render(); }
+    else if (a.dataset.acao === 'metas-mais') { st.fMetas.limite += LIMITE_PASSO; render(); }
     else if (a.dataset.acao === 'metas-csv') baixar('pendentes-metas-' + new Date().toISOString().slice(0, 10) + '.csv', csvPendentes());
   });
 
