@@ -89,11 +89,12 @@ select hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; height:
   .sel-linhas, .sel-linhas::picker(select) { appearance: base-select; }
   .sel-linhas { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink); font: inherit; cursor: pointer; }
   .sel-linhas::picker-icon { color: var(--muted); }
-  .sel-linhas::picker(select) { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r); padding: 4px; box-shadow: var(--shadow); max-height: min(60vh, 24rem); }
-  .sel-linhas option { padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+  .sel-linhas::picker(select) { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r); padding: 3px; box-shadow: var(--shadow); max-height: min(60vh, 24rem); }
+  /* espaçamento enxuto, próximo ao do menu comum do navegador */
+  .sel-linhas option { padding: 3px 10px; min-height: 0; line-height: 1.3; border-radius: 5px; cursor: pointer; }
   .sel-linhas option:hover, .sel-linhas option:focus-visible { background: var(--hover); }
   .sel-linhas option:checked { font-weight: 600; background: var(--sunken); }
-  .sel-linhas hr { margin: 4px 6px; }
+  .sel-linhas hr { margin: 3px 6px; }
 }
 .menu-aparencia-tit { padding: 4px 12px 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .seg-tema { display: flex; gap: 2px; padding: 3px; margin: 0 4px 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--sunken); }
