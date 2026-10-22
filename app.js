@@ -265,6 +265,11 @@
       const cl = await sb.from('classe_processual').select('codigo,descricao,abreviacao,situacao').order('codigo');
       if (cl.error) { console.warn('Tabela de classes indisponível', cl.error); st.classesProc = []; } else st.classesProc = cl.data || [];
     }
+    // Cadastros de classe: nome e sigla acompanham a tabela de classes (reconverte pelo código gravado).
+    if (gestor && st.classesProc.length) {
+      st.etiquetasPrioridade = st.etiquetasPrioridade.map(x => { const c = R.reconverterClasse(x, st.classesProc); return c ? Object.assign({}, x, { e: c.d, d: c.d, s: c.s }) : x; });
+      if (!st.etPriAlteradas) st.rascEtPri = JSON.parse(JSON.stringify(st.etiquetasPrioridade));
+    }
     st.mapaTarefas = R.mapaTarefas(st.tarefas);
     if (!st.tarefasAlteradas) st.rascTarefas = JSON.parse(JSON.stringify(st.tarefas));
     st.resumo = porChave.resumo ? porChave.resumo.valor : null;

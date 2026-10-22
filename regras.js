@@ -276,6 +276,13 @@
     return c ? { cod: c.codigo, d: c.descricao, s: c.abreviacao } : null;
   }
 
+  // Cadastro de classe já convertido (tem o código gravado): reconverte pelo código, assim nome e sigla acompanham a tabela de
+  // classes quando ela muda. Sem código, ou com código que saiu da tabela, devolve null (quem chama converte pelo texto digitado).
+  function reconverterClasse(item, tabela) {
+    if (!item || item.k !== 'classe' || item.cod == null) return null;
+    return resolverClasse(String(item.cod), tabela);
+  }
+
   // Classes cadastradas com caráter de urgência ou prioridade (Gestão): o nome por extenso da classe do processo, por caráter.
   // A comparação é pela sigla do PJe+R guardada no cadastro (o CSV só traz a sigla).
   function causasDeClasse(classe, regras) {
@@ -607,7 +614,7 @@
   }
 
   root.Regras = {
-    lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, causasDeEtiqueta, causasDeClasse, resolverClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
+    lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
     atribuir, pessoasDoSetor, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, montarFila, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos,
   };

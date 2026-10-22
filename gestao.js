@@ -535,7 +535,8 @@
         const t = x.t === 'prioritaria' ? 'prioritaria' : 'urgente';
         let item, chave;
         if (x.k === 'classe') {
-          const c = R.resolverClasse(texto, st.classesProc);
+          // Texto não mexido: reconverte pelo código gravado (o nome acompanha a tabela). Texto mudado: converte pelo que foi digitado.
+          const c = (x.cod != null && texto === String(x.d || '').trim() && R.reconverterClasse(x, st.classesProc)) || R.resolverClasse(texto, st.classesProc);
           if (!c) { naoAchadas.push(texto); continue; }
           item = { k: 'classe', e: c.d, cod: c.cod, d: c.d, s: c.s, t };
           chave = 'classe|' + c.cod;
