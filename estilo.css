@@ -281,6 +281,7 @@ td.mono { white-space: nowrap; }
 .regra { display: grid; grid-template-columns: minmax(0, 7rem) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; }
 .regra.so-etiqueta { grid-template-columns: minmax(0, 1fr) auto; }
 .regra.dir-etiqueta { grid-template-columns: minmax(0, 1fr) auto auto; }
+.regra.pri-cad { grid-template-columns: auto minmax(0, 18rem) auto auto; justify-content: start; }
 .gestor-fila { grid-column: 1 / -1; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; box-shadow: var(--shadow); }
 .gestor-fila.oculta { padding: 8px 14px; }
 .gestor-cab { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -298,6 +299,11 @@ td.mono { white-space: nowrap; }
   .regra { grid-template-columns: 1fr 1fr; }
   .regra.so-etiqueta { grid-template-columns: minmax(0, 1fr) auto; }
   .regra.dir-etiqueta { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .regra.pri-cad { grid-template-columns: 1.3fr 1fr; justify-content: stretch; }
+  .regra.pri-cad > :nth-child(1) { grid-area: 1 / 1; }
+  .regra.pri-cad > :nth-child(3) { grid-area: 1 / 2; }
+  .regra.pri-cad > :nth-child(2) { grid-area: 2 / 1 / 3 / 3; }
+  .regra.pri-cad > :nth-child(4) { grid-area: 3 / 1 / 4 / 3; }
   .digitos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

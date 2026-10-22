@@ -259,9 +259,33 @@
     const r = { urgente: [], prioritaria: [] };
     if (!etiquetas || !regras || !regras.length) return r;
     for (const x of regras) {
-      if (!x || !x.e) continue;
+      if (!x || !x.e || x.k === 'classe') continue;
       const k = x.t === 'urgente' ? 'urgente' : 'prioritaria';
       for (const e of etiquetasQueCasam(etiquetas, x.e)) if (!r[k].includes(e)) r[k].push(e);
+    }
+    return r;
+  }
+
+  // Classe digitada pelo Gestor em qualquer forma (sigla do PJe+R, código CNJ ou nome por extenso, sem diferenciar
+  // maiúsculas e acentos) -> { cod, d (nome por extenso), s (sigla) }, ou null se a classe não está na tabela.
+  // tabela: linhas de classe_processual { codigo, descricao, abreviacao }.
+  function resolverClasse(texto, tabela) {
+    const t = normTexto(texto);
+    if (!t) return null;
+    const c = (tabela || []).find(x => x && (String(x.codigo) === t || normTexto(x.abreviacao) === t || normTexto(x.descricao) === t));
+    return c ? { cod: c.codigo, d: c.descricao, s: c.abreviacao } : null;
+  }
+
+  // Classes cadastradas com caráter de urgência ou prioridade (Gestão): o nome por extenso da classe do processo, por caráter.
+  // A comparação é pela sigla do PJe+R guardada no cadastro (o CSV só traz a sigla).
+  function causasDeClasse(classe, regras) {
+    const r = { urgente: [], prioritaria: [] };
+    if (!classe || !regras || !regras.length) return r;
+    for (const x of regras) {
+      if (!x || x.k !== 'classe' || !x.s || !casaPadrao(classe, x.s)) continue;
+      const k = x.t === 'urgente' ? 'urgente' : 'prioritaria';
+      const nome = x.d || x.s;
+      if (!r[k].includes(nome)) r[k].push(nome);
     }
     return r;
   }
@@ -285,9 +309,11 @@
       // Processos gravados antes de guardarmos as etiquetas: a urgência vinda de "Urgente se etiqueta" é explicada pela tarefa.
       if (!e.length && l.u && linha && linha.etiquetaUrgente) e = String(linha.etiquetaUrgente).split('|').map(s => s.trim()).filter(Boolean);
       if (e.length) out.push({ r: 'Urgência pela etiqueta', e });
+      if (l.ecu && l.ecu.length) out.push({ r: 'Urgência pela classe', e: l.ecu });
     } else if (l.tipo === 'prioritaria') {
       if (linha && linha.zerar) out.push({ r: 'Prioridade pela tarefa' });
       if (l.ep && l.ep.length) out.push({ r: 'Prioridade pela etiqueta', e: l.ep });
+      if (l.ecp && l.ecp.length) out.push({ r: 'Prioridade pela classe', e: l.ecp });
     }
     return out;
   }
@@ -367,12 +393,21 @@
       if (cu.length) { item.u = true; item.eu = cu; }
       // Etiqueta com prioridade ou urgência (qualquer tarefa que entra no painel). Urgente vence; prioritária só se nada o torna urgente.
       // porEtiqueta conta só os processos que mudaram de caráter por causa da etiqueta (não os que a tarefa já tornava urgentes/prioritários).
+      // Classe cadastrada no mesmo lugar: "ecu" e "ecp" guardam o nome por extenso das classes que causaram urgência e prioridade.
       const causas = causasDeEtiqueta(it.e, etPrioridade);
-      const pri = causas.urgente.length ? 'urgente' : causas.prioritaria.length ? 'prioritaria' : null;
+      const causasC = causasDeClasse(it.c, etPrioridade);
+      const pri = (causas.urgente.length || causasC.urgente.length) ? 'urgente' : (causas.prioritaria.length || causasC.prioritaria.length) ? 'prioritaria' : null;
       if (pri) {
         const antes = tipoItem(item, mapa);
-        if (pri === 'urgente') { item.u = true; item.eu = [...new Set([...(item.eu || []), ...causas.urgente])]; }
-        else { item.p = true; item.ep = causas.prioritaria; }
+        if (pri === 'urgente') {
+          item.u = true;
+          if (causas.urgente.length) item.eu = [...new Set([...(item.eu || []), ...causas.urgente])];
+          if (causasC.urgente.length) item.ecu = causasC.urgente;
+        } else {
+          item.p = true;
+          if (causas.prioritaria.length) item.ep = causas.prioritaria;
+          if (causasC.prioritaria.length) item.ecp = causasC.prioritaria;
+        }
         const depois = tipoItem(item, mapa);
         if (depois !== antes) porEtiqueta[depois]++;
       }
@@ -511,8 +546,8 @@
         ? lista.reduce((a, b) => (ch(b) < ch(a) ? b : a))
         : lista.reduce((a, b) => ((b.ch == null ? -1 : b.ch) > (a.ch == null ? -1 : a.ch) ? b : a));
       const uniao = campo => [...new Set(lista.flatMap(x => x[campo] || []))];
-      const eu = uniao('eu'), ep = uniao('ep');
-      porNumero.set(k, paralelo ? Object.assign({}, escolhido, { fp: true, u: lista.some(x => x.u) || escolhido.u, p: lista.some(x => x.p) || escolhido.p }, eu.length ? { eu } : {}, ep.length ? { ep } : {}) : escolhido);
+      const eu = uniao('eu'), ep = uniao('ep'), ecu = uniao('ecu'), ecp = uniao('ecp');
+      porNumero.set(k, paralelo ? Object.assign({}, escolhido, { fp: true, u: lista.some(x => x.u) || escolhido.u, p: lista.some(x => x.p) || escolhido.p }, eu.length ? { eu } : {}, ep.length ? { ep } : {}, ecu.length ? { ecu } : {}, ecp.length ? { ecp } : {}) : escolhido);
     }
     const linhas = [];
     const especiais = [
@@ -572,7 +607,7 @@
   }
 
   root.Regras = {
-    lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, causasDeEtiqueta, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
+    lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, causasDeEtiqueta, causasDeClasse, resolverClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
     atribuir, pessoasDoSetor, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, montarFila, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos,
   };

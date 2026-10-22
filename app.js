@@ -29,7 +29,7 @@
     config: null, rascunho: null,
     tarefas: [], mapaTarefas: new Map(), tarefasEm: null, rascTarefas: null, tarefasAlteradas: false,
     filtroTabela: { busca: '', painel: '' },
-    etiquetasPrioridade: [], rascEtPri: [], etPriAlteradas: false,
+    etiquetasPrioridade: [], rascEtPri: [], etPriAlteradas: false, classesProc: [],
     resumo: null, jd: null,
     filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
     ver: 0, cache: { ver: -1, m: {} },
@@ -257,9 +257,14 @@
     if (!st.rascunho && st.config) st.rascunho = JSON.parse(JSON.stringify(st.config));
     st.tarefas = porChave.tarefas ? (porChave.tarefas.valor.itens || []) : [];
     st.tarefasEm = porChave.tarefas ? ms(porChave.tarefas.atualizado_em) : null;
-    // Etiquetas com caráter de urgência ou prioridade (Gestão): [{ e, t: 'urgente' | 'prioritaria' }]
+    // Etiquetas e classes com caráter de urgência ou prioridade (Gestão): [{ k: 'etiqueta' | 'classe', e, t: 'urgente' | 'prioritaria', cod, d, s }]
     st.etiquetasPrioridade = porChave.etiquetas_prioridade ? (porChave.etiquetas_prioridade.valor.itens || []) : [];
     if (!st.etPriAlteradas) st.rascEtPri = JSON.parse(JSON.stringify(st.etiquetasPrioridade));
+    // Tabela de classes (só o Gestor lê): converte a classe digitada em nome por extenso e sigla. Se falhar, a tela segue sem ela.
+    if (gestor) {
+      const cl = await sb.from('classe_processual').select('codigo,descricao,abreviacao,situacao').order('codigo');
+      if (cl.error) { console.warn('Tabela de classes indisponível', cl.error); st.classesProc = []; } else st.classesProc = cl.data || [];
+    }
     st.mapaTarefas = R.mapaTarefas(st.tarefas);
     if (!st.tarefasAlteradas) st.rascTarefas = JSON.parse(JSON.stringify(st.tarefas));
     st.resumo = porChave.resumo ? porChave.resumo.valor : null;

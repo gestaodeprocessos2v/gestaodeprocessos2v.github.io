@@ -85,7 +85,7 @@
       previa = `<div class="previa">
         <div><b>${imp.lidos} linhas lidas</b> em “${esc(imp.arquivo)}”.</div>
         <div class="small">Por setor: ${setores || '—'}</div>
-        ${(r.porEtiqueta && (r.porEtiqueta.urgente || r.porEtiqueta.prioritaria)) ? `<div class="small">Por etiqueta com prioridade ou urgência: <b class="mono">${r.porEtiqueta.urgente}</b> ${r.porEtiqueta.urgente === 1 ? 'urgente' : 'urgentes'} e <b class="mono">${r.porEtiqueta.prioritaria}</b> ${r.porEtiqueta.prioritaria === 1 ? 'prioritário' : 'prioritários'}.</div>` : ''}
+        ${(r.porEtiqueta && (r.porEtiqueta.urgente || r.porEtiqueta.prioritaria)) ? `<div class="small">Por classe ou etiqueta com prioridade ou urgência: <b class="mono">${r.porEtiqueta.urgente}</b> ${r.porEtiqueta.urgente === 1 ? 'urgente' : 'urgentes'} e <b class="mono">${r.porEtiqueta.prioritaria}</b> ${r.porEtiqueta.prioritaria === 1 ? 'prioritário' : 'prioritários'}.</div>` : ''}
         ${!imp.pessoaFixa ? `<div class="small">Outros setores da vara (sem fila de servidor): <b class="mono">${(r.outros || []).length}</b> processos, guardados só para as Metas CNJ.</div>` : ''}
         <div class="small muted">Ignorados: ${r.ignorados.foraDaVara} em tarefas de outros setores${r.ignorados.semEtiqueta ? ` e ${r.ignorados.semEtiqueta} sem a etiqueta exigida pela tarefa` : ''}.${imp.semData ? ` ${imp.semData} sem data de chegada vão para o fim da fila.` : ''}</div>
         <div class="tabela-wrap"><table><thead><tr><th>Pessoa</th><th>Processos</th><th>Urgentes</th><th>Prioritários</th></tr></thead><tbody>${linhas || '<tr><td colspan="4">Nenhum processo para gravar.</td></tr>'}</tbody></table></div>
@@ -147,7 +147,7 @@
     render();
   }
 
-  const itemMin = it => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u', 'p', 'eu', 'ep', 'et']) if (it[k] != null) o[k] = it[k]; return o; };
+  const itemMin = it => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u', 'p', 'eu', 'ep', 'ecu', 'ecp', 'et']) if (it[k] != null) o[k] = it[k]; return o; };
 
   // As urgentes da lista seguem a lista: saem quando o processo sai do relatório novo. Só ficam até o servidor concluir
   // as urgências incluídas à mão (gestor) e as enviadas para outra pessoa. Aqui some o que antigas versões gravaram como "da lista".
@@ -473,24 +473,31 @@
     }
   }
 
-  // ---------- etiquetas com caráter de prioridade ou de urgência ----------
+  // ---------- classes e etiquetas com caráter de prioridade ou de urgência ----------
   // Vale na próxima lista do PJe enviada: as etiquetas do relatório só existem na importação, não ficam guardadas no banco.
+  // Cada cadastro é { k: 'etiqueta' | 'classe', e, t }. Na classe, o Gestor digita sigla, código CNJ ou nome por extenso e o
+  // painel grava o nome por extenso (e), o código (cod), o nome (d) e a sigla do PJe+R (s), que é o que o relatório traz.
   const CARATERES_ET = [['urgente', 'Urgente'], ['prioritaria', 'Prioritária']];
+  const TIPOS_PRI = [['classe', 'Classe processual'], ['etiqueta', 'Etiqueta']];
 
   function painelEtiquetasPrioridade() {
     const lista = st.rascEtPri || [];
-    const linhas = lista.map((x, i) => `<div class="regra dir-etiqueta">
-      <input type="text" id="ep-e-${i}" data-epi="${i}" data-epcampo="e" value="${esc(x.e || '')}" placeholder="Etiqueta, como aparece no PJe" aria-label="Etiqueta">
+    const linhas = lista.map((x, i) => {
+      const classe = x.k === 'classe';
+      return `<div class="regra pri-cad">
+      <select id="ep-k-${i}" data-epi="${i}" data-epcampo="k" aria-label="Tipo de cadastro">${TIPOS_PRI.map(([v, rot]) => `<option value="${v}"${(classe ? 'classe' : 'etiqueta') === v ? ' selected' : ''}>${rot}</option>`).join('')}</select>
+      <input type="text" id="ep-e-${i}" data-epi="${i}" data-epcampo="e" value="${esc(x.e || '')}" placeholder="${classe ? 'Sigla, código ou nome da classe' : 'Etiqueta, como aparece no PJe'}" aria-label="${classe ? 'Classe processual' : 'Etiqueta'}">
       <select id="ep-t-${i}" data-epi="${i}" data-epcampo="t" aria-label="Caráter">${CARATERES_ET.map(([v, rot]) => `<option value="${v}"${x.t === v ? ' selected' : ''}>${rot}</option>`).join('')}</select>
-      <button class="btn" type="button" data-acao="ep-remover" data-i="${i}">Remover</button></div>`).join('');
+      <button class="btn" type="button" data-acao="ep-remover" data-i="${i}">Remover</button></div>`;
+    }).join('');
     return `<section class="painel largo" id="painel-etiquetas-prioridade">
-      <h2>Etiquetas com prioridade ou urgência</h2>
-      <p>Todo processo que entra nas filas e tem uma destas etiquetas vira <b>urgente</b> (topo da fila) ou <b>prioritário</b> (seção Tarefas prioritárias), em qualquer tarefa e setor. Se o processo tiver mais de uma, urgente vale mais; prioritária só vale se nada mais o torna urgente. A etiqueta é comparada inteira, sem diferenciar maiúsculas e acentos; use “|” para alternativas. <b>Vale a partir da próxima lista do PJe enviada</b>: depois de incluir ou mudar uma etiqueta, envie a lista de novo. A coluna “Urgente se etiqueta” da tabela de tarefas continua valendo, para uma tarefa específica.</p>
-      ${linhas || '<p class="muted">Nenhuma etiqueta cadastrada.</p>'}
-      <div class="linha-botoes"><button class="btn" type="button" data-acao="ep-incluir">Incluir etiqueta</button>
+      <h2>Cadastrar prioridade ou urgência</h2>
+      <p>Todo processo que entra nas filas e é de uma destas classes ou tem uma destas etiquetas vira <b>urgente</b> (topo da fila) ou <b>prioritário</b> (seção Tarefas prioritárias), em qualquer tarefa e setor. Se o processo casar com mais de um cadastro, urgente vale mais; prioritária só vale se nada mais o torna urgente. <b>Classe</b>: digite a sigla do PJe+R, o código do CNJ ou o nome por extenso; ao salvar, o painel mostra o nome por extenso. Só valem as classes já cadastradas na tabela de classes (as que apareceram nos relatórios do BI e do PJe+R). <b>Etiqueta</b>: é comparada inteira, sem diferenciar maiúsculas e acentos; use “|” para alternativas. <b>Vale a partir da próxima lista do PJe enviada</b>: depois de incluir ou mudar um cadastro, envie a lista de novo. A coluna “Urgente se etiqueta” da tabela de tarefas continua valendo, para uma tarefa específica.</p>
+      ${linhas || '<p class="muted">Nada cadastrado.</p>'}
+      <div class="linha-botoes"><button class="btn" type="button" data-acao="ep-incluir">Incluir</button>
         <span id="ep-estado" class="small ${st.etPriAlteradas ? 'alterado' : 'muted'}">${st.etPriAlteradas ? 'Alterações não salvas' : 'Tudo salvo'}</span></div>
       <div class="linha-botoes">
-        <button class="btn primario" type="button" data-acao="ep-salvar" ${st.etPriAlteradas ? '' : 'disabled'}>Salvar etiquetas</button>
+        <button class="btn primario" type="button" data-acao="ep-salvar" ${st.etPriAlteradas ? '' : 'disabled'}>Salvar</button>
         <button class="btn" type="button" data-acao="ep-descartar" ${st.etPriAlteradas ? '' : 'disabled'}>Descartar alterações</button>
       </div>
     </section>`;
@@ -507,23 +514,41 @@
     if (!x) return;
     x[el.dataset.epcampo] = el.value;
     marcarEtPriAlteradas();
+    if (el.dataset.epcampo === 'k') render(); // troca o texto de ajuda do campo
   }
 
   async function acaoEtiquetasPrioridade(acao, alvo) {
     const lista = st.rascEtPri || (st.rascEtPri = []);
     if (acao === 'ep-incluir') {
-      lista.push({ e: '', t: 'urgente' }); marcarEtPriAlteradas(); render();
+      lista.push({ k: 'classe', e: '', t: 'urgente' }); marcarEtPriAlteradas(); render();
       const el = document.getElementById('ep-e-' + (lista.length - 1)); if (el) el.focus();
     } else if (acao === 'ep-remover') {
       lista.splice(Number(alvo.dataset.i), 1); marcarEtPriAlteradas(); render();
     } else if (acao === 'ep-descartar') {
       st.rascEtPri = clonar(st.etiquetasPrioridade); st.etPriAlteradas = false; render();
-      toast('Alterações nas etiquetas descartadas.');
+      toast('Alterações descartadas.');
     } else if (acao === 'ep-salvar') {
-      const itens = lista.map(x => ({ e: String(x.e || '').trim(), t: x.t === 'prioritaria' ? 'prioritaria' : 'urgente' })).filter(x => x.e);
-      const vistos = new Set(), repetidas = [];
-      for (const x of itens) { const k = R.normTexto(x.e); if (vistos.has(k)) repetidas.push(x.e); vistos.add(k); }
-      if (repetidas.length) { toast('Etiqueta repetida: ' + repetidas.slice(0, 3).join('; ') + '. Deixe só uma linha para cada etiqueta antes de salvar.'); return; }
+      const itens = [], vistos = new Set(), repetidas = [], naoAchadas = [];
+      for (const x of lista) {
+        const texto = String(x.e || '').trim();
+        if (!texto) continue;
+        const t = x.t === 'prioritaria' ? 'prioritaria' : 'urgente';
+        let item, chave;
+        if (x.k === 'classe') {
+          const c = R.resolverClasse(texto, st.classesProc);
+          if (!c) { naoAchadas.push(texto); continue; }
+          item = { k: 'classe', e: c.d, cod: c.cod, d: c.d, s: c.s, t };
+          chave = 'classe|' + c.cod;
+        } else {
+          item = { k: 'etiqueta', e: texto, t };
+          chave = 'etiqueta|' + R.normTexto(texto);
+        }
+        if (vistos.has(chave)) repetidas.push(item.e);
+        vistos.add(chave);
+        itens.push(item);
+      }
+      if (naoAchadas.length) { toast('Classe não cadastrada: ' + naoAchadas.slice(0, 3).join('; ') + '. Só valem as classes da tabela de classes (as que já apareceram nos relatórios do BI e do PJe+R).'); return; }
+      if (repetidas.length) { toast('Cadastro repetido: ' + repetidas.slice(0, 3).join('; ') + '. Deixe só uma linha para cada classe ou etiqueta antes de salvar.'); return; }
       const { error } = await st.sb.from('config').upsert({ chave: 'etiquetas_prioridade', valor: { itens }, atualizado_em: iso(Date.now()), atualizado_por: st.email }, { onConflict: 'chave' });
       if (error) throw error;
       st.etPriAlteradas = false;
@@ -532,7 +557,7 @@
       const imp = st.importacao;
       if (imp && imp.itens && imp.resultado) { imp.resultado = R.prepararLista(imp.itens, st.mapaTarefas, st.config, imp.pessoaFixa || null, st.etiquetasPrioridade); imp.confirmando = false; }
       render();
-      toast('Etiquetas salvas. Valem a partir da próxima lista do PJe enviada.');
+      toast('Cadastro salvo. Vale a partir da próxima lista do PJe enviada.');
     }
   }
 
