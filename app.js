@@ -34,7 +34,7 @@
     filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
     ver: 0, cache: { ver: -1, m: {} },
     aba: 'fila', verComo: '', area: 'fila', menuAreas: false,
-    abaMetas: 'visao', abaProd: 'resumo', prod: null, metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null,
+    abaMetas: 'visao', abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null,
     vis: {
       fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
       geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
@@ -144,7 +144,7 @@
       tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
       anotando: null, devolvendo: null, modal: null, importacao: null,
       area: 'fila', menuAreas: false, abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, metasImp: null,
-      abaProd: 'resumo', prod: null,
+      abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null,
     });
     // o padrão dos botões de magistrado depende de quem entra: quem entrar depois não herda o filtro do usuário anterior
     for (const k of Object.keys(st.vis)) st.vis[k].magOff = null;
@@ -196,18 +196,22 @@
     fila: { rotulo: 'Fila de Trabalho', titulo: 'Fila de Trabalho', subtitulo: 'Gestão de Processos · 2ª Vara Federal · ' + HOJE, pagina: 'Fila de Trabalho · Gestão de Processos' },
     metas: { rotulo: 'Metas CNJ', titulo: 'Metas CNJ', subtitulo: 'Metas Nacionais 2026 · 2ª Vara Federal', pagina: 'Metas CNJ · Gestão de Processos' },
     produtividade: { rotulo: 'Produtividade da Vara', titulo: 'Produtividade da Vara', subtitulo: 'Atividades da equipe · 2ª Vara Federal', pagina: 'Produtividade da Vara · Gestão de Processos' },
+    emails: { rotulo: 'E-mails', titulo: 'E-mails', subtitulo: 'Resumo diário dos e-mails da vara · 2ª Vara Federal', pagina: 'E-mails · Gestão de Processos' },
   };
   const PERFIS_METAS = ['gestor', 'servidor', 'magistrado', 'diretor', 'eventual'];
   // Produtividade da Vara (dados por pessoa): só gestor, diretor e magistrado. O banco também confere (RLS).
   const PERFIS_PRODUTIVIDADE = ['gestor', 'diretor', 'magistrado'];
+  // E-mails (resumo diário da rotina): gestor, diretor e magistrado(a). O banco decide o que cada um vê (RLS).
+  const PERFIS_EMAILS = ['gestor', 'diretor', 'magistrado'];
   function areasDisponiveis() {
     const a = ['fila'];
     if (PERFIS_METAS.includes(st.perfil)) a.push('metas');
     if (PERFIS_PRODUTIVIDADE.includes(st.perfil)) a.push('produtividade');
+    if (PERFIS_EMAILS.includes(st.perfil)) a.push('emails');
     return a;
   }
   // Abas de cada área que não é a Fila (a Fila usa abasDisponiveis(), que depende do perfil).
-  const ABAS_AREA = { metas: ['visao', 'pendentes'], produtividade: ['resumo', 'pessoas'] };
+  const ABAS_AREA = { metas: ['visao', 'pendentes'], produtividade: ['resumo', 'pessoas'], get emails() { return window.PAINEL.abasEmails ? window.PAINEL.abasEmails() : ['emsub']; } };
   function irParaArea(area) {
     st.menuAreas = false;
     if (!areasDisponiveis().includes(area)) area = 'fila';
@@ -287,12 +291,13 @@
     st.negados = (negados.data || []).map(r => ({ email: r.email, em: ms(r.em) }));
     await carregarJD();
     if (PERFIS_PRODUTIVIDADE.includes(st.perfil) && window.PAINEL.carregarProd) await window.PAINEL.carregarProd();
+    if (PERFIS_EMAILS.includes(st.perfil) && window.PAINEL.carregarEmails) await window.PAINEL.carregarEmails();
     if (!st.rascOutros) st.rascOutros = null;
     st.ver++;
   }
 
   async function atualizar() {
-    if (st.estado !== 'ok' || document.hidden || st.gravando || st.modal || st.anotando || st.devolvendo) return;
+    if (st.estado !== 'ok' || document.hidden || st.gravando || st.modal || st.anotando || st.devolvendo || (st.emails && st.emails.modal)) return;
     try { await carregar(); render(); } catch (e) { console.error(e); }
   }
 
@@ -388,25 +393,31 @@
     renderTopo();
     renderAvisos();
     const ok = st.estado === 'ok';
-    const emMetas = ok && st.area === 'metas', emProd = ok && st.area === 'produtividade';
+    const emMetas = ok && st.area === 'metas', emProd = ok && st.area === 'produtividade', emEml = ok && st.area === 'emails';
     $('#v-estado').hidden = ok;
-    for (const a of ['fila', 'geral', 'gestao', 'eventual']) $('#v-' + a).hidden = !ok || emMetas || emProd || st.aba !== a;
+    for (const a of ['fila', 'geral', 'gestao', 'eventual']) $('#v-' + a).hidden = !ok || emMetas || emProd || emEml || st.aba !== a;
     $('#v-metas').hidden = !emMetas;
     $('#v-prod').hidden = !emProd;
+    $('#v-emails').hidden = !emEml;
     if (!ok) {
-      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod']) $('#v-' + a).innerHTML = '';
+      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod', 'emails']) $('#v-' + a).innerHTML = '';
       renderEstado(); renderModal(); return;
     }
     $('#v-estado').innerHTML = '';
     if (emMetas) {
-      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'prod']) $('#v-' + a).innerHTML = '';
+      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'prod', 'emails']) $('#v-' + a).innerHTML = '';
       renderMetas(); renderModal(); return;
     }
     if (emProd) {
-      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas']) $('#v-' + a).innerHTML = '';
+      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'emails']) $('#v-' + a).innerHTML = '';
       renderProd(); renderModal(); return;
     }
-    $('#v-metas').innerHTML = ''; $('#v-prod').innerHTML = '';
+    if (emEml) {
+      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod']) $('#v-' + a).innerHTML = '';
+      if (window.PAINEL.renderEmails) window.PAINEL.renderEmails();
+      renderModal(); return;
+    }
+    $('#v-metas').innerHTML = ''; $('#v-prod').innerHTML = ''; $('#v-emails').innerHTML = '';
     for (const a of ['fila', 'geral', 'gestao', 'eventual']) if (a !== st.aba) $('#v-' + a).innerHTML = '';
     if (st.aba === 'fila') renderLista('fila');
     else if (st.aba === 'geral') renderLista('geral');
@@ -436,6 +447,8 @@
     else $('#v-prod').innerHTML = '<div class="vazio"><h2>Produtividade da Vara</h2><p>Carregando…</p></div>';
   }
 
+  const naoLidosEmails = () => (window.PAINEL.emailsNaoLidos ? window.PAINEL.emailsNaoLidos() : 0);
+
   function renderMenuAreas(ok) {
     const lista = ok ? areasDisponiveis() : [];
     const btn = $('#btn-areas'), menu = $('#menu-areas');
@@ -446,7 +459,7 @@
     btn.setAttribute('aria-expanded', String(st.menuAreas));
     menu.hidden = !st.menuAreas;
     const itens = $('#itens-areas');
-    const h = multi ? lista.map(a => `<button class="item-area" type="button" role="menuitemradio" aria-checked="${a === st.area}" data-area="${a}">${AREAS[a].rotulo}</button>`).join('') : '';
+    const h = multi ? lista.map(a => `<button class="item-area" type="button" role="menuitemradio" aria-checked="${a === st.area}" data-area="${a}">${AREAS[a].rotulo}${a === 'emails' && naoLidosEmails() ? ` <span class="contagem">${naoLidosEmails()}</span>` : ''}</button>`).join('') : '';
     if (itens.dataset.h !== h) { itens.innerHTML = h; itens.dataset.h = h; }
     itens.hidden = !multi; $('#menu-sep').hidden = !multi;
     for (const b of itens.querySelectorAll('.item-area')) b.setAttribute('aria-checked', String(b.dataset.area === st.area));
@@ -472,12 +485,12 @@
     if (ok) $('#quem').innerHTML = `${esc(st.nome)} <small>${esc(PERFIS[st.perfil] || st.perfil)}</small>`;
     const outraArea = ok && ABAS_AREA[st.area];
     const abas = !ok ? [] : outraArea || abasDisponiveis();
-    const atual = st.area === 'metas' ? st.abaMetas : st.area === 'produtividade' ? st.abaProd : st.aba;
+    const atual = st.area === 'metas' ? st.abaMetas : st.area === 'produtividade' ? st.abaProd : st.area === 'emails' ? st.abaEmails : st.aba;
     const nav = $('#abas');
     nav.hidden = abas.length < 2;
-    const rot = { fila: 'Fila', eventual: 'Eventual', geral: 'Geral', gestao: 'Gestão', visao: 'Visão geral', pendentes: 'Pendentes', resumo: 'Visão geral', pessoas: 'Por pessoa' };
+    const rot = { fila: 'Fila', eventual: 'Eventual', geral: 'Geral', gestao: 'Gestão', visao: 'Visão geral', pendentes: 'Pendentes', resumo: 'Visão geral', pessoas: 'Por pessoa', emsub: 'Juíza Substituta', emtit: 'Juiz Titular', emnl: 'Não localizado', emsec: 'Secretaria', emdem: 'Demais', emgest: 'Só gestor' };
     const nAvisos = outraArea ? 0 : urgenciasDoGestor();
-    const h = abas.map(a => `<button class="aba" role="tab" id="aba-${a}" aria-selected="${a === atual}" data-aba="${a}">${rot[a]}${a === 'gestao' && nAvisos ? ` <span class="contagem">${nAvisos}</span>` : ''}</button>`).join('');
+    const h = abas.map(a => `<button class="aba" role="tab" id="aba-${a}" aria-selected="${a === atual}" data-aba="${a}">${rot[a]}${a === 'gestao' && nAvisos ? ` <span class="contagem">${nAvisos}</span>` : ''}${st.area === 'emails' && window.PAINEL.emailsNaoLidos && window.PAINEL.emailsNaoLidos(a) ? ` <span class="contagem">${window.PAINEL.emailsNaoLidos(a)}</span>` : ''}</button>`).join('');
     if (nav.dataset.h !== h) { nav.innerHTML = h; nav.dataset.h = h; }
     for (const b of nav.querySelectorAll('.aba')) b.setAttribute('aria-selected', String(b.dataset.aba === atual));
   }
@@ -1138,6 +1151,7 @@
       const b = e.target.closest('.aba'); if (!b) return;
       if (st.area === 'metas') { st.abaMetas = b.dataset.aba; render(); return; }
       if (st.area === 'produtividade') { st.abaProd = b.dataset.aba; render(); return; }
+      if (st.area === 'emails') { st.abaEmails = b.dataset.aba; render(); return; }
       st.aba = b.dataset.aba; guardar('fila.aba.' + st.email, st.aba);
       st.anotando = null; st.devolvendo = null; render();
     });
@@ -1210,7 +1224,7 @@
     st.sb.auth.onAuthStateChange((evento) => {
       if (evento === 'SIGNED_OUT' && st.estado === 'ok') setTimeout(() => { reiniciarEstado(); st.estado = 'login'; render(); }, 0);
     });
-    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, atualizar, baixar, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS, PERFIS_PRODUTIVIDADE, MAGISTRADOS, magDoCargo, magPadrao, magOffDe, noPadraoMag, magPassa, alternarMag, letraMagHTML, faixaMagHTML });
+    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, atualizar, baixar, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS, PERFIS_PRODUTIVIDADE, PERFIS_EMAILS, MAGISTRADOS, magDoCargo, magPadrao, magOffDe, noPadraoMag, magPassa, alternarMag, letraMagHTML, faixaMagHTML });
     iniciarSessao();
   }
   iniciar();
