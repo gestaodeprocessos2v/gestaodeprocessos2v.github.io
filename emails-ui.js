@@ -20,7 +20,7 @@
 
   // ---------- estado ----------
   const E = () => st.emails || (st.emails = { itens: [], lidos: new Set(), carregado: false, erro: false, busca: '', modal: null, corpos: {},
-    conclusoes: {}, notas: {}, concAtiva: false, concl: false, anotando: null, rascunho: '' });
+    conclusoes: {}, notas: {}, concAtiva: false, concl: false, anotando: null, rascunho: '', pedidoAtivo: false });
 
   // Abas que a pessoa enxerga. Magistrado(a): só a aba do seu cargo (o banco só entrega as minutas dela).
   P.abasEmails = function () {
@@ -50,6 +50,11 @@
       s.notas = Object.fromEntries(notas.r.map(x => [x.chave, { texto: x.texto, por: x.por, em: x.em }]));
       s.concAtiva = conc.ok && notas.ok;
       marcarConcluidos();
+      s.pedidoAtivo = false;
+      if (st.perfil === 'gestor') {
+        const t = await st.sb.from('juntada_pedido').select('id').limit(1);
+        s.pedidoAtivo = !t.error;
+      }
       s.erro = false;
     } catch (e) { console.error('E-mails indisponíveis', e); s.erro = true; }
     s.carregado = true;
@@ -142,6 +147,9 @@
     const tipo = r.categoria !== 'minuta' ? ` · ${esc(ROTULO_CAT[r.categoria] || '')}` : '';
     const conclInfo = g.concluido
       ? `<div class="nota"><b>Concluído${g.conclusao && g.conclusao.por ? ' por ' + esc(g.conclusao.por) : ''}</b>${g.conclusao ? ' em ' + esc(quando(g.conclusao.em)) : ' (marcado como solucionado pela rotina)'}</div>` : '';
+    const podeJuntar = gestor && s.pedidoAtivo && !g.concluido && g.numero && g.msgs.some(m => m.anexo_juntar && !m.solucionado);
+    const juntar = podeJuntar
+      ? `<button class="btn primario" type="button" data-eacao="juntar" data-ck="${esc(g.ck)}" data-balao="Baixa os anexos, gera o PDF dos e-mails e deixa o formulário de juntada pronto no PJe. Você confere e assina." aria-description="Juntar no PJe">Juntar no PJe</button>` : '';
     const acoes = !s.concAtiva ? '' : g.concluido
       ? (g.conclusao ? `<button class="btn" type="button" data-eacao="desfazer" data-ck="${esc(g.ck)}">Desfazer</button>` : '')
       : `<button class="btn feito" type="button" data-eacao="concluir" data-ck="${esc(g.ck)}">Marcar como concluído</button>`;
@@ -154,7 +162,7 @@
       ${msgs}
       ${conclInfo}
       ${s.concAtiva ? blocoNota(g) : ''}
-      ${acoes ? `<div class="linha-botoes">${acoes}</div>` : ''}
+      ${acoes || juntar ? `<div class="linha-botoes">${juntar}${acoes}</div>` : ''}
     </article>`;
   }
 
@@ -238,6 +246,19 @@
     delete E().conclusoes[ck];
     marcarConcluidos(); toast('Conclusão desfeita.'); render();
   }
+  // Um processo por vez: grava o pedido (processo + e-mails pendentes com anexo) e abre o atalho que inicia o script local.
+  // O endereço painel:// não leva argumentos de propósito; o script lê o pedido pela sessão do gestor no Edge do painel.
+  async function juntar(ck) {
+    const g = grupos().find(x => x.ck === ck);
+    if (!g || !g.numero) return;
+    const ids = g.msgs.filter(m => m.anexo_juntar && !m.solucionado).map(m => m.msg_id);
+    if (!ids.length) { toast('Este processo não tem e-mail com anexo para juntar.'); return; }
+    const { error } = await st.sb.from('juntada_pedido').upsert({ id: 1, numero: g.numero, msg_ids: ids }, { onConflict: 'id' });
+    if (error) { falha(error); return; }
+    toast(`Pedido enviado: ${fmtCNJ(g.numero)}. O script abre o processo no PJe; confira e assine.`);
+    const a = document.createElement('a'); a.href = 'painel://extrair?alvo=juntada';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
   function iniciarNota(ck) {
     const s = E(); s.anotando = ck; s.rascunho = (s.notas[ck] || {}).texto || ''; render();
     const t = $('#em-nota-texto'); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
@@ -262,6 +283,7 @@
     const acao = a.dataset.eacao;
     if (acao === 'ver') abrirMensagem(a.dataset.id);
     else if (acao === 'copiar') copiar(a);
+    else if (acao === 'juntar') juntar(a.dataset.ck);
     else if (acao === 'concluir') concluir(a.dataset.ck);
     else if (acao === 'desfazer') desfazer(a.dataset.ck);
     else if (acao === 'anotar') iniciarNota(a.dataset.ck);
