@@ -237,7 +237,8 @@ ol.linhas { list-style: none; margin: 0; padding: 0; }
 @media (max-width: 560px) {
   .contagens { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tile.concluido { grid-column: 1 / -1; }
-  .abas { margin-left: 0; }
+  .abas { margin-left: 0; max-width: 100%; flex-wrap: wrap; }   /* 6 abas (gestor, E-mails) não cabem em uma linha: quebram em linhas */
+  .aba { padding: 6px 11px; }
   .grupo-cab p { flex-basis: 100%; margin: 0; }
 }
 
