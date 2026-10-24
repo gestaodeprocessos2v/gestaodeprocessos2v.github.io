@@ -297,7 +297,7 @@
   }
 
   async function atualizar() {
-    if (st.estado !== 'ok' || document.hidden || st.gravando || st.modal || st.anotando || st.devolvendo || (st.emails && st.emails.modal)) return;
+    if (st.estado !== 'ok' || document.hidden || st.gravando || st.modal || st.anotando || st.devolvendo || (st.emails && (st.emails.modal || st.emails.anotando))) return;
     try { await carregar(); render(); } catch (e) { console.error(e); }
   }
 

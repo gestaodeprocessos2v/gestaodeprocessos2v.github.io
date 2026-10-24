@@ -19,7 +19,8 @@
   const ABAS = [['emsub', 'Juíza Substituta'], ['emtit', 'Juiz Titular'], ['emnl', 'Não localizado'], ['emsec', 'Secretaria'], ['emdem', 'Demais'], ['emgest', 'Só gestor']];
 
   // ---------- estado ----------
-  const E = () => st.emails || (st.emails = { itens: [], lidos: new Set(), carregado: false, erro: false, busca: '', modal: null, corpos: {} });
+  const E = () => st.emails || (st.emails = { itens: [], lidos: new Set(), carregado: false, erro: false, busca: '', modal: null, corpos: {},
+    conclusoes: {}, notas: {}, concAtiva: false, concl: false, anotando: null, rascunho: '' });
 
   // Abas que a pessoa enxerga. Magistrado(a): só a aba do seu cargo (o banco só entrega as minutas dela).
   P.abasEmails = function () {
@@ -33,14 +34,22 @@
     if (!podeVer()) return;
     const s = E();
     try {
-      const [itens, lidos] = await Promise.all([
+      const lerOpc = (tabela, campos) => todas((a, b) => st.sb.from(tabela).select(campos).order('chave').range(a, b))
+        .then(r => ({ ok: true, r }), e => { console.error(tabela + ' indisponível', e); return { ok: false, r: [] }; });
+      const [itens, lidos, conc, notas] = await Promise.all([
         todas((a, b) => st.sb.from('emails_resumo')
           .select('msg_id,publico,numero,categoria,cargo,tarefa,entrada_tarefa,urgente,perecimento,pedido,ato_provavel,remetente,assunto,recebido_em,web_link,anexo_juntar,solucionado,nao_localizado')
           .order('recebido_em', { ascending: false }).order('msg_id').range(a, b)),
         todas((a, b) => st.sb.from('emails_lidos').select('msg_id').eq('email', st.email).order('msg_id').range(a, b)),
+        lerOpc('emails_conclusao', 'chave,concluido_por,em'),
+        lerOpc('emails_notas', 'chave,texto,por,em'),
       ]);
       s.itens = itens;
       s.lidos = new Set(lidos.map(r => r.msg_id));
+      s.conclusoes = Object.fromEntries(conc.r.map(x => [x.chave, { por: x.concluido_por, em: x.em }]));
+      s.notas = Object.fromEntries(notas.r.map(x => [x.chave, { texto: x.texto, por: x.por, em: x.em }]));
+      s.concAtiva = conc.ok && notas.ok;
+      marcarConcluidos();
       s.erro = false;
     } catch (e) { console.error('E-mails indisponíveis', e); s.erro = true; }
     s.carregado = true;
@@ -76,8 +85,11 @@
     else if (sec) aba = 'emsec';
     else aba = 'emdem';
     const entrada = rep.entrada_tarefa ? Date.parse(rep.entrada_tarefa) : null;
-    return { chave: msgs[0].msg_id, numero: rep.numero, msgs, rep, cargo, aba, entrada, urgente: msgs.some(m => m.urgente), anexo: msgs.some(m => m.anexo_juntar), ultimo: Date.parse(rep.recebido_em) };
+    const ck = P.R.chaveEmail(msgs[0]), conclusao = E().conclusoes[ck] || null;
+    return { chave: msgs[0].msg_id, ck, conclusao, concluido: P.R.emailConcluido(msgs, conclusao), numero: rep.numero, msgs, rep, cargo, aba, entrada, urgente: msgs.some(m => m.urgente), anexo: msgs.some(m => m.anexo_juntar), ultimo: Date.parse(rep.recebido_em) };
   }
+  // Marca em cada e-mail se o card dele está concluído (a automação de juntada lê esse campo para pular os já resolvidos).
+  function marcarConcluidos() { for (const g of grupos()) for (const m of g.msgs) m.concluido = g.concluido; }
   const naoLida = m => !E().lidos.has(m.msg_id);
   const nNaoLidas = g => g.msgs.filter(naoLida).length;
 
@@ -85,23 +97,40 @@
   P.emailsNaoLidos = function (aba) {
     if (!podeVer() || !st.emails || !st.emails.carregado) return 0;
     let n = 0;
-    for (const g of grupos()) if ((!aba || g.aba === aba) && P.abasEmails().includes(g.aba)) n += nNaoLidas(g);
+    for (const g of grupos()) if (!g.concluido && (!aba || g.aba === aba) && P.abasEmails().includes(g.aba)) n += nNaoLidas(g);
     return n;
   };
 
   // ---------- tela ----------
   function filtrar(lista, aba) {
     const q = norm(E().busca).trim();
-    return lista.filter(g => g.aba === aba && (!q || norm([g.numero, fmtCNJ(g.numero), g.rep.tarefa, ...g.msgs.map(m => `${m.remetente} ${m.pedido} ${m.assunto}`)].join(' ')).includes(q)))
+    return lista.filter(g => g.aba === aba && (E().concl || !g.concluido) && (!q || norm([g.numero, fmtCNJ(g.numero), g.rep.tarefa, ...g.msgs.map(m => `${m.remetente} ${m.pedido} ${m.assunto}`)].join(' ')).includes(q)))
       .sort((a, b) => (b.urgente - a.urgente) || ((a.entrada || Infinity) - (b.entrada || Infinity)) || (b.ultimo - a.ultimo));
   }
 
   const seloCargo = g => g.cargo ? `<span class="selo sigilo">${ROTULO_CARGO[g.cargo]}</span>` : `<span class="selo sigilo">Cargo não identificado</span>`;
 
+  const quando = ms => dataHoraBR(Date.parse(ms));
+
+  function blocoNota(g) {
+    const s = E(), n = s.notas[g.ck];
+    if (s.anotando === g.ck) {
+      return `<form class="anotar-form" data-eform="anotar" data-ck="${esc(g.ck)}">
+        <textarea id="em-nota-texto" maxlength="2000" rows="3" aria-label="Anotação sobre o processo" placeholder="Ex.: juntado no processo; aguardando a decisão">${esc(s.rascunho)}</textarea>
+        <div class="linha-botoes"><button class="btn primario" type="submit">Salvar</button>${n ? '<button class="btn perigo" type="button" data-eacao="apagar-nota">Apagar</button>' : ''}<button class="btn" type="button" data-eacao="cancelar-nota">Cancelar</button></div>
+      </form>`;
+    }
+    if (n) return `<div class="em-anot"><button class="anot-texto" type="button" data-eacao="anotar" data-ck="${esc(g.ck)}" data-balao="Editar anotação" aria-description="Editar anotação">${esc(n.texto)}</button><span class="quando">${esc(quando(n.em))}${n.por ? ' · ' + esc(n.por) : ''}</span></div>`;
+    return `<div><button class="btn discreto" type="button" data-eacao="anotar" data-ck="${esc(g.ck)}">+ Anotar</button></div>`;
+  }
+
   function cartao(g) {
-    const r = g.rep, gestor = st.perfil === 'gestor';
+    const r = g.rep, gestor = st.perfil === 'gestor', s = E();
     const novo = nNaoLidas(g) > 0;
     const num = g.numero ? fmtCNJ(g.numero) : 'Sem número de processo';
+    const numH = g.numero
+      ? `<button class="num em-num" type="button" data-eacao="copiar" data-n="${esc(num)}" data-balao="Copiar número" aria-description="Copiar número">${esc(num)}</button>`
+      : `<span class="mono em-num">${esc(num)}</span>`;
     const tarefa = r.tarefa ? `${esc(r.tarefa)}${r.entrada_tarefa ? ` <span class="sub">[desde ${esc(dataBR(Date.parse(r.entrada_tarefa)))}]</span>` : ''}` : 'não localizada no painel';
     const msgs = g.msgs.map(m => `<div class="em-msg">
         <div><b>${esc(dataHoraBR(Date.parse(m.recebido_em)))}</b> · ${esc(m.remetente || '—')}${naoLida(m) ? ' <span class="selo novo">Novo</span>' : ''}${m.anexo_juntar ? ' <span class="selo prioritaria">📎🟥 Anexo para juntar</span>' : ''}</div>
@@ -111,13 +140,21 @@
     const cargoSel = !g.cargo && g.numero && podeCargo()
       ? `<label class="campo em-cargo"><span>Definir cargo</span><select data-ecargo="${esc(g.numero)}"><option value="">Escolha…</option><option value="S">Juíza Substituta</option><option value="T">Juiz Titular</option></select></label>` : '';
     const tipo = r.categoria !== 'minuta' ? ` · ${esc(ROTULO_CAT[r.categoria] || '')}` : '';
-    return `<article class="painel em-card${g.urgente ? ' t-urgente' : ''}">
-      <h3><span class="mono em-num">${esc(num)}</span> ${seloCargo(g)}${g.urgente ? ' <span class="selo urgente">Urgente</span>' : ''}${novo ? ' <span class="selo novo">Novo</span>' : ''}<span class="sub">${tipo}</span></h3>
+    const conclInfo = g.concluido
+      ? `<div class="nota"><b>Concluído${g.conclusao && g.conclusao.por ? ' por ' + esc(g.conclusao.por) : ''}</b>${g.conclusao ? ' em ' + esc(quando(g.conclusao.em)) : ' (marcado como solucionado pela rotina)'}</div>` : '';
+    const acoes = !s.concAtiva ? '' : g.concluido
+      ? (g.conclusao ? `<button class="btn" type="button" data-eacao="desfazer" data-ck="${esc(g.ck)}">Desfazer</button>` : '')
+      : `<button class="btn feito" type="button" data-eacao="concluir" data-ck="${esc(g.ck)}">Marcar como concluído</button>`;
+    return `<article class="painel em-card${g.urgente ? ' t-urgente' : ''}${g.concluido ? ' concluido' : ''}">
+      <h3>${numH} ${seloCargo(g)}${g.urgente ? ' <span class="selo urgente">Urgente</span>' : ''}${novo ? ' <span class="selo novo">Novo</span>' : ''}<span class="sub">${tipo}</span></h3>
       <p><b>Tarefa atual:</b> ${tarefa}</p>
       ${r.ato_provavel ? `<p><b>Ato provável:</b> ${esc(r.ato_provavel)}</p>` : ''}
       ${r.perecimento ? `<p><b>Perecimento:</b> ${esc(r.perecimento)}</p>` : ''}
       ${cargoSel}
       ${msgs}
+      ${conclInfo}
+      ${s.concAtiva ? blocoNota(g) : ''}
+      ${acoes ? `<div class="linha-botoes">${acoes}</div>` : ''}
     </article>`;
   }
 
@@ -133,7 +170,7 @@
     const ultima = s.itens.length ? Date.parse(s.itens[0].recebido_em) : null;
     const corpo = lista.length ? lista.map(cartao).join('')
       : vazio(s.itens.length ? 'Nada nesta aba' : 'Ainda não há e-mails', s.itens.length ? 'Nenhum e-mail corresponde a esta aba e à busca.' : 'A rotina das 7h30 grava aqui os e-mails de cada dia útil.');
-    v.innerHTML = `<div class="em-barra"><input type="search" id="em-busca" placeholder="Buscar por processo, remetente ou pedido" value="${esc(s.busca)}" aria-label="Buscar nos e-mails"></div>
+    v.innerHTML = `<div class="em-barra"><input type="search" id="em-busca" placeholder="Buscar por processo, remetente ou pedido" value="${esc(s.busca)}" aria-label="Buscar nos e-mails">${s.concAtiva ? `<label class="small em-mostrar"><input type="checkbox" id="em-mostrar-concl"${s.concl ? ' checked' : ''}> Mostrar concluídos</label>` : ''}</div>
       ${ultima ? `<p class="atualizacao">Último e-mail gravado em ${esc(dataHoraBR(ultima))} · resumo diário gerado pela rotina das 7h30.</p>` : ''}
       <div class="em-lista">${corpo}</div>${renderModalEmail()}`;
     if (foco === 'em-busca') { const b = $('#em-busca'); if (b) { b.focus(); if (pos != null) b.setSelectionRange(pos, pos); } }
@@ -182,18 +219,67 @@
     render();
   }
 
+  async function copiar(el) {
+    const n = el.dataset.n;
+    try { await navigator.clipboard.writeText(n); toast('Número copiado: ' + n); }
+    catch (e) { const rg = document.createRange(); rg.selectNodeContents(el); const sl = getSelection(); sl.removeAllRanges(); sl.addRange(rg); toast('Número selecionado. Use Ctrl+C para copiar.'); }
+  }
+
+  // O banco carimba quem concluiu e a hora (gatilho); a resposta traz os valores reais para a tela.
+  async function concluir(ck) {
+    const { data, error } = await st.sb.from('emails_conclusao').upsert({ chave: ck }, { onConflict: 'chave' }).select('concluido_por,em').single();
+    if (error) { falha(error); return; }
+    E().conclusoes[ck] = { por: data.concluido_por, em: data.em };
+    marcarConcluidos(); toast('Marcado como concluído.'); render();
+  }
+  async function desfazer(ck) {
+    const { error } = await st.sb.from('emails_conclusao').delete().eq('chave', ck);
+    if (error) { falha(error); return; }
+    delete E().conclusoes[ck];
+    marcarConcluidos(); toast('Conclusão desfeita.'); render();
+  }
+  function iniciarNota(ck) {
+    const s = E(); s.anotando = ck; s.rascunho = (s.notas[ck] || {}).texto || ''; render();
+    const t = $('#em-nota-texto'); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
+  }
+  async function salvarNota(ck, texto) {
+    const s = E();
+    if (texto) {
+      const { data, error } = await st.sb.from('emails_notas').upsert({ chave: ck, texto }, { onConflict: 'chave' }).select('texto,por,em').single();
+      if (error) { falha(error); return; }
+      s.notas[ck] = { texto: data.texto, por: data.por, em: data.em };
+    } else {
+      const { error } = await st.sb.from('emails_notas').delete().eq('chave', ck);
+      if (error) { falha(error); return; }
+      delete s.notas[ck];
+    }
+    s.anotando = null; s.rascunho = ''; render();
+  }
+
   const v = $('#v-emails');
   v.addEventListener('click', e => {
     const a = e.target.closest('[data-eacao]'); if (!a) return;
     const acao = a.dataset.eacao;
     if (acao === 'ver') abrirMensagem(a.dataset.id);
+    else if (acao === 'copiar') copiar(a);
+    else if (acao === 'concluir') concluir(a.dataset.ck);
+    else if (acao === 'desfazer') desfazer(a.dataset.ck);
+    else if (acao === 'anotar') iniciarNota(a.dataset.ck);
+    else if (acao === 'apagar-nota') salvarNota(E().anotando, '');
+    else if (acao === 'cancelar-nota') { E().anotando = null; E().rascunho = ''; render(); }
     else if (acao === 'fechar' || (acao === 'fechar-fundo' && e.target === a)) { E().modal = null; render(); }
   });
+  v.addEventListener('submit', e => {
+    const f = e.target.closest && e.target.closest('[data-eform="anotar"]'); if (!f) return;
+    e.preventDefault(); salvarNota(f.dataset.ck, ($('#em-nota-texto').value || '').trim());
+  });
   v.addEventListener('change', e => {
+    if (e.target.id === 'em-mostrar-concl') { E().concl = e.target.checked; render(); return; }
     if (e.target.dataset && e.target.dataset.ecargo) definirCargo(e.target.dataset.ecargo, e.target.value);
   });
   let buscaTimer = null;
   v.addEventListener('input', e => {
+    if (e.target.id === 'em-nota-texto') { E().rascunho = e.target.value; return; }
     if (e.target.id !== 'em-busca') return;
     clearTimeout(buscaTimer); buscaTimer = setTimeout(() => { E().busca = e.target.value; render(); }, 180);
   });

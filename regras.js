@@ -609,6 +609,21 @@
     return '﻿' + [cols.map(c => q(c[0])).join(';'), ...itens.map(t => cols.map(c => q(c[1](t))).join(';'))].join('\r\n');
   }
 
+  // ---------- e-mails: conclusão compartilhada ----------
+  // Chave do card da área E-mails: a mesma do agrupamento da tela (um card por processo e por público; sem número, um por mensagem).
+  // É também a chave das tabelas emails_conclusao e emails_notas, para os perfis verem o mesmo card.
+  const chaveEmail = m => `${m.publico}|${m.numero ? m.numero : 'msg|' + m.msg_id}`;
+
+  // Um card está concluído quando a rotina já o deu como solucionado, ou quando há linha de conclusão e NENHUMA mensagem dele chegou
+  // depois dela (e-mail novo reabre o processo sozinho). Cada perfil avalia só as mensagens que enxerga.
+  function emailConcluido(msgs, linha) {
+    const lista = msgs || [];
+    if (lista.length && lista.every(m => m.solucionado)) return true;
+    const em = linha && linha.em ? Date.parse(linha.em) : NaN;
+    if (isNaN(em)) return false;
+    return !lista.some(m => Date.parse(m.recebido_em) > em);
+  }
+
   function slug(s) {
     return semAcento(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'pessoa';
   }
@@ -616,6 +631,6 @@
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
     atribuir, pessoasDoSetor, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, montarFila, comparar, chaveItem,
-    paraCsv, tarefasParaCsv, slug, normTexto, soDigitos,
+    paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
