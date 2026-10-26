@@ -6,6 +6,9 @@
 -- Quem enxerga o quê é decidido pela RLS de emails_resumo: o exists abaixo respeita a política do usuário, então diretor e
 -- magistrado(a) só leem e gravam em cards cujos e-mails já enxergam (nenhum número de processo vaza).
 -- A coluna emails_resumo.solucionado e a rotina das 7h30 não mudam.
+-- Limite da chave ampliado de 80 para 200 caracteres (migração "emails_chave_200", 26/10/2026): a chave de um e-mail sem número de
+-- processo (publico|msg|<internetMessageId>) chega a 86 caracteres. Em bancos já criados: drop/add das restrições
+-- emails_conclusao_chave_check e emails_notas_chave_check com "between 8 and 200".
 -- Já aplicado no banco (migração "emails_conclusao", 24/10/2026), depois de testada a RLS em transação desfeita; este arquivo é o registro.
 
 create or replace function app.nome_atual()
@@ -15,13 +18,13 @@ as $$
 $$;
 
 create table public.emails_conclusao (
-  chave        text primary key check (length(chave) between 8 and 80),
+  chave        text primary key check (length(chave) between 8 and 200),
   concluido_por text not null default '',
   em           timestamptz not null default now()
 );
 
 create table public.emails_notas (
-  chave  text primary key check (length(chave) between 8 and 80),
+  chave  text primary key check (length(chave) between 8 and 200),
   texto  text not null check (length(texto) between 1 and 2000),
   por    text not null default '',
   em     timestamptz not null default now()
