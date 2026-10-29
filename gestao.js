@@ -55,6 +55,14 @@
     });
   }
 
+  // Painel com algo esperando gravação fica com o fundo vermelho suave dos urgentes: é o que tem o botão
+  // de gravar ou salvar aceso (prévia de envio lida, tabela ou configuração alterada). Vale também oculto.
+  const BOTOES_GRAVAR = ['gravar-importacao', 'jd-gravar', 'metas-gravar', 'pr-env-gravar', 'pr-eq-salvar', 'tf-salvar', 'ep-salvar', 'cfg-salvar']
+    .map(a => `[data-acao="${a}"]:not(:disabled)`).concat('[data-macao="gravar"]:not(:disabled)').join(', ');
+  function marcarPendentes() {
+    document.querySelectorAll('#v-gestao .paineis > section.painel').forEach(s => s.classList.toggle('pendente', !!s.querySelector(BOTOES_GRAVAR)));
+  }
+
   // Painéis lado a lado (na mesma linha da grade) ocultam e aparecem juntos, qualquer que seja o botão clicado.
   // A linha é vista na hora do clique: em tela estreita, com um painel por linha, cada um vale sozinho.
   function mesmaLinha(el) {
@@ -105,6 +113,7 @@
       ${painelConfig()}
     </div>`;
     ligarRecolher(v);
+    marcarPendentes();
     manter.forEach(el => { const novo = document.getElementById(el.id); if (novo) novo.replaceWith(el); });
     if (foco) { const el = document.getElementById(foco); if (el && el.tagName !== 'BUTTON') el.focus(); }
   };
@@ -887,6 +896,9 @@
   const v = $('#v-gestao');
   v.addEventListener('click', aoClicarGestao);
   v.addEventListener('submit', e => { if (e.target.id === 'form-urgencia') aoIncluirUrgencia(e); else e.preventDefault(); });
+  // Depois de qualquer digitação ou mudança, confere de novo quais painéis têm algo para gravar
+  // (os outros arquivos acendem os próprios botões no mesmo evento, por isso o setTimeout).
+  for (const tipo of ['input', 'change']) v.addEventListener(tipo, () => setTimeout(marcarPendentes, 0));
   v.addEventListener('change', e => {
     const id = e.target.id;
     if (campoCfg(e.target)) marcarCfgAlterada();

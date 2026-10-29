@@ -271,6 +271,8 @@ ol.linhas { list-style: none; margin: 0; padding: 0; }
 .painel.recolhido { align-self: start; padding-bottom: 0; gap: 0; }
 .painel.recolhido > :not(h2:first-child) { display: none; }
 .painel.recolhido > h2:first-child { border-bottom: 0; }
+/* Painel com alteração ou prévia esperando gravação: fundo vermelho suave, o mesmo do card Urgentes (gestao.js, marcarPendentes). */
+.painel.pendente, .painel.pendente > h2:first-child { background: var(--urg-bg); }
 .cfg-sub { display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--line); padding-top: 12px; min-width: 0; }
 .cfg-sub.recolhido > :not(h3:first-child) { display: none; }
 .campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; }
