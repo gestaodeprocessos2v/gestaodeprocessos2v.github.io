@@ -12,10 +12,9 @@
   const ALVOS = {
     pjer: { rotulo: 'PJe+R', input: '#imp-arquivo', arquivo: /^[\w .+()-]{1,120}\.csv$/i, balao: 'Abre o Edge do painel e baixa o relatório do PJe+R sozinho (o login no PJe continua seu). Precisa do atalho instalado neste computador.' },
     jd: { rotulo: 'JD', input: '#jd-arquivo', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i, balao: 'Lê no JD as RPV/PRC das 8 situações (só leitura, nada é alterado no JD) e monta a planilha sozinho; leva alguns minutos. O login no JD continua seu. Precisa do atalho instalado neste computador.' },
-    // BI: as duas partes não têm barra própria (só recebem os arquivos); o botão é o do painel único "Atualizar dados do BI" (alvo "bi").
-    'bi-produtividade': { oculto: true, input: '#pr-arq', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i },
-    'bi-metas': { oculto: true, input: '#metas-arq-resumo', campos: { resumo: '#metas-arq-resumo', pendentes: '#metas-arq-pend' }, carga: '#metas-carga', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i },
-    bi: { painel: true, partes: { produtividade: 'bi-produtividade', metas: 'bi-metas' }, rotuloBotao: 'Extrair tudo do BI', balao: 'Abre o Portal BI, escolhe a 2ª Vara e extrai a Produtividade da equipe (Atividades por Usuário) e as Metas CNJ (Resumo, Pendentes por Meta e as contagens da Meta 3); leva uns 3 minutos. O login no Portal BI continua seu. Precisa do atalho instalado neste computador.' },
+    // BI: um botão para cada parte, no painel "Atualizar dados do BI" (a barra de cada uma fica nesse painel, não junto do campo de arquivo).
+    'bi-produtividade': { painel: true, input: '#pr-arq', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i, rotuloBotao: 'Extrair produtividade', semPasta: true, balao: 'Abre o Portal BI, escolhe a 2ª Vara e extrai a Produtividade da equipe (Atividades por Usuário). O login no Portal BI continua seu. Precisa do atalho instalado neste computador.' },
+    'bi-metas': { painel: true, input: '#metas-arq-resumo', campos: { resumo: '#metas-arq-resumo', pendentes: '#metas-arq-pend' }, carga: '#metas-carga', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i, rotuloBotao: 'Extrair metas', balao: 'Abre o Portal BI, escolhe a 2ª Vara e extrai as Metas CNJ (Resumo, Pendentes por Meta e as contagens da Meta 3). O login no Portal BI continua seu. Precisa do atalho instalado neste computador.' },
   };
   const SUPORTE = typeof window.showDirectoryPicker === 'function';
   const ESPERA_MAX = 12 * 60 * 1000, INTERVALO = 3000;
@@ -64,23 +63,9 @@
     while (Date.now() < fim) { if (cond()) return true; await pausa(500); }
     return cond();
   }
-  // BI: entrega cada parte que deu certo (arquivo da Produtividade; Resumo, Pendentes e Última Carga das Metas; e as contagens da Meta 3, que vêm do script)
-  async function entregarBI(alvo, status) {
-    const cfg = ALVOS[alvo], partes = status.partes || {};
-    let entregues = 0;
-    for (const [chave, alvoParte] of Object.entries(cfg.partes)) {
-      const p = partes[chave];
-      if (!p || p.estado !== 'concluido') continue;
-      if (chave === 'metas' && P.metasDefinirM3) P.metasDefinirM3(p.meta3 || {});   // Meta 3 lida do BI (não há mais campos para digitar)
-      await entregar(alvoParte, p);
-      entregues++;
-    }
-    if (!entregues) throw new Error(status.mensagem || 'Nenhuma parte da extração do BI terminou.');
-    S.carregado[alvo] = status.gerado_em;
-  }
   async function entregar(alvo, status) {
     const cfg = ALVOS[alvo];
-    if (cfg.partes) return entregarBI(alvo, status);
+    if (alvo === 'bi-metas' && P.metasDefinirM3) P.metasDefinirM3(status.meta3 || {});   // Meta 3 lida do BI (não há campos para digitar)
     // [seletor do campo, nome do arquivo]: um campo só, ou vários (Metas)
     const campos = cfg.campos ? Object.entries(cfg.campos).map(([k, sel]) => [sel, (status.arquivos || {})[k]]) : [[cfg.input, status.arquivo]];
     for (const [sel, nome] of campos) {   // confere tudo antes de mexer na tela
@@ -122,11 +107,7 @@
         if ((st.estado === 'concluido' || st.estado === 'parcial') && recente) { await entregar(alvo, st); S.msg[alvo] = st.estado === 'parcial' ? (st.mensagem || 'Parte da extração falhou.') : ''; parar(alvo); }
         else if (st.estado === 'erro' || st.estado === 'cancelado') { if (Date.parse(st.atualizado_em) >= pedido - 5000) { S.msg[alvo] = st.mensagem || 'A extração não terminou.'; parar(alvo); } }
         else if (st.estado === 'em_andamento') {
-          let det = st.mensagem || 'Extraindo';
-          if (ALVOS[alvo].partes) {   // andamento fino da parte que está rodando
-            for (const sub of Object.values(ALVOS[alvo].partes)) { const x = await lerStatus(sub); if (x && x.estado === 'em_andamento' && Date.parse(x.atualizado_em) >= pedido - 5000) det += ' — ' + (x.mensagem || ''); }
-          }
-          S.msg[alvo] = det + '…';
+          S.msg[alvo] = (st.mensagem || 'Extraindo') + '…';
         }
       } catch (e) { S.msg[alvo] = e.message || 'Não consegui carregar o arquivo.'; parar(alvo); }
       montar();
@@ -159,8 +140,8 @@
     a.dataset.balao = cfg.balao;
     div.append(a);
     if (SUPORTE) {
-      const rot = !S.pasta ? 'Escolher pasta de entrada' : liberada() ? 'Trocar pasta' : 'Liberar pasta';
-      div.append(botao(rot, !S.pasta || liberada() ? 'pasta' : 'liberar', 'A pasta onde o script grava os arquivos extraídos (extrator/entrada, no OneDrive). O painel só lê essa pasta.'));
+      const rot = cfg.semPasta ? '' : !S.pasta ? 'Escolher pasta de entrada' : liberada() ? 'Trocar pasta' : 'Liberar pasta';
+      if (rot) div.append(botao(rot, !S.pasta || liberada() ? 'pasta' : 'liberar', 'A pasta onde o script grava os arquivos extraídos (extrator/entrada, no OneDrive). O painel só lê essa pasta.'));
       const st = S.status[alvo];
       if (liberada() && st && (st.estado === 'concluido' || st.estado === 'parcial') && S.carregado[alvo] !== st.gerado_em) div.append(botao('Carregar a última extração', 'carregar', 'Põe o último arquivo extraído na prévia abaixo.'));
     }
@@ -169,12 +150,13 @@
     div.append(m);
     return div;
   }
-  // ---------- painel "Atualizar dados do BI" (um botão só para a Produtividade e as Metas) ----------
+  // ---------- painel "Atualizar dados do BI" (um botão para as Metas e outro para a Produtividade) ----------
   P.painelBIGestao = function () {
     return `<section class="painel" id="painel-bi">
       <h2>Atualizar dados do BI</h2>
-      <p>Um clique extrai do Portal BI, para a 2ª Vara, a <b>Produtividade</b> da equipe e as <b>Metas CNJ</b> (Resumo, Pendentes por Meta e as contagens da Meta 3). Depois confira as prévias dos dois painéis abaixo e use <b>Gravar tudo</b>. Os campos de arquivo dos painéis continuam valendo para o envio manual.</p>
-      <div class="automacao" data-alvo="bi"></div>
+      <p>Extraia do Portal BI, para a 2ª Vara, as <b>Metas CNJ</b> (Resumo, Pendentes por Meta e as contagens da Meta 3) e a <b>Produtividade</b> da equipe, cada uma no seu botão (uma não depende da outra). Depois confira as prévias dos dois painéis abaixo e use <b>Gravar tudo</b>. Os campos de arquivo dos painéis continuam valendo para o envio manual.</p>
+      <div class="automacao" data-alvo="bi-metas"></div>
+      <div class="automacao" data-alvo="bi-produtividade"></div>
       <div class="automacao" id="bi-gravar"></div>
     </section>`;
   };
@@ -211,8 +193,7 @@
   function montar() {
     for (const alvo of Object.keys(ALVOS)) {
       const cfg = ALVOS[alvo];
-      if (cfg.oculto) continue;
-      if (cfg.painel) {   // o painel único traz o próprio contêiner; só preenche
+      if (cfg.painel) {   // o painel do BI traz os próprios contêineres; só preenche
         const barra = document.querySelector(`.automacao[data-alvo="${alvo}"]`);
         if (barra) { const nova = criarBarra(alvo); if (barra.innerHTML !== nova.innerHTML) barra.replaceChildren(...nova.childNodes); }
         const grav = document.getElementById('bi-gravar');
