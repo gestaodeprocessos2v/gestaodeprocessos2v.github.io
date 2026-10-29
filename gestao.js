@@ -454,6 +454,15 @@
     for (const a of ['tf-salvar', 'tf-descartar']) { const b = document.querySelector(`[data-acao="${a}"]`); if (b) b.disabled = false; }
   }
 
+  // Configuração: os botões Salvar e Descartar só acendem depois de alguma mudança (como na tabela de tarefas).
+  // Os campos de "Adicionar pessoa" não contam: só viram mudança quando a pessoa é adicionada.
+  function marcarCfgAlterada() {
+    st.cfgAlterada = true;
+    const e = $('#cfg-estado'); if (e) { e.textContent = 'Alterações não salvas'; e.className = 'small alterado'; }
+    for (const a of ['cfg-salvar', 'cfg-descartar']) { const b = document.querySelector(`[data-acao="${a}"]`); if (b && !st.gravando) b.disabled = false; }
+  }
+  const campoCfg = el => /^cfg-/.test(el.id) && el.id !== 'cfg-nova-pessoa' && el.id !== 'cfg-nova-tipo';
+
   // Tarefas vistas no relatório que não estão na tabela: acrescenta ao rascunho (sem setor; o gestor escolhe e salva).
   function nomesSemCadastro(origem, um) {
     if (um) return [um];
@@ -699,8 +708,9 @@
         ${setoresH}
       </div>
       <div class="linha-botoes">
-        <button class="btn primario" type="button" data-acao="cfg-salvar" ${st.gravando ? 'disabled' : ''}>Salvar configuração</button>
-        <button class="btn" type="button" data-acao="cfg-descartar">Descartar alterações</button>
+        <button class="btn primario" type="button" data-acao="cfg-salvar" ${st.gravando || !st.cfgAlterada ? 'disabled' : ''}>Salvar configuração</button>
+        <button class="btn" type="button" data-acao="cfg-descartar" ${st.cfgAlterada ? '' : 'disabled'}>Descartar alterações</button>
+        <span id="cfg-estado" class="small ${st.cfgAlterada ? 'alterado' : 'muted'}">${st.cfgAlterada ? 'Alterações não salvas' : 'Tudo salvo'}</span>
       </div>
     </section>`;
   }
@@ -800,7 +810,7 @@
       for (const p of valor.pessoas || []) delete p.email;   // e-mails ficam só na tabela de acessos, visível ao gestor
       const { error } = await sb.from('config').upsert({ chave: 'geral', valor, atualizado_em: iso(Date.now()), atualizado_por: st.email }, { onConflict: 'chave' });
       if (error) throw error;
-      st.rascunho = null; st.rascOutros = null;
+      st.rascunho = null; st.rascOutros = null; st.cfgAlterada = false;
       await P.carregar();
       toast('Configuração salva.');
     } catch (e) { falha(e); }
@@ -814,6 +824,7 @@
     const acao = alvo.dataset.acao;
     if (acao === 'sec-ocultar') { alternarSecao(alvo); return; }
     if (acao.startsWith('cfg-')) lerRascunho();
+    if (/^cfg-(add-(?!pessoa)|remover-)/.test(acao)) st.cfgAlterada = true;
     const c = st.rascunho;
     try {
       if (acao.startsWith('tf-')) await acaoTarefas(acao, alvo);
@@ -845,7 +856,7 @@
         let id = R.slug(nome), n = 2;
         while ((c.pessoas || []).some(p => p.id === id)) id = R.slug(nome) + '-' + n++;
         c.pessoas = (c.pessoas || []).concat({ id, nome, tipo: $('#cfg-nova-tipo').value, email: '' });
-        st.novaPessoa = ''; render();
+        st.novaPessoa = ''; st.cfgAlterada = true; render();
       }
       else if (acao === 'cfg-remover-pessoa') { c.pessoas.splice(Number(alvo.dataset.i), 1); render(); }
       else if (acao === 'cfg-add-outro') { st.rascOutros = (st.rascOutros || []).concat({ nome: '', email: '', perfil: 'magistrado' }); render(); }
@@ -858,7 +869,7 @@
       else if (acao === 'cfg-remover-etiqueta') { c.etiquetasFiltro.splice(Number(alvo.dataset.i), 1); render(); }
       else if (acao === 'cfg-remover-visao') { c.visoes.splice(Number(alvo.dataset.i), 1); render(); }
       else if (acao === 'cfg-remover-regra') { c.regrasClasse.splice(Number(alvo.dataset.i), 1); render(); }
-      else if (acao === 'cfg-descartar') { st.rascunho = null; st.rascOutros = null; render(); toast('Alterações descartadas.'); }
+      else if (acao === 'cfg-descartar') { st.rascunho = null; st.rascOutros = null; st.cfgAlterada = false; render(); toast('Alterações descartadas.'); }
       else if (acao === 'cfg-salvar') await salvarConfiguracao();
     } catch (e) { falha(e); }
   }
@@ -868,6 +879,7 @@
   v.addEventListener('submit', e => { if (e.target.id === 'form-urgencia') aoIncluirUrgencia(e); else e.preventDefault(); });
   v.addEventListener('change', e => {
     const id = e.target.id;
+    if (campoCfg(e.target)) marcarCfgAlterada();
     if (id === 'imp-arquivo' || id === 'imp-destino') prepararImportacao();
     else if (e.target.dataset.epcampo) editarEtiquetaPrioridade(e.target);
     else if (e.target.dataset.campo && e.target.dataset.i != null) editarTarefa(e.target);
@@ -885,6 +897,7 @@
   });
   let tfBuscaTimer = null;
   v.addEventListener('input', e => {
+    if (campoCfg(e.target)) marcarCfgAlterada();
     if (e.target.id === 'urg-numero') sugerirResponsavel();
     else if (e.target.id === 'tf-busca') { clearTimeout(tfBuscaTimer); tfBuscaTimer = setTimeout(() => { st.filtroTabela.busca = e.target.value; render(); }, 200); }
     else if (e.target.dataset.epcampo && e.target.type === 'text') editarEtiquetaPrioridade(e.target);
