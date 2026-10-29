@@ -249,11 +249,14 @@ ol.linhas { list-style: none; margin: 0; padding: 0; }
 .tabela-tarefas thead th { position: sticky; top: 0; z-index: 1; }
 .tabela-tarefas td { padding: 4px 6px; }
 .tabela-tarefas input[type="text"], .tabela-tarefas select { width: 100%; padding: 4px 6px; font-size: 13px; }
-.tabela-tarefas td:nth-child(1) { min-width: 18rem; }
-.tabela-tarefas td:nth-child(2) { min-width: 11rem; }
-.tabela-tarefas td:nth-child(3) { min-width: 9rem; }
-.tabela-tarefas td:nth-child(4) { min-width: 11rem; }
-.tabela-tarefas td:nth-child(6) { min-width: 13rem; }
+/* Larguras mínimas pensadas para caber sem rolagem horizontal no PC (painel com cerca de 1.200 px). */
+.tabela-tarefas td:nth-child(1) { min-width: 13rem; width: 30%; }
+.tabela-tarefas td:nth-child(2) { min-width: 8.5rem; }
+.tabela-tarefas td:nth-child(3) { min-width: 8rem; }
+.tabela-tarefas td:nth-child(4) { min-width: 8.5rem; }
+.tabela-tarefas td:nth-child(6) { min-width: 8.5rem; }
+.tabela-tarefas th { white-space: normal; }
+.tabela-tarefas td .btn { padding: 4px 8px; }
 .tabela-tarefas td.ck { text-align: center; }
 .paineis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 16px; margin-top: 20px; }
 .painel { background: var(--surface); border-radius: var(--r); box-shadow: var(--shadow); padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; overflow: hidden; }

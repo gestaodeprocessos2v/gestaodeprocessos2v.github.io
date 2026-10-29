@@ -79,12 +79,12 @@
       .map(([id, ativo]) => { const el = ativo && document.getElementById(id); return el && el.files && el.files.length ? el : null; }).filter(Boolean);
     v.innerHTML = `<div class="paineis">
       ${P.htmlGestorFila()}
+      ${painelUrgencia()}
       ${painelImportar()}
       ${P.painelJDGestao ? P.painelJDGestao() : ''}
       ${P.painelBIGestao ? P.painelBIGestao() : ''}
       ${P.painelProdGestao ? P.painelProdGestao() : ''}
       ${P.painelMetasGestao ? P.painelMetasGestao() : ''}
-      ${painelUrgencia()}
       ${P.painelMinutasGestao ? P.painelMinutasGestao() : ''}
       ${P.painelEquipeGestao ? P.painelEquipeGestao() : ''}
       ${painelResumo()}
