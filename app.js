@@ -310,7 +310,10 @@
     const itens = [];
     const notasP = st.notas[p] || {};
     // Processo que saiu da lista mas segue na fila por causa da anotação: some assim que a anotação for excluída.
-    for (const r of st.filas) if (r.pessoa === p) for (const it of r.itens || []) if (!it.fora || (notasP[R.soDigitos(it.n)] || {}).texto) itens.push(it);
+    // Fila do gestor gravada antes de a etiqueta ir junto no processo: mostra a etiqueta configurada hoje.
+    const cfgG = st.config || {};
+    const etGestor = p === GESTOR_ID ? (cfgG.etiquetaGestor == null ? R.ETIQUETA_GESTOR_PADRAO : cfgG.etiquetaGestor) : '';
+    for (const r of st.filas) if (r.pessoa === p) for (const it of r.itens || []) if (!it.fora || (notasP[R.soDigitos(it.n)] || {}).texto) itens.push(etGestor && !it.ed ? Object.assign({}, it, { ed: [etGestor] }) : it);
     const umMes = Date.now() - 30 * DIA;
     const fila = R.montarFila({
       itens,
@@ -605,7 +608,7 @@
     }
     if (l.origem === 'devolucao') nota = `<div class="nota"><b>Devolvido por ${esc(nomeDe(l.de))}</b> em ${dataHoraBR(l.criadaEm)}${l.motivo ? ': ' + esc(l.motivo) : ''}</div>`;
     const resp = geral || eventual ? `<div class="sub sub-resp">Responsável: ${esc(nomeDe(l.dono))}</div>` : '';
-    // Fila do diretor: mostra só as etiquetas da lista dele que o processo tem.
+    // Fila do diretor: mostra só as etiquetas da lista dele que o processo tem. Fila do gestor: a etiqueta que o selecionou.
     const etqHTML = l.ed && l.ed.length ? `<div class="etiquetas" aria-label="Etiquetas do filtro">${l.ed.map(x => `<span class="chip">${esc(x)}</span>`).join('')}</div>` : '';
     let acoes = '', anot, form = '';
     const dis = st.verComo && modo !== 'gestor' ? ' disabled data-balao="Visualização somente leitura" aria-description="Visualização somente leitura"' : '';

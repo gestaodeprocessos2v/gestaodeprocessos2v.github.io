@@ -453,6 +453,7 @@
 
   // Filas do diretor e do gestor: escolhidas só por etiqueta, em qualquer tarefa ou setor (independem da tabela de tarefas).
   // Um item por processo (o de chegada mais antiga). Diretor: guarda só as etiquetas da lista dele ("ed") e "u" se alguma é urgente.
+  // Gestor: guarda em "ed" a etiqueta que o colocou na fila, para aparecer no processo.
   const ETIQUETA_GESTOR_PADRAO = 'Alberto - Acompanhar';
   const GESTOR_ID = '__gestor';
   function prepararEspeciais(itens, config) {
@@ -476,7 +477,7 @@
         const achadas = dirEt.filter(x => temEtiqueta(it.e, x.e));
         if (achadas.length) guardar(dir, it, achadas.map(x => x.e), achadas.some(x => x.u));
       }
-      if (etGestor && temEtiqueta(it.e, etGestor)) guardar(ges, it, null, false);
+      if (etGestor && temEtiqueta(it.e, etGestor)) guardar(ges, it, [etGestor], false);
     }
     return { diretor: [...dir.values()], gestor: [...ges.values()] };
   }
