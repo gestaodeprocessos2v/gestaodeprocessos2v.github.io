@@ -55,15 +55,25 @@
     });
   }
 
+  // Painéis lado a lado (na mesma linha da grade) ocultam e aparecem juntos, qualquer que seja o botão clicado.
+  // A linha é vista na hora do clique: em tela estreita, com um painel por linha, cada um vale sozinho.
+  function mesmaLinha(el) {
+    if (!el.matches('section.painel')) return [el];
+    const topo = el.getBoundingClientRect().top;
+    return [...el.parentElement.children].filter(x => x.matches('section.painel[data-sec]') && Math.abs(x.getBoundingClientRect().top - topo) < 2);
+  }
+
   function alternarSecao(botao) {
     const el = botao.closest('[data-sec]');
     if (!el) return;
     const oculta = !el.classList.contains('recolhido');
-    el.classList.toggle('recolhido', oculta);
-    if (oculta) ocultas.add(el.dataset.sec); else ocultas.delete(el.dataset.sec);
+    for (const x of mesmaLinha(el)) {
+      x.classList.toggle('recolhido', oculta);
+      if (oculta) ocultas.add(x.dataset.sec); else ocultas.delete(x.dataset.sec);
+      const b = x.querySelector(':scope > .sec-cab > [data-acao="sec-ocultar"]');
+      if (b) { b.textContent = oculta ? 'Mostrar' : 'Ocultar'; b.setAttribute('aria-expanded', String(!oculta)); }
+    }
     guardar(CHAVE_OCULTAS, JSON.stringify([...ocultas]));
-    botao.textContent = oculta ? 'Mostrar' : 'Ocultar';
-    botao.setAttribute('aria-expanded', String(!oculta));
   }
 
   P.renderGestao = function () {
