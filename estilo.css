@@ -344,11 +344,15 @@ body { margin: 0; }
 .sub-resp { margin-top: 4px; }
 .acoes .btn { white-space: normal; text-align: center; }
 .perfil-cel { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.acesso-cfg { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 10rem) minmax(0, 1.3fr) auto; gap: 6px; align-items: center; }
+/* Outros acessos: Perfil e Titular/Substituta lado a lado, para cada acesso caber numa linha. */
+.acesso-cfg { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 20.5rem) minmax(0, 1.3fr) auto; gap: 6px; align-items: center; }
+.acesso-cfg .perfil-cel { flex-direction: row; }
+.acesso-cfg .perfil-cel select { flex: 0 1 10rem; min-width: 0; }
 .pessoa-cfg { grid-template-columns: minmax(0, 1fr) minmax(0, 10rem) minmax(0, 1.3fr) auto; }
 .cab-cfg { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .02em; }
 @media (max-width: 560px) {
   .pessoa-cfg, .acesso-cfg { grid-template-columns: 1fr 1fr; }
+  .acesso-cfg .perfil-cel { flex-direction: column; }
 }
 .marca-nome[hidden]{display:none}
 .topo .ver-como { background: var(--band-2); color: var(--band-ink); border: 0; border-radius: var(--r); padding: 8px 10px; font: inherit; font-weight: 600; max-width: 100%; }
