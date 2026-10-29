@@ -310,10 +310,12 @@
     const itens = [];
     const notasP = st.notas[p] || {};
     // Processo que saiu da lista mas segue na fila por causa da anotação: some assim que a anotação for excluída.
-    // Fila do gestor gravada antes de a etiqueta ir junto no processo: mostra a etiqueta configurada hoje.
+    // Fila do gestor gravada antes de a etiqueta ir junto no processo: mostra a etiqueta configurada hoje,
+    // mas só se for uma; com várias (separadas por |) não dá para saber qual o processo tem, até o próximo envio.
     const cfgG = st.config || {};
-    const etGestor = p === GESTOR_ID ? (cfgG.etiquetaGestor == null ? R.ETIQUETA_GESTOR_PADRAO : cfgG.etiquetaGestor) : '';
-    for (const r of st.filas) if (r.pessoa === p) for (const it of r.itens || []) if (!it.fora || (notasP[R.soDigitos(it.n)] || {}).texto) itens.push(etGestor && !it.ed ? Object.assign({}, it, { ed: [etGestor] }) : it);
+    const etGestor = p === GESTOR_ID ? (cfgG.etiquetaGestor == null ? R.ETIQUETA_GESTOR_PADRAO : cfgG.etiquetaGestor).trim() : '';
+    const umaEt = etGestor && !etGestor.includes('|') ? etGestor : '';
+    for (const r of st.filas) if (r.pessoa === p) for (const it of r.itens || []) if (!it.fora || (notasP[R.soDigitos(it.n)] || {}).texto) itens.push(umaEt && !it.ed ? Object.assign({}, it, { ed: [umaEt] }) : it);
     const umMes = Date.now() - 30 * DIA;
     const fila = R.montarFila({
       itens,

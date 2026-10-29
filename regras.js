@@ -461,6 +461,7 @@
     const dirEt = (cfg.etiquetasDiretor || []).filter(x => x && x.e);
     const temDiretor = (cfg.pessoas || []).some(p => p.tipo === 'diretor');
     const etGestor = cfg.etiquetaGestor == null ? ETIQUETA_GESTOR_PADRAO : cfg.etiquetaGestor;
+    const etsGestor = String(etGestor || '').split('|').map(s => s.trim()).filter(Boolean);   // várias, separadas por |
     const dir = new Map(), ges = new Map();
     const guardar = (m, it, ed, urg) => {
       const k = soDigitos(it.n);
@@ -477,7 +478,8 @@
         const achadas = dirEt.filter(x => temEtiqueta(it.e, x.e));
         if (achadas.length) guardar(dir, it, achadas.map(x => x.e), achadas.some(x => x.u));
       }
-      if (etGestor && temEtiqueta(it.e, etGestor)) guardar(ges, it, [etGestor], false);
+      const doGestor = etsGestor.filter(x => temEtiqueta(it.e, x));
+      if (doGestor.length) guardar(ges, it, doGestor, false);
     }
     return { diretor: [...dir.values()], gestor: [...ges.values()] };
   }

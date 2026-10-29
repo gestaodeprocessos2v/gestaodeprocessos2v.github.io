@@ -713,7 +713,7 @@
       </div>
       <div class="cfg-sub" data-sub="gestor">
         <h3>Fila do gestor (por etiqueta)</h3>
-        <p class="small muted">A fila do gestor, no topo desta aba, mostra os processos com esta etiqueta e os que servidores e o diretor enviarem para o gestor. Deixe em branco para usar só os envios.</p>
+        <p class="small muted">A fila do gestor, no topo desta aba, mostra os processos com esta etiqueta e os que servidores e o diretor enviarem para o gestor. Para mais de uma etiqueta, separe com | (ex.: Alberto - Acompanhar|# Secretaria - Cadastrar condenação de improbidade). Deixe em branco para usar só os envios.</p>
         <div class="regra so-etiqueta"><input type="text" id="cfg-etg" value="${esc(c.etiquetaGestor == null ? R.ETIQUETA_GESTOR_PADRAO : c.etiquetaGestor)}" aria-label="Etiqueta da fila do gestor" placeholder="${esc(R.ETIQUETA_GESTOR_PADRAO)}"></div>
       </div>
       <div class="cfg-sub" data-sub="excecoes">
