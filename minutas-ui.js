@@ -164,11 +164,31 @@
     </div>`;
   }
 
+  // Linha de uma minuta gravada (busca e últimos envios).
+  function linhaGravada(n, i, fora) {
+    return `<tr><td class="mono">${esc(fmtCNJ(n))}</td><td>${fora.has(n) ? '<span class="muted">Fora da fila</span>' : 'Na fila'}</td><td class="mono">${dataHoraBR(i.enviadoEm)}</td><td class="mono">${i.concluidaEm ? dataBR(i.concluidaEm) : '—'}</td><td class="mono">${i.concluidaEm ? dataBR(i.concluidaEm + 90 * DIA) : '—'}</td><td><button class="btn discreto" type="button" data-macao="apagar" data-n="${esc(n)}">Apagar</button></td></tr>`;
+  }
+  const tabelaGravadas = linhas => `<div class="tabela-wrap"><table><thead><tr><th>Processo</th><th>Situação</th><th>Enviada em</th><th>Concluída em</th><th>Apagada em</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>`;
+  const ULTIMAS = 5;
+
+  // Resultado da busca por número (a partir de 4 dígitos, em qualquer parte do número).
+  function resultadoBusca(fora) {
+    const m = M(), q = digitos(m.busca);
+    if (!q) return '';
+    if (q.length < 4) return '<p class="small muted">Digite pelo menos 4 dígitos do número.</p>';
+    const achadas = Object.entries(m.lista).filter(([n]) => n.includes(q));
+    if (!achadas.length) return '<p class="small muted">Nenhuma minuta gravada com esse número.</p>';
+    return tabelaGravadas(achadas.slice(0, 20).map(([n, i]) => linhaGravada(n, i, fora)).join(''))
+      + (achadas.length > 20 ? `<p class="small muted">Mostrando 20 de ${achadas.length}. Digite mais dígitos para achar a minuta.</p>` : '');
+  }
+
+  // Sem a lista completa (ficava longa demais): números, busca por processo e só os últimos envios.
   P.painelMinutasGestao = function () {
     const m = M();
     const lista = Object.entries(m.lista).sort((a, b) => (b[1].enviadoEm || 0) - (a[1].enviadoEm || 0));
     const fora = new Set(lista.length ? foraDaFila() : []);
-    const linhas = lista.map(([n, i]) => `<tr><td class="mono">${esc(fmtCNJ(n))}</td><td>${fora.has(n) ? '<span class="muted">Fora da fila</span>' : 'Na fila'}</td><td class="mono">${dataHoraBR(i.enviadoEm)}</td><td class="mono">${i.concluidaEm ? dataBR(i.concluidaEm) : '—'}</td><td class="mono">${i.concluidaEm ? dataBR(i.concluidaEm + 90 * DIA) : '—'}</td><td><button class="btn discreto" type="button" data-macao="apagar" data-n="${esc(n)}">Apagar</button></td></tr>`).join('');
+    const concluidas = lista.filter(([, i]) => i.concluidaEm).length;
+    const ultimas = lista.slice(0, ULTIMAS).map(([n, i]) => linhaGravada(n, i, fora)).join('');
     return `<section class="painel" id="min-painel">
       <h2>Minutas para o Residente</h2>
       <p>Envie os arquivos .txt das minutas (um por processo, com o número do processo no nome do arquivo). O residente abre o texto pelo botão “Minuta” na fila dele, com a formatação do arquivo. A minuta é apagada sozinha 90 dias depois da conclusão do processo no painel.</p>
@@ -176,14 +196,24 @@
         <button class="btn" type="button" data-macao="escolher">Escolher arquivos .txt</button>
         <span class="small muted">ou arraste os arquivos para cá</span></div>
       ${m.imp ? previa(m.imp) : ''}
-      <h3>Gravadas (${lista.length})</h3>
-      ${lista.length ? `<div class="tabela-wrap"><table><thead><tr><th>Processo</th><th>Situação</th><th>Enviada em</th><th>Concluída em</th><th>Apagada em</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>
+      <h3>Gravadas <span class="muted mono">${lista.length}</span></h3>
+      ${lista.length ? `<div class="small">Na fila do residente: <b class="mono">${lista.length - fora.size}</b> · Fora da fila: <b class="mono">${fora.size}</b> · Concluídas (aguardando exclusão automática): <b class="mono">${concluidas}</b></div>
+        <label class="campo"><span>Buscar minuta pelo número do processo</span><input type="search" id="min-busca" class="mono" inputmode="numeric" placeholder="Ex.: 0801234" value="${esc(m.busca || '')}" autocomplete="off"></label>
+        <div id="min-busca-res">${resultadoBusca(fora)}</div>
+        <h3>Últimos envios</h3>
+        ${tabelaGravadas(ultimas)}
         ${fora.size ? `<div class="linha-botoes"><button class="btn" type="button" data-macao="apagar-fora">Apagar as ${fora.size} de processos fora da fila</button></div>` : ''}` : '<p class="small muted">Nenhuma minuta gravada.</p>'}
     </section>`;
   };
 
   const vg = $('#v-gestao');
   if (vg) {
+    // A busca só redesenha o resultado (redesenhar a aba inteira a cada tecla tiraria o cursor do lugar).
+    vg.addEventListener('input', e => {
+      if (e.target.id !== 'min-busca') return;
+      M().busca = e.target.value;
+      const r = $('#min-busca-res'); if (r) r.innerHTML = resultadoBusca(new Set(foraDaFila()));
+    });
     vg.addEventListener('change', e => { if (e.target.id === 'min-arquivos' && e.target.files.length) lerArquivos([...e.target.files]).catch(falha); });
     vg.addEventListener('dragover', e => { if (e.target.closest('#min-painel')) e.preventDefault(); });
     vg.addEventListener('drop', e => {

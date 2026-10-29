@@ -260,6 +260,16 @@ ol.linhas { list-style: none; margin: 0; padding: 0; }
 .painel > h2:first-child { margin: -16px -16px 0; padding: 12px 16px; background: var(--sunken); border-bottom: 1px solid var(--line); }
 .painel.largo { grid-column: 1 / -1; }
 .painel > p { margin: 0; color: var(--muted); }
+/* Ocultar/mostrar seções da aba Gestão e subseções da Configuração (gestao.js, ligarRecolher). Só visual: os campos continuam na página. */
+.sec-cab { display: flex; align-items: center; gap: 10px; }
+.sec-cab .btn { margin-left: auto; padding: 2px 10px; font-family: var(--font-body); font-size: 14px; letter-spacing: normal; }
+/* Incluir urgência em linha inteira: os campos numa linha só, com o Motivo mais largo. */
+@media (min-width: 900px) { #form-urgencia { grid-template-columns: 1.2fr 1fr 1fr 2fr auto; align-items: end; } }
+.painel.recolhido { align-self: start; padding-bottom: 0; gap: 0; }
+.painel.recolhido > :not(h2:first-child) { display: none; }
+.painel.recolhido > h2:first-child { border-bottom: 0; }
+.cfg-sub { display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--line); padding-top: 12px; min-width: 0; }
+.cfg-sub.recolhido > :not(h3:first-child) { display: none; }
 .campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; }
 .campo { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .campo > span { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .02em; }

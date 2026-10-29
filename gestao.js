@@ -3,7 +3,7 @@
   'use strict';
   const P = window.PAINEL;
   if (!P || !P.render) return;
-  const { st, R, SETORES, NOME_SETOR, TIPOS, ROTULO_TIPO, PERFIS, DIA, esc, dataBR, dataHoraBR, toast, falha, todas, iso, ms, pessoas, nomeDe, opcoesPessoas, opcoesTipo, baixar } = P;
+  const { st, R, SETORES, NOME_SETOR, TIPOS, ROTULO_TIPO, PERFIS, DIA, esc, dataBR, dataHoraBR, toast, falha, todas, iso, ms, pessoas, nomeDe, opcoesPessoas, opcoesTipo, baixar, guardar, ler } = P;
   const $ = sel => document.querySelector(sel);
   const render = () => P.render();
   const PERFIS_OUTROS = ['gestor', 'magistrado', 'visitante'];
@@ -31,6 +31,41 @@
     st.novaPessoa = $('#cfg-nova-pessoa').value;
   }
 
+  // Seções da aba e subseções da Configuração que o gestor ocultou. Ficam lembradas neste navegador;
+  // ocultar é só visual (CSS): os campos continuam na página, e o que foi digitado não se perde.
+  const CHAVE_OCULTAS = 'painel.gestao.ocultas';
+  const ocultas = new Set((() => { try { return JSON.parse(ler(CHAVE_OCULTAS) || '[]'); } catch (e) { return []; } })());
+  const botaoOcultar = oculta => `<button class="btn" type="button" data-acao="sec-ocultar" aria-expanded="${!oculta}">${oculta ? 'Mostrar' : 'Ocultar'}</button>`;
+
+  // Põe o botão Ocultar/Mostrar no título de cada painel (h2) e de cada subseção da Configuração (h3).
+  function ligarRecolher(v) {
+    const ligar = (el, cab, chave) => {
+      el.dataset.sec = chave;
+      el.classList.toggle('recolhido', ocultas.has(chave));
+      cab.classList.add('sec-cab');
+      cab.insertAdjacentHTML('beforeend', botaoOcultar(ocultas.has(chave)));
+    };
+    v.querySelectorAll('.paineis > section.painel').forEach(s => {
+      const h = s.querySelector(':scope > h2:first-child');
+      if (h) ligar(s, h, s.id || h.textContent.trim());
+    });
+    v.querySelectorAll('.cfg-sub').forEach(d => {
+      const h = d.querySelector(':scope > h3:first-child');
+      if (h) ligar(d, h, 'cfg:' + d.dataset.sub);
+    });
+  }
+
+  function alternarSecao(botao) {
+    const el = botao.closest('[data-sec]');
+    if (!el) return;
+    const oculta = !el.classList.contains('recolhido');
+    el.classList.toggle('recolhido', oculta);
+    if (oculta) ocultas.add(el.dataset.sec); else ocultas.delete(el.dataset.sec);
+    guardar(CHAVE_OCULTAS, JSON.stringify([...ocultas]));
+    botao.textContent = oculta ? 'Mostrar' : 'Ocultar';
+    botao.setAttribute('aria-expanded', String(!oculta));
+  }
+
   P.renderGestao = function () {
     const v = $('#v-gestao');
     if (st.perfil !== 'gestor') { v.innerHTML = ''; return; }
@@ -45,13 +80,13 @@
     v.innerHTML = `<div class="paineis">
       ${P.htmlGestorFila()}
       ${painelImportar()}
-      ${P.painelMinutasGestao ? P.painelMinutasGestao() : ''}
       ${P.painelJDGestao ? P.painelJDGestao() : ''}
-      ${P.painelEquipeGestao ? P.painelEquipeGestao() : ''}
       ${P.painelBIGestao ? P.painelBIGestao() : ''}
       ${P.painelProdGestao ? P.painelProdGestao() : ''}
       ${P.painelMetasGestao ? P.painelMetasGestao() : ''}
       ${painelUrgencia()}
+      ${P.painelMinutasGestao ? P.painelMinutasGestao() : ''}
+      ${P.painelEquipeGestao ? P.painelEquipeGestao() : ''}
       ${painelResumo()}
       ${painelAcessosNegados()}
       ${painelManutencao()}
@@ -59,6 +94,7 @@
       ${painelEtiquetasPrioridade()}
       ${painelConfig()}
     </div>`;
+    ligarRecolher(v);
     manter.forEach(el => { const novo = document.getElementById(el.id); if (novo) novo.replaceWith(el); });
     if (foco) { const el = document.getElementById(foco); if (el && el.tagName !== 'BUTTON') el.focus(); }
   };
@@ -246,7 +282,7 @@
     const respOpc = doSetor.length
       ? `<option value="">Escolha</option>` + doSetor.map(id => `<option value="${esc(id)}"${id === ur.responsavel ? ' selected' : ''}>${esc(nomeDe(id))}</option>`).join('')
       : `<option value="">${setorUrg === DIRETORIA ? 'Cadastre o Diretor de Secretaria na configuração' : 'Nenhuma pessoa atende este setor — ajuste a configuração'}</option>`;
-    return `<section class="painel">
+    return `<section class="painel largo" id="painel-urgencia">
       <h2>Incluir urgência</h2>
       <p>A urgência vai para o topo da fila do responsável (servidor ou Diretor de Secretaria) e fica lá até ele marcar como concluída.</p>
       <form id="form-urgencia" class="campos">
@@ -614,38 +650,54 @@
     return `<section class="painel largo">
       <h2>Configuração</h2>
       <p>As mudanças valem para todos assim que você salvar. Urgência e prioridade de cada tarefa ficam na tabela “Tarefas do PJe”. Quem não tiver e-mail cadastrado recebe processos, mas não consegue entrar no painel.</p>
-      <h3>Pessoas com fila (servidores, estagiários, residentes e servidores eventuais)</h3>
-      ${(c.pessoas || []).length ? '<div class="pessoa-cfg cab-cfg"><span>Nome</span><span>Perfil</span><span>E-mail Google</span><span></span></div>' : ''}
-      ${pessoasH || '<p class="muted">Nenhuma pessoa cadastrada.</p>'}
-      <div class="linha-botoes"><input type="text" id="cfg-nova-pessoa" placeholder="Nome da nova pessoa" aria-label="Nome da nova pessoa" value="${esc(st.novaPessoa || '')}">
-        <select id="cfg-nova-tipo" aria-label="Perfil da nova pessoa">${opcoesTipo('servidor')}</select>
-        <button class="btn" type="button" data-acao="cfg-add-pessoa">Adicionar pessoa</button></div>
-      <h3>Outros acessos (sem fila própria)</h3>
-      <p class="small muted">Gestor, Magistrado(a) e Diretor de Secretaria veem todas as filas; Visitante vê só o painel geral, sem filtrar por servidor. Só o Gestor acessa esta aba.</p>
-      ${outros.length ? '<div class="acesso-cfg cab-cfg"><span>Nome</span><span>Perfil</span><span>E-mail Google</span><span></span></div>' : ''}
-      ${outrosH}
-      <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-outro">Adicionar acesso</button></div>
-      <h3>Visões por pessoa (filtros opcionais)</h3>
-      <p class="small muted">Para quem trabalha em mais de um setor ou tipo de processo: a pessoa ganha um filtro na própria fila, ao lado da busca. Ele só muda o que aparece na tela; a distribuição continua igual. O painel sempre abre completo, sem filtro. A opção “Painel completo” existe automaticamente.</p>
-      ${visoesH}
-      <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-visao">Adicionar visão</button></div>
-      <h3>Etiquetas para filtro (Pagamentos)</h3>
-      <p class="small muted">Só as etiquetas listadas aqui são guardadas, e apenas nos processos de tarefas de Pagamentos. Elas viram o filtro “Etiqueta” na fila e no painel geral. Escreva exatamente como no PJe (ex.: # RPV - 01. Expedir). Depois de incluir ou mudar uma etiqueta, envie o CSV completo de novo para ela passar a valer.</p>
-      ${etiquetasH}
-      <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-etiqueta">Adicionar etiqueta</button></div>
-      <h3>Fila do Diretor de Secretaria (por etiqueta)</h3>
-      <p class="small muted">Entra na fila do diretor todo processo que tiver pelo menos uma destas etiquetas, em qualquer tarefa ou setor, uma vez só, com a tarefa de chegada mais antiga. Cada processo mostra apenas as etiquetas desta lista que ele tem. As marcadas como “Urgente” colocam o processo em Urgências. Os processos saem da fila quando deixam de ter a etiqueta no CSV novo. Depois de mudar a lista, envie o CSV de novo. Cadastre o diretor em “Pessoas com fila”, com o perfil Diretor de Secretaria.</p>
-      ${etDirH}
-      <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-etdir">Adicionar etiqueta</button></div>
-      <h3>Fila do gestor (por etiqueta)</h3>
-      <p class="small muted">A fila do gestor, no topo desta aba, mostra os processos com esta etiqueta e os que servidores e o diretor enviarem para o gestor. Deixe em branco para usar só os envios.</p>
-      <div class="regra so-etiqueta"><input type="text" id="cfg-etg" value="${esc(c.etiquetaGestor == null ? R.ETIQUETA_GESTOR_PADRAO : c.etiquetaGestor)}" aria-label="Etiqueta da fila do gestor" placeholder="${esc(R.ETIQUETA_GESTOR_PADRAO)}"></div>
-      <h3>Exceções por classe ou etiqueta</h3>
-      <p class="small muted">Valem antes da divisão do setor, na ordem da lista (a primeira que casar decide). Classe: use a sigla do PJe+R (ex.: ACPCiv|ACIA); etiqueta: o texto completo (ex.: $ Ação civil pública).</p>
-      ${regrasH}
-      <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-regra">Adicionar exceção</button></div>
-      <h3>Divisão por setor</h3>
-      ${setoresH}
+      <div class="cfg-sub" data-sub="pessoas">
+        <h3>Pessoas com fila (servidores, estagiários, residentes e servidores eventuais) <span class="muted mono">${(c.pessoas || []).length}</span></h3>
+        ${(c.pessoas || []).length ? '<div class="pessoa-cfg cab-cfg"><span>Nome</span><span>Perfil</span><span>E-mail Google</span><span></span></div>' : ''}
+        ${pessoasH || '<p class="muted">Nenhuma pessoa cadastrada.</p>'}
+        <div class="linha-botoes"><input type="text" id="cfg-nova-pessoa" placeholder="Nome da nova pessoa" aria-label="Nome da nova pessoa" value="${esc(st.novaPessoa || '')}">
+          <select id="cfg-nova-tipo" aria-label="Perfil da nova pessoa">${opcoesTipo('servidor')}</select>
+          <button class="btn" type="button" data-acao="cfg-add-pessoa">Adicionar pessoa</button></div>
+      </div>
+      <div class="cfg-sub" data-sub="outros">
+        <h3>Outros acessos (sem fila própria) <span class="muted mono">${outros.length}</span></h3>
+        <p class="small muted">Gestor, Magistrado(a) e Diretor de Secretaria veem todas as filas; Visitante vê só o painel geral, sem filtrar por servidor. Só o Gestor acessa esta aba.</p>
+        ${outros.length ? '<div class="acesso-cfg cab-cfg"><span>Nome</span><span>Perfil</span><span>E-mail Google</span><span></span></div>' : ''}
+        ${outrosH}
+        <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-outro">Adicionar acesso</button></div>
+      </div>
+      <div class="cfg-sub" data-sub="visoes">
+        <h3>Visões por pessoa (filtros opcionais) <span class="muted mono">${(c.visoes || []).length}</span></h3>
+        <p class="small muted">Para quem trabalha em mais de um setor ou tipo de processo: a pessoa ganha um filtro na própria fila, ao lado da busca. Ele só muda o que aparece na tela; a distribuição continua igual. O painel sempre abre completo, sem filtro. A opção “Painel completo” existe automaticamente.</p>
+        ${visoesH}
+        <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-visao">Adicionar visão</button></div>
+      </div>
+      <div class="cfg-sub" data-sub="etiquetas">
+        <h3>Etiquetas para filtro (Pagamentos) <span class="muted mono">${(c.etiquetasFiltro || []).length}</span></h3>
+        <p class="small muted">Só as etiquetas listadas aqui são guardadas, e apenas nos processos de tarefas de Pagamentos. Elas viram o filtro “Etiqueta” na fila e no painel geral. Escreva exatamente como no PJe (ex.: # RPV - 01. Expedir). Depois de incluir ou mudar uma etiqueta, envie o CSV completo de novo para ela passar a valer.</p>
+        ${etiquetasH}
+        <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-etiqueta">Adicionar etiqueta</button></div>
+      </div>
+      <div class="cfg-sub" data-sub="diretor">
+        <h3>Fila do Diretor de Secretaria (por etiqueta) <span class="muted mono">${(c.etiquetasDiretor || []).length}</span></h3>
+        <p class="small muted">Entra na fila do diretor todo processo que tiver pelo menos uma destas etiquetas, em qualquer tarefa ou setor, uma vez só, com a tarefa de chegada mais antiga. Cada processo mostra apenas as etiquetas desta lista que ele tem. As marcadas como “Urgente” colocam o processo em Urgências. Os processos saem da fila quando deixam de ter a etiqueta no CSV novo. Depois de mudar a lista, envie o CSV de novo. Cadastre o diretor em “Pessoas com fila”, com o perfil Diretor de Secretaria.</p>
+        ${etDirH}
+        <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-etdir">Adicionar etiqueta</button></div>
+      </div>
+      <div class="cfg-sub" data-sub="gestor">
+        <h3>Fila do gestor (por etiqueta)</h3>
+        <p class="small muted">A fila do gestor, no topo desta aba, mostra os processos com esta etiqueta e os que servidores e o diretor enviarem para o gestor. Deixe em branco para usar só os envios.</p>
+        <div class="regra so-etiqueta"><input type="text" id="cfg-etg" value="${esc(c.etiquetaGestor == null ? R.ETIQUETA_GESTOR_PADRAO : c.etiquetaGestor)}" aria-label="Etiqueta da fila do gestor" placeholder="${esc(R.ETIQUETA_GESTOR_PADRAO)}"></div>
+      </div>
+      <div class="cfg-sub" data-sub="excecoes">
+        <h3>Exceções por classe ou etiqueta <span class="muted mono">${(c.regrasClasse || []).length}</span></h3>
+        <p class="small muted">Valem antes da divisão do setor, na ordem da lista (a primeira que casar decide). Classe: use a sigla do PJe+R (ex.: ACPCiv|ACIA); etiqueta: o texto completo (ex.: $ Ação civil pública).</p>
+        ${regrasH}
+        <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-regra">Adicionar exceção</button></div>
+      </div>
+      <div class="cfg-sub" data-sub="setores">
+        <h3>Divisão por setor</h3>
+        ${setoresH}
+      </div>
       <div class="linha-botoes">
         <button class="btn primario" type="button" data-acao="cfg-salvar" ${st.gravando ? 'disabled' : ''}>Salvar configuração</button>
         <button class="btn" type="button" data-acao="cfg-descartar">Descartar alterações</button>
@@ -760,6 +812,7 @@
     const alvo = ev.target.closest('[data-acao]');
     if (!alvo) return;
     const acao = alvo.dataset.acao;
+    if (acao === 'sec-ocultar') { alternarSecao(alvo); return; }
     if (acao.startsWith('cfg-')) lerRascunho();
     const c = st.rascunho;
     try {
