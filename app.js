@@ -496,14 +496,12 @@
     for (const b of nav.querySelectorAll('.aba')) b.setAttribute('aria-selected', String(b.dataset.aba === atual));
   }
 
+  // Processos enviados ao gestor não geram aviso aqui: o número vermelho na aba Gestão já mostra (pedido do gestor).
   function renderAvisos() {
-    const abertos = urgenciasDoGestor();
     $('#avisos').innerHTML = st.estado === 'ok' && st.area !== 'fila' ? ''
       : st.estado === 'ok' && st.verComo
       ? `<div class="aviso novo"><b>Visualização somente leitura.</b> Você está vendo a fila de ${esc(nomeDe(st.verComo))} como ela vê. Nada é gravado. <button class="btn" type="button" data-acao="sair-ver-como">Voltar à minha visão</button></div>`
-      : st.estado === 'ok' && abertos
-        ? `<div class="aviso novo"><b>${abertos} ${abertos === 1 ? 'processo enviado' : 'processos enviados'} para você verificar.</b> <button class="btn" type="button" data-acao="abrir-avisos">Ver na aba Gestão</button></div>`
-        : '';
+      : '';
   }
 
   function renderEstado() {
@@ -1144,7 +1142,6 @@
     });
     $('#avisos').addEventListener('click', e => {
       if (e.target.closest('[data-acao="sair-ver-como"]')) sairVerComo();
-      else if (e.target.closest('[data-acao="abrir-avisos"]')) { st.aba = 'gestao'; guardar('fila.aba.' + st.email, st.aba); render(); window.scrollTo({ top: 0 }); }
     });
     $('#ver-como').addEventListener('change', e => {
       st.anotando = null; st.devolvendo = null; st.modal = null;
