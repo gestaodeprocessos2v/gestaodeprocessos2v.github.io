@@ -292,6 +292,7 @@
     await carregarJD();
     if (PERFIS_PRODUTIVIDADE.includes(st.perfil) && window.PAINEL.carregarProd) await window.PAINEL.carregarProd();
     if (PERFIS_EMAILS.includes(st.perfil) && window.PAINEL.carregarEmails) await window.PAINEL.carregarEmails();
+    if (window.PAINEL.carregarMinutas) await window.PAINEL.carregarMinutas();
     if (!st.rascOutros) st.rascOutros = null;
     st.ver++;
   }
@@ -622,6 +623,8 @@
         if (podeEnviar(modo)) acoes += `<button class="btn" data-acao="enviar"${dis}>Enviar para outra pessoa</button>`;
         if (podeDevolver(l) && modo !== 'gestor') acoes += `<button class="btn" data-acao="devolver"${dis}>Devolver</button>`;
       }
+      // Minuta feita por IA (residente; o gestor também vê em "ver como"). Só leitura: não depende do "ver como".
+      if (window.PAINEL.botaoMinuta) acoes += window.PAINEL.botaoMinuta(l);
       if (st.anotando === l.chave) {
         anot = `<form class="anotar-form" data-form="anotar">
           <textarea id="nota-texto" maxlength="2000" rows="3" aria-label="Anotação sobre o processo" placeholder="Ex.: aguardando resposta do INSS ao ofício">${esc(st.notaRascunho)}</textarea>
@@ -636,7 +639,7 @@
       }
       if (st.devolvendo === l.chave) {
         const doDiretor = tipoAtivo() === 'diretor';
-        const sugerido = doDiretor ? (l.via === 'envio' && l.de ? l.de : GESTOR_ID) : (l.resp || R.atribuir(l, l.s, st.config || {}).pessoa || '');
+        const sugerido = doDiretor ? (l.via === 'envio' && l.de ? l.de : GESTOR_ID) : (l.resp || (l.s === R.SETOR_SEM_PAINEL ? '' : R.atribuir(l, l.s, st.config || {}).pessoa) || '');
         form = `<form class="devolver-form" data-form="devolver">
           <label class="small" for="dev-motivo">Motivo</label>
           <input type="text" id="dev-motivo" placeholder="Ex.: precisa de despacho, não sei elaborar o ofício" maxlength="300" value="${esc(st.devMotivo || '')}">

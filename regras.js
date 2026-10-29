@@ -359,6 +359,16 @@
     return [...ids].sort((a, b) => (ordem.indexOf(a) + 1 || 999) - (ordem.indexOf(b) + 1 || 999));
   }
 
+  // Processos de tarefas sem setor no painel que entram numa fila por exceção de etiqueta ("Vale para: Todos os setores").
+  const SETOR_SEM_PAINEL = 'assessoria';
+  function excecaoSemSetor(item, config) {
+    for (const r of (config && config.regrasClasse) || []) {
+      if (!r || r.campo !== 'etiqueta' || !r.padrao || !r.responsavel || (r.setores && r.setores.length)) continue;
+      if (temEtiqueta(item && item.e, r.padrao)) return { pessoa: r.responsavel, motivo: 'etiqueta: ' + r.padrao };
+    }
+    return null;
+  }
+
   // Tarefa -> setor (tabela) -> pessoa (regras). pessoaFixa: lista inteira para um estagiário ou residente;
   // "resp" guarda o servidor que as regras indicariam, para a devolução.
   // etPrioridade: etiquetas com caráter de urgência ou prioridade, [{ e, t: 'urgente' | 'prioritaria' }] (Gestão).
@@ -388,13 +398,22 @@
     for (const it of itens) {
       const linha = mapa.get(normTexto(it.t));
       if (!linha) contarSemCadastro(it);
-      if (!linha || !linha.painel) { ignorados.foraDaVara++; guardarOutro(it); continue; }
-      if (linha.etiqueta && !temEtiqueta(it.e, linha.etiqueta)) { ignorados.semEtiqueta++; guardarOutro(it); continue; }
-      const s = linha.painel;
-      const r = atribuir(it, s, config);
+      let s, r;
+      if (!linha || !linha.painel) {
+        // Tarefa cadastrada sem setor no painel (ex.: Assessoria): continua só nas Metas CNJ, salvo exceção por etiqueta
+        // válida em todos os setores (ex.: minutas do residente); aí entra também na fila de quem a regra indica.
+        guardarOutro(it);
+        const ex = linha && !pessoaFixa ? excecaoSemSetor(it, config) : null;
+        if (!ex) { ignorados.foraDaVara++; continue; }
+        s = SETOR_SEM_PAINEL; r = ex;
+      } else {
+        if (linha.etiqueta && !temEtiqueta(it.e, linha.etiqueta)) { ignorados.semEtiqueta++; guardarOutro(it); continue; }
+        s = linha.painel;
+        r = atribuir(it, s, config);
+      }
       const item = { n: it.n, s };
       for (const k of ['c', 't', 'cg', 'ch', 'sg']) if (it[k] != null) item[k] = it[k];
-      if (r.pessoa) item.resp = r.pessoa;
+      if (r.pessoa && s !== SETOR_SEM_PAINEL) item.resp = r.pessoa;
       // "eu" e "ep": as etiquetas do processo que causaram a urgência e a prioridade (as do CSV não ficam guardadas; estas sim).
       const cu = linha.etiquetaUrgente ? etiquetasQueCasam(it.e, linha.etiquetaUrgente) : [];
       if (cu.length) { item.u = true; item.eu = cu; }
@@ -630,7 +649,7 @@
 
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
-    atribuir, pessoasDoSetor, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, montarFila, comparar, chaveItem,
+    atribuir, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, montarFila, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

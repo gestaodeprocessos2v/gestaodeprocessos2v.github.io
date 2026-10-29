@@ -45,6 +45,7 @@
     v.innerHTML = `<div class="paineis">
       ${P.htmlGestorFila()}
       ${painelImportar()}
+      ${P.painelMinutasGestao ? P.painelMinutasGestao() : ''}
       ${P.painelJDGestao ? P.painelJDGestao() : ''}
       ${P.painelEquipeGestao ? P.painelEquipeGestao() : ''}
       ${P.painelBIGestao ? P.painelBIGestao() : ''}
@@ -73,7 +74,7 @@
       const conta = (its, tipo) => its.filter(i => R.tipoItem(i, st.mapaTarefas) === tipo).length;
       const linhas = Object.entries(r.porPessoa).sort((a, b) => b[1].length - a[1].length)
         .map(([p, its]) => `<tr><td>${esc(nomeDe(p))}</td><td class="n">${its.length}</td><td class="n">${conta(its, 'urgente')}</td><td class="n">${conta(its, 'prioritaria')}</td></tr>`).join('');
-      const setores = SETORES.filter(([id]) => r.porSetor[id]).map(([id, n]) => `${n}: <b class="mono">${r.porSetor[id]}</b>`).join(' · ');
+      const setores = SETORES.concat([[R.SETOR_SEM_PAINEL, 'Assessoria (por exceção de etiqueta)']]).filter(([id]) => r.porSetor[id]).map(([id, n]) => `${n}: <b class="mono">${r.porSetor[id]}</b>`).join(' · ');
       const sem = r.semResponsavel.length ? `<div class="aviso erro"><b>${r.semResponsavel.length} sem responsável</b> e não serão gravados: ${r.semResponsavel.slice(0, 6).map(i => `${esc(i.n)} (${esc(i.motivo)})`).join('; ')}${r.semResponsavel.length > 6 ? '…' : ''}. Ajuste a configuração e leia o arquivo de novo.</div>` : '';
       // Tarefas que não existem na tabela: os processos delas não entram na fila de ninguém. ("Ignorar" é decisão do gestor e não entra aqui.)
       const sc = r.semCadastro || [], nSc = r.semCadastroProcessos || 0;
