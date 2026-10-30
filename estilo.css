@@ -503,6 +503,9 @@ a.btn { display: inline-block; text-decoration: none; }
 /* Guia aberto: coluna de leitura centralizada (≈ 720px de texto), letra maior e mais ar entre os passos. */
 .aj-topo, .aj-guia { max-width: 52rem; margin-inline: auto; }
 .aj-topo { margin-top: 20px; }
+.aj-voltar { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px 7px 10px; border-color: transparent; background: none; color: var(--accent); font-size: 16.5px; font-weight: 600; }
+.aj-voltar:hover { background: var(--sunken); }
+.aj-voltar svg { flex: none; }
 .aj-guia { margin-top: 8px; margin-bottom: 8px; padding: 40px 56px 32px; border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow); }
 .aj-cat-nome { margin: 0 0 6px; color: var(--accent); font-size: 13px; font-weight: 600; letter-spacing: .02em; }
 .aj-titulo { margin: 0 0 28px; font-size: 1.85rem; font-weight: 600; line-height: 1.2; }

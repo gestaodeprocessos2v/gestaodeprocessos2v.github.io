@@ -73,7 +73,7 @@
     const corpo = g ? `<div class="guia">${g.html}</div>`
       : s.erroGuia === id ? '<div class="aviso erro">Não foi possível abrir este guia agora. Tente de novo em instantes.</div>'
       : '<p class="atualizacao">Carregando…</p>';
-    return `<div class="aj-topo"><button class="btn discreto" type="button" data-aacao="voltar">← Todos os guias</button></div>
+    return `<div class="aj-topo"><button class="btn aj-voltar" type="button" data-aacao="voltar"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 10H4M9.5 4.5 4 10l5.5 5.5"/></svg>Todos os guias</button></div>
       <article class="aj-guia">
         <p class="aj-cat-nome">${esc(info.categoria)}</p>
         <h2 class="aj-titulo">${esc(info.titulo)}</h2>
