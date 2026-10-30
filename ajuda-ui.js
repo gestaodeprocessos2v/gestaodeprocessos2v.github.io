@@ -14,6 +14,7 @@
   // Cor de cada categoria, na ordem em que aparecem: a mesma bolinha no menu, nos assuntos e nos resultados.
   const CORES = ['--prod-1', '--prod-3', '--prod-2', '--prod-6', '--prod-0', '--prod-7', '--prod-4'];
   const COR_MISTA = '--prod-5'; // assunto com guias de mais de uma categoria
+  const CAT_PAINEL = 'Usando o painel'; // os assuntos desta categoria ficam num quadro próprio no início
 
   // ---------- estado ----------
   const A = () => st.ajuda || (st.ajuda = { lista: [], carregado: false, carregando: false, erro: false, busca: '', palavra: null, abertas: new Set(), aberto: null, guias: {}, erroGuia: null });
@@ -110,15 +111,25 @@
     </nav>`;
   }
 
+  // Quadro de assuntos: rótulo e botões. Vazio, não aparece.
+  function quadro(id, rotulo, lista) {
+    const s = A();
+    if (!lista.length) return '';
+    const chips = lista.map(a => `<button type="button" class="prod-chip" aria-pressed="${s.palavra === a.k}" data-aacao="palavra" data-v="${esc(a.k)}" style="--c:var(${a.cor})" data-balao="${esc(`${plural(a.guias.length, 'guia', 'guias')} em ${a.cats.join(', ')}`)}"><i></i>${esc(a.nome)}</button>`).join('');
+    return `<div class="prod-chips aj-assuntos"><div class="prod-chips-bloco"><span class="prod-chips-rot" id="${id}">${esc(rotulo)}</span><div class="prod-chips-lista" role="group" aria-labelledby="${id}">${chips}</div></div></div>`;
+  }
+
   function inicio(cats) {
     const s = A(), lista = assuntos(cats);
-    const chips = lista.map(a => `<button type="button" class="prod-chip" aria-pressed="${s.palavra === a.k}" data-aacao="palavra" data-v="${esc(a.k)}" style="--c:var(${a.cor})" data-balao="${esc(`${plural(a.guias.length, 'guia', 'guias')} em ${a.cats.join(', ')}`)}"><i></i>${esc(a.nome)}</button>`).join('');
+    // Assuntos do próprio painel (todos os guias na categoria CAT_PAINEL) num quadro; os demais em outro.
+    const doPainel = a => a.cats.length === 1 && a.cats[0] === CAT_PAINEL;
     return `<div class="aj-boas">
         <h2>Guia do usuário</h2>
         <p>Escolha um guia no menu, busque pelo título ou toque num assunto abaixo.</p>
         <div class="em-barra"><input type="search" id="aj-busca" placeholder="Buscar guia pelo título ou assunto" value="${esc(s.busca)}" aria-label="Buscar guia pelo título ou assunto"></div>
       </div>
-      ${lista.length ? `<div class="prod-chips aj-assuntos"><div class="prod-chips-bloco"><span class="prod-chips-rot" id="aj-rot-assuntos">Assuntos</span><div class="prod-chips-lista" role="group" aria-labelledby="aj-rot-assuntos">${chips}</div></div></div>` : ''}
+      ${quadro('aj-rot-painel', CAT_PAINEL, lista.filter(doPainel))}
+      ${quadro('aj-rot-outros', lista.some(doPainel) ? 'Outros assuntos' : 'Assuntos', lista.filter(a => !doPainel(a)))}
       <div id="aj-res" aria-live="polite"></div>`;
   }
 
