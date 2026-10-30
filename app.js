@@ -34,7 +34,7 @@
     filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
     ver: 0, cache: { ver: -1, m: {} },
     aba: 'fila', verComo: '', area: 'fila', menuAreas: false,
-    abaMetas: 'visao', abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null,
+    abaMetas: 'visao', abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null,
     vis: {
       fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
       geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
@@ -144,7 +144,7 @@
       tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
       anotando: null, devolvendo: null, modal: null, importacao: null,
       area: 'fila', menuAreas: false, abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, metasImp: null,
-      abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null,
+      abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null,
     });
     // o padrão dos botões de magistrado depende de quem entra: quem entrar depois não herda o filtro do usuário anterior
     for (const k of Object.keys(st.vis)) st.vis[k].magOff = null;
@@ -197,6 +197,7 @@
     metas: { rotulo: 'Metas CNJ', titulo: 'Metas CNJ', subtitulo: 'Metas Nacionais 2026 · 2ª Vara Federal', pagina: 'Metas CNJ · Gestão de Processos' },
     produtividade: { rotulo: 'Produtividade da Vara', titulo: 'Produtividade da Vara', subtitulo: 'Atividades da equipe · 2ª Vara Federal', pagina: 'Produtividade da Vara · Gestão de Processos' },
     emails: { rotulo: 'E-mails', titulo: 'E-mails', subtitulo: 'Resumo diário dos e-mails da vara · 2ª Vara Federal', pagina: 'E-mails · Gestão de Processos' },
+    ajuda: { rotulo: 'Ajuda', titulo: 'Ajuda', subtitulo: 'Guias passo a passo · 2ª Vara Federal', pagina: 'Ajuda · Gestão de Processos' },
   };
   const PERFIS_METAS = ['gestor', 'servidor', 'magistrado', 'diretor', 'eventual'];
   // Produtividade da Vara (dados por pessoa): só gestor, diretor e magistrado. O banco também confere (RLS).
@@ -208,10 +209,11 @@
     if (PERFIS_METAS.includes(st.perfil)) a.push('metas');
     if (PERFIS_PRODUTIVIDADE.includes(st.perfil)) a.push('produtividade');
     if (PERFIS_EMAILS.includes(st.perfil)) a.push('emails');
+    a.push('ajuda'); // Ajuda (guias passo a passo): todos os perfis
     return a;
   }
   // Abas de cada área que não é a Fila (a Fila usa abasDisponiveis(), que depende do perfil).
-  const ABAS_AREA = { metas: ['visao', 'pendentes'], produtividade: ['resumo', 'pessoas'], get emails() { return window.PAINEL.abasEmails ? window.PAINEL.abasEmails() : ['emsub']; } };
+  const ABAS_AREA = { metas: ['visao', 'pendentes'], produtividade: ['resumo', 'pessoas'], get emails() { return window.PAINEL.abasEmails ? window.PAINEL.abasEmails() : ['emsub']; }, ajuda: [] };
   function irParaArea(area) {
     st.menuAreas = false;
     if (!areasDisponiveis().includes(area)) area = 'fila';
@@ -399,17 +401,19 @@
     renderTopo();
     renderAvisos();
     const ok = st.estado === 'ok';
-    const emMetas = ok && st.area === 'metas', emProd = ok && st.area === 'produtividade', emEml = ok && st.area === 'emails';
+    const emMetas = ok && st.area === 'metas', emProd = ok && st.area === 'produtividade', emEml = ok && st.area === 'emails', emAju = ok && st.area === 'ajuda';
     $('#v-estado').hidden = ok;
-    for (const a of ['fila', 'geral', 'gestao', 'eventual']) $('#v-' + a).hidden = !ok || emMetas || emProd || emEml || st.aba !== a;
+    for (const a of ['fila', 'geral', 'gestao', 'eventual']) $('#v-' + a).hidden = !ok || emMetas || emProd || emEml || emAju || st.aba !== a;
     $('#v-metas').hidden = !emMetas;
     $('#v-prod').hidden = !emProd;
     $('#v-emails').hidden = !emEml;
+    $('#v-ajuda').hidden = !emAju;
     if (!ok) {
-      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod', 'emails']) $('#v-' + a).innerHTML = '';
+      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod', 'emails', 'ajuda']) $('#v-' + a).innerHTML = '';
       renderEstado(); renderModal(); return;
     }
     $('#v-estado').innerHTML = '';
+    if (!emAju) $('#v-ajuda').innerHTML = '';
     if (emMetas) {
       for (const a of ['fila', 'geral', 'gestao', 'eventual', 'prod', 'emails']) $('#v-' + a).innerHTML = '';
       renderMetas(); renderModal(); return;
@@ -421,6 +425,11 @@
     if (emEml) {
       for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod']) $('#v-' + a).innerHTML = '';
       if (window.PAINEL.renderEmails) window.PAINEL.renderEmails();
+      renderModal(); return;
+    }
+    if (emAju) {
+      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod', 'emails']) $('#v-' + a).innerHTML = '';
+      if (window.PAINEL.renderAjuda) window.PAINEL.renderAjuda();
       renderModal(); return;
     }
     $('#v-metas').innerHTML = ''; $('#v-prod').innerHTML = ''; $('#v-emails').innerHTML = '';

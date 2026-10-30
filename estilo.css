@@ -492,3 +492,24 @@ button.tile:focus-visible { outline: 2px solid currentColor; outline-offset: 2px
 a.btn { display: inline-block; text-decoration: none; }
 .item-area .contagem { margin-left: 8px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 0 7px; border-radius: 999px; background: var(--urg); color: var(--urg-ink); }
 .em-msg .selo { text-transform: none; letter-spacing: 0; font-size: 12px; }
+
+/* Área Ajuda: índice por categoria e guia passo a passo (o conteúdo vem da tabela ajuda_guias). Só variáveis: vale nos dois temas. */
+.aj-indice { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: 16px; margin-top: 16px; }
+.aj-cat { padding: 16px 18px; border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow); }
+.aj-cat h2 { margin: 0 0 8px; font-size: 15px; color: var(--muted); }
+.aj-cat ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.aj-link { width: 100%; text-align: left; padding: 7px 8px; border: 0; border-radius: 6px; background: none; color: var(--accent); font: inherit; cursor: pointer; }
+.aj-link:hover { background: var(--sunken); text-decoration: underline; }
+.aj-topo { margin-top: 16px; }
+.aj-guia { margin-top: 8px; padding: 22px 24px 18px; border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow); max-width: 52rem; }
+.aj-cat-nome { margin: 0; color: var(--muted); font-size: 12.5px; }
+.aj-titulo { margin: 2px 0 16px; }
+.guia { line-height: 1.55; }
+.guia p { margin: 0 0 10px; }
+.guia ol, .guia ul { margin: 0 0 10px; padding-left: 1.6em; }
+.guia li { margin: 0 0 8px; }
+.guia li > ol, .guia li > ul { margin-top: 8px; }
+.guia img { display: block; max-width: 100%; height: auto; margin: 10px 0 14px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.guia table { border-collapse: collapse; margin: 0 0 12px; }
+.guia th, .guia td { border: 1px solid var(--line); padding: 6px 8px; vertical-align: top; }
+@media (max-width: 600px) { .aj-guia { padding: 16px 14px 12px; } }
