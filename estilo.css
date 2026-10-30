@@ -521,6 +521,14 @@ a.btn { display: inline-block; text-decoration: none; }
 .guia li li::marker { font-weight: 600; }
 .guia img { display: block; max-width: 100%; height: auto; margin: 14px 0 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .08); }
 .guia img + img { margin-top: 12px; }
+.guia a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+.guia a:hover { text-decoration-thickness: 2px; }
+/* Texto copiável (realce amarelo no Word): no meio da frase vira uma etiqueta; o parágrafo inteiro vira um bloco. */
+.aj-copiar { display: inline-flex; align-items: baseline; gap: 6px; margin: 0 1px; padding: 0 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--sunken); color: var(--ink); font: inherit; font-weight: 600; line-height: inherit; text-align: left; cursor: copy; }
+.aj-copiar svg { flex: none; align-self: center; color: var(--accent); }
+.aj-copiar:hover { border-color: var(--accent); }
+.aj-copiar.bloco { display: flex; width: 100%; justify-content: space-between; gap: 12px; padding: 12px 14px; font-weight: 400; white-space: pre-wrap; }
+.aj-copiar.bloco svg { align-self: flex-start; margin-top: 4px; }
 .guia table { border-collapse: collapse; margin: 0 0 16px; }
 .guia th, .guia td { border: 1px solid var(--line); padding: 8px 10px; vertical-align: top; }
 @media (max-width: 700px) {

@@ -36,8 +36,9 @@
   }
 
   // O html vem só da conversão feita fora da tela, mas passa por uma lista de tags e atributos permitidos antes de ir para a página.
-  const TAGS = new Set(['H2', 'H3', 'P', 'OL', 'UL', 'LI', 'STRONG', 'B', 'EM', 'I', 'U', 'BR', 'IMG', 'FIGURE', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD']);
-  const ATRIBUTOS = { OL: ['type', 'start'], IMG: ['src', 'alt', 'width', 'height'], TD: ['colspan', 'rowspan'], TH: ['colspan', 'rowspan'] };
+  // Links (A) só https, sempre em nova aba. CODE marca texto copiável (realce amarelo no Word): vira botão "clique para copiar".
+  const TAGS = new Set(['H2', 'H3', 'P', 'OL', 'UL', 'LI', 'STRONG', 'B', 'EM', 'I', 'U', 'BR', 'IMG', 'FIGURE', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'A', 'CODE']);
+  const ATRIBUTOS = { OL: ['type', 'start'], IMG: ['src', 'alt', 'width', 'height'], TD: ['colspan', 'rowspan'], TH: ['colspan', 'rowspan'], A: ['href'] };
   function limpar(html) {
     const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
     const raiz = doc.body.firstElementChild;
@@ -47,10 +48,21 @@
         const ok = ATRIBUTOS[f.tagName] || [];
         for (const at of [...f.attributes]) if (!ok.includes(at.name)) f.removeAttribute(at.name);
         if (f.tagName === 'IMG' && !/^data:image\/(png|jpeg|gif|webp);base64,/.test(f.getAttribute('src') || '')) { f.remove(); continue; }
+        if (f.tagName === 'A' && !/^https:\/\//i.test(f.getAttribute('href') || '')) { f.replaceWith(...f.childNodes); passar(no); return; }
         passar(f);
       }
     })(raiz);
     for (const img of raiz.querySelectorAll('img')) { img.loading = 'lazy'; img.decoding = 'async'; }
+    for (const a of raiz.querySelectorAll('a')) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+    for (const c of raiz.querySelectorAll('code')) {
+      const b = doc.createElement('button'), p = c.parentElement;
+      const bloco = p && p.tagName === 'P' && p.textContent.trim() === c.textContent.trim();
+      b.type = 'button'; b.className = bloco ? 'aj-copiar bloco' : 'aj-copiar';
+      b.dataset.aacao = 'copiar'; b.dataset.balao = 'Clique para copiar'; b.setAttribute('aria-description', 'Clique para copiar');
+      const t = doc.createElement('span'); t.append(...c.childNodes);
+      b.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5V3a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5"/></svg>';
+      b.prepend(t); c.replaceWith(b);
+    }
     return raiz.innerHTML;
   }
 
@@ -113,6 +125,18 @@
     const a = e.target.closest('[data-aacao]'); if (!a) return;
     if (a.dataset.aacao === 'abrir') abrirGuia(a.dataset.id);
     else if (a.dataset.aacao === 'voltar') { A().aberto = null; render(); }
+    else if (a.dataset.aacao === 'copiar') copiar(a);
   });
+  async function copiar(b) {
+    const texto = b.querySelector('span').innerText.trim();
+    const ok = () => P.toast(texto.length > 60 ? 'Texto copiado.' : 'Copiado: ' + texto);
+    try { await navigator.clipboard.writeText(texto); ok(); return; } catch (e) { console.warn('clipboard', e); }
+    // Alternativa para navegadores que bloqueiam a API da área de transferência.
+    const ta = document.createElement('textarea');
+    ta.value = texto; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.append(ta); ta.select();
+    const deu = document.execCommand('copy'); ta.remove(); b.focus();
+    if (deu) ok(); else P.toast('Não foi possível copiar. Selecione o texto e use Ctrl+C.');
+  }
   v.addEventListener('input', e => { if (e.target.id === 'aj-busca') { A().busca = e.target.value; filtrar(); } });
 })();
