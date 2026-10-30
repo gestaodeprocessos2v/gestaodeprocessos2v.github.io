@@ -114,7 +114,7 @@
     const s = A(), lista = assuntos(cats);
     const chips = lista.map(a => `<button type="button" class="prod-chip" aria-pressed="${s.palavra === a.k}" data-aacao="palavra" data-v="${esc(a.k)}" style="--c:var(${a.cor})" data-balao="${esc(`${plural(a.guias.length, 'guia', 'guias')} em ${a.cats.join(', ')}`)}"><i></i>${esc(a.nome)}</button>`).join('');
     return `<div class="aj-boas">
-        <h2>Como podemos ajudar?</h2>
+        <h2>Guia do usuário</h2>
         <p>Escolha um guia no menu, busque pelo título ou toque num assunto abaixo.</p>
         <div class="em-barra"><input type="search" id="aj-busca" placeholder="Buscar guia pelo título ou assunto" value="${esc(s.busca)}" aria-label="Buscar guia pelo título ou assunto"></div>
       </div>
