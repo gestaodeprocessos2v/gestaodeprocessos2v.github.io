@@ -493,21 +493,43 @@ a.btn { display: inline-block; text-decoration: none; }
 .item-area .contagem { margin-left: 8px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 0 7px; border-radius: 999px; background: var(--urg); color: var(--urg-ink); }
 .em-msg .selo { text-transform: none; letter-spacing: 0; font-size: 12px; }
 
-/* Área Ajuda: índice por categoria e guia passo a passo (o conteúdo vem da tabela ajuda_guias). Só variáveis: vale nos dois temas. */
-.aj-indice { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: 16px; margin-top: 16px; }
-.aj-cat { padding: 16px 18px; border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow); }
-.aj-cat h2 { margin: 0 0 8px; font-size: 15px; color: var(--muted); }
-.aj-cat ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.aj-link { width: 100%; text-align: left; padding: 7px 8px; border: 0; border-radius: 6px; background: none; color: var(--accent); font: inherit; cursor: pointer; }
-.aj-link:hover { background: var(--sunken); text-decoration: underline; }
-/* Guia aberto: coluna de leitura centralizada (≈ 720px de texto), letra maior e mais ar entre os passos. */
-.aj-topo, .aj-guia { max-width: 52rem; margin-inline: auto; }
-.aj-topo { margin-top: 20px; }
-.aj-voltar { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px 7px 10px; border-color: transparent; background: none; color: var(--accent); font-size: 16.5px; font-weight: 600; }
-.aj-voltar:hover { background: var(--sunken); }
-.aj-voltar svg { flex: none; }
-.aj-guia { margin-top: 8px; margin-bottom: 8px; padding: 40px 56px 32px; border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow); }
-.aj-cat-nome { margin: 0 0 6px; color: var(--accent); font-size: 13px; font-weight: 600; letter-spacing: .02em; }
+/* Área Ajuda: menu à esquerda (categorias que abrem e mostram os guias) e, ao lado, o início ou o guia aberto.
+   O conteúdo vem da tabela ajuda_guias. A cor de cada categoria (--c) vem da paleta --prod-N. Só variáveis: vale nos dois temas. */
+.aj-layout { display: grid; grid-template-columns: 17rem minmax(0, 1fr); gap: 24px; align-items: start; margin-top: 20px; }
+.aj-barra-cel { display: none; }
+.aj-menu { position: sticky; top: 84px; max-height: calc(100vh - 100px); overflow-y: auto; padding: 10px; border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow); }
+.aj-menu ul { list-style: none; margin: 0 0 6px; padding: 0 0 0 18px; }
+.aj-item { display: block; width: 100%; text-align: left; padding: 7px 10px; border: 0; border-left: 3px solid transparent; border-radius: 6px; background: none; color: var(--ink); font: inherit; font-size: 14px; line-height: 1.35; cursor: pointer; }
+.aj-item:hover { background: var(--sunken); }
+.aj-item[aria-current="page"] { background: var(--sunken); border-left-color: var(--accent); color: var(--accent); font-weight: 600; }
+.aj-inicio { margin-bottom: 4px; font-weight: 600; }
+.aj-grupo summary { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer; list-style: none; }
+.aj-grupo summary::-webkit-details-marker { display: none; }
+.aj-grupo summary:hover { background: var(--sunken); }
+.aj-grupo summary:focus-visible, .aj-item:focus-visible, .aj-res-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.aj-grupo summary span:first-of-type { flex: 1; }
+.aj-qtd { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--muted); }
+.aj-seta { flex: none; color: var(--muted); transition: transform .15s; }
+.aj-grupo[open] > summary .aj-seta { transform: rotate(90deg); }
+.aj-grupo summary i, .aj-res-cat i, .aj-cat-nome i { flex: none; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+/* Início: boas-vindas, busca, assuntos (botões coloridos pela categoria) e os resultados logo abaixo. */
+.aj-boas { padding: 24px 28px; border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow); margin-bottom: 8px; }
+.aj-boas h2 { margin: 0 0 4px; font-size: 1.5rem; font-weight: 600; }
+.aj-boas p { margin: 0; color: var(--muted); }
+.aj-boas .em-barra input { width: min(100%, 30rem); }
+.aj-assuntos .prod-chip { color: var(--ink); background: color-mix(in srgb, var(--c) 12%, var(--surface)); border-color: color-mix(in srgb, var(--c) 45%, transparent); }
+.aj-assuntos .prod-chip i { display: inline-block; }
+.aj-assuntos .prod-chip[aria-pressed="true"] { background: color-mix(in srgb, var(--c) 40%, var(--surface)); border-color: var(--c); }
+.aj-res-rot { margin: 16px 0 8px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.aj-res { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.aj-res-item { display: grid; grid-template-columns: 1fr auto; gap: 2px 16px; align-items: center; width: 100%; padding: 12px 16px; text-align: left; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); color: var(--ink); font: inherit; cursor: pointer; }
+.aj-res-item:hover { border-color: var(--accent); }
+.aj-res-cat { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.aj-res-tit { grid-column: 1; font-size: 15.5px; font-weight: 600; }
+.aj-res-ir { grid-column: 2; grid-row: 1 / span 2; display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+/* Guia aberto: coluna de leitura (≈ 720px de texto), letra maior e mais ar entre os passos. */
+.aj-guia { max-width: 52rem; margin-bottom: 8px; padding: 40px 56px 32px; border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow); }
+.aj-cat-nome { display: flex; align-items: center; gap: 7px; margin: 0 0 6px; color: var(--accent); font-size: 13px; font-weight: 600; letter-spacing: .02em; }
 .aj-titulo { margin: 0 0 28px; font-size: 1.85rem; font-weight: 600; line-height: 1.2; }
 .aj-guia > .atualizacao { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--line); }
 .guia { font-size: 16px; line-height: 1.65; }
@@ -531,7 +553,19 @@ a.btn { display: inline-block; text-decoration: none; }
 .aj-copiar.bloco svg { align-self: flex-start; margin-top: 4px; }
 .guia table { border-collapse: collapse; margin: 0 0 16px; }
 .guia th, .guia td { border: 1px solid var(--line); padding: 8px 10px; vertical-align: top; }
+/* Celular: uma coluna; o menu fica atrás do botão "Guias". */
+@media (max-width: 900px) {
+  .aj-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .aj-barra-cel { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .aj-barra-cel .btn { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+  .aj-barra-cel span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 14px; }
+  .aj-menu { display: none; position: static; max-height: none; }
+  .aj-layout.menu-cel .aj-menu { display: block; }
+}
 @media (max-width: 700px) {
+  .aj-boas { padding: 18px; }
+  .aj-res-item { grid-template-columns: 1fr; }
+  .aj-res-ir { grid-column: 1; grid-row: auto; }
   .aj-guia { padding: 24px 18px 20px; }
   .aj-titulo { font-size: 1.45rem; margin-bottom: 20px; }
   .guia { font-size: 15.5px; }
