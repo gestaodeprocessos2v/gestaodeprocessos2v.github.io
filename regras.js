@@ -553,8 +553,8 @@
     const mapa = mapaTarefas(e.tarefas);
     const marcas = e.marcas || {};
     const ultimaVisita = e.ultimaVisita || 0;
-    // Mesmo processo em mais de uma entrada: se alguma tarefa é de fluxo paralelo, mostra a de chegada
-    // mais antiga com o selo "Fluxo paralelo"; senão, a mais recente.
+    // Mesmo processo em mais de uma entrada: mostra a de chegada mais antiga; se alguma tarefa é de fluxo
+    // paralelo, com o selo "Fluxo paralelo".
     const grupos = new Map();
     for (const it of e.itens || []) {
       const k = soDigitos(it.n);
@@ -571,9 +571,10 @@
       if (lista.length === 1) { porNumero.set(k, lista[0]); continue; }
       const tarefas = new Set(lista.map(x => normTexto(x.t)));
       const paralelo = tarefas.size > 1 && lista.some(x => (mapa.get(normTexto(x.t)) || {}).paralelo);
-      const escolhido = paralelo
-        ? lista.reduce((a, b) => (ch(b) < ch(a) ? b : a))
-        : lista.reduce((a, b) => ((b.ch == null ? -1 : b.ch) > (a.ch == null ? -1 : a.ch) ? b : a));
+      // Fica a de chegada mais antiga. Se uma das entradas já foi concluída (a marca é pela chave número|chegada), fica ela,
+      // para a conclusão feita quando a regra mostrava a mais recente (até 31/10/2026) continuar valendo.
+      const concluidas = lista.filter(x => marcas[chaveItem(x)]);
+      const escolhido = (concluidas.length ? concluidas : lista).reduce((a, b) => (ch(b) < ch(a) ? b : a));
       const uniao = campo => [...new Set(lista.flatMap(x => x[campo] || []))];
       const eu = uniao('eu'), ep = uniao('ep'), ecu = uniao('ecu'), ecp = uniao('ecp');
       porNumero.set(k, paralelo ? Object.assign({}, escolhido, { fp: true, u: lista.some(x => x.u) || escolhido.u, p: lista.some(x => x.p) || escolhido.p }, eu.length ? { eu } : {}, ep.length ? { ep } : {}, ecu.length ? { ecu } : {}, ecp.length ? { ecp } : {}) : escolhido);
