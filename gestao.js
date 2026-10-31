@@ -90,6 +90,8 @@
     capturarGestao();
     prepararRascunho();
     const foco = document.activeElement && document.activeElement.id;
+    // Posição do cursor no campo em edição: o campo é recriado a cada desenho e, sem isso, o cursor volta ao início.
+    let sel = null; try { const ae = document.activeElement; if (foco && ae.selectionStart != null) sel = [ae.selectionStart, ae.selectionEnd]; } catch (e) { /* campo sem cursor */ }
     // Os campos de arquivo são recriados vazios a cada desenho; os que ainda têm arquivo lido são mantidos.
     const mi = st.metasImp, imp = st.importacao, ji = st.jdImp, pe = st.prod && st.prod.eq, pi = st.prod && st.prod.imp;
     const manter = [['imp-arquivo', imp && (imp.resultado || imp.erro)], ['jd-arquivo', ji && (ji.resumo || ji.erro)],
@@ -115,7 +117,10 @@
     ligarRecolher(v);
     marcarPendentes();
     manter.forEach(el => { const novo = document.getElementById(el.id); if (novo) novo.replaceWith(el); });
-    if (foco) { const el = document.getElementById(foco); if (el && el.tagName !== 'BUTTON') el.focus(); }
+    if (foco) {
+      const el = document.getElementById(foco);
+      if (el && el.tagName !== 'BUTTON') { el.focus(); if (sel) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) { /* campo sem cursor */ } }
+    }
   };
 
   // ---------- importação ----------
