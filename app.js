@@ -723,7 +723,10 @@
     }
     const todas = aplicarVisao(modo, geral ? linhasGeral(f.pessoa) : eventual ? linhasEventual() : filaDe(pessoaAtiva()));
     const abertas = todas.filter(l => !l.concluido);
-    const conta = t => abertas.filter(l => l.tipo === t).length;
+    // Cards de contagem: seguem os botões de magistrado (como seguem o filtro de servidor); os demais filtros não mudam os cards.
+    const doMag = todas.filter(l => magPassa(f, magDoCargo(l.cg)));
+    const abertasMag = doMag.filter(l => !l.concluido);
+    const conta = t => abertasMag.filter(l => l.tipo === t).length;
     const novos = geral || eventual ? 0 : abertas.filter(l => l.novo).length;
     const { campo: campoEt, lista: listaEt, especial } = etConfig(modo);
     const etiquetas = listaEt.filter(x => todas.some(l => (l[campoEt] || []).includes(x)));
@@ -760,7 +763,7 @@
     const paraMag = todas.filter(l => casa(l, 'mag'));
     const faixaMag = faixaMagHTML(f, letra => paraMag.filter(l => magDoCargo(l.cg) === letra).length, '', 'rot-mag-' + modo);
     const nenhumMag = magOffDe(f).length >= MAGISTRADOS.length;
-    const concluidos = todas.length - abertas.length;
+    const concluidos = doMag.length - abertasMag.length;
     const ultimaLista = st.filas.reduce((m, r) => Math.max(m, ms(r.importado_em) || 0), 0);
 
     let h = '';
