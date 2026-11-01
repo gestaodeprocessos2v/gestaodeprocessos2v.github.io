@@ -297,6 +297,11 @@
     return r;
   }
 
+  // Cadastros de prioridade ou urgência que valem num setor: os sem setor (todos) e os "Só <setor>" (campo st).
+  function regrasDoSetor(regras, setor) {
+    return (regras || []).filter(x => x && (!x.st || x.st === setor));
+  }
+
   // Urgente vence; devolve 'urgente', 'prioritaria' ou null.
   function prioridadeDaEtiqueta(etiquetas, regras) {
     const c = causasDeEtiqueta(etiquetas, regras);
@@ -420,8 +425,10 @@
       // Etiqueta com prioridade ou urgência (qualquer tarefa que entra no painel). Urgente vence; prioritária só se nada o torna urgente.
       // porEtiqueta conta só os processos que mudaram de caráter por causa da etiqueta (não os que a tarefa já tornava urgentes/prioritários).
       // Classe cadastrada no mesmo lugar: "ecu" e "ecp" guardam o nome por extenso das classes que causaram urgência e prioridade.
-      const causas = causasDeEtiqueta(it.e, etPrioridade);
-      const causasC = causasDeClasse(it.c, etPrioridade);
+      // Só os cadastros do setor do processo ("Vale para"); os sem setor valem em todos.
+      const regrasSetor = regrasDoSetor(etPrioridade, s);
+      const causas = causasDeEtiqueta(it.e, regrasSetor);
+      const causasC = causasDeClasse(it.c, regrasSetor);
       const pri = (causas.urgente.length || causasC.urgente.length) ? 'urgente' : (causas.prioritaria.length || causasC.prioritaria.length) ? 'prioritaria' : null;
       if (pri) {
         const antes = tipoItem(item, mapa);
@@ -669,7 +676,7 @@
   }
 
   root.Regras = {
-    lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
+    lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, regrasDoSetor, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
     atribuir, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, marcaVencida, montarFila, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido,
   };
