@@ -546,6 +546,15 @@
     return [...por.values()].map(it => Object.assign({}, it, { fora: true }));
   }
 
+  // Conclusão com prazo: processo da lista concluído que continua na mesma tarefa, com a mesma chegada, volta à fila
+  // depois de N dias corridos da conclusão (prazos.urgente para urgentes; prazos.demais para os outros). Não vence:
+  // sem prazos (testes antigos), conclusão de quem enviou ou devolveu o processo (env ou dev) e prazo zerado.
+  function marcaVencida(marca, tipo, prazos, agora) {
+    if (!marca || !prazos || marca.dev || (marca.item && marca.item.env) || marca.em == null) return false;
+    const dias = Number(tipo === 'urgente' ? prazos.urgente : prazos.demais);
+    return dias > 0 && (agora == null ? Date.now() : agora) - marca.em >= dias * 86400000;
+  }
+
   // Junta a lista do PJe + urgências manuais + devoluções numa fila única, sem repetir processo.
   // Urgente/prioritária vêm da tabela de tarefas (colunas "Urgente?" e "Zerar?").
   function montarFila(entrada) {
@@ -553,6 +562,8 @@
     const mapa = mapaTarefas(e.tarefas);
     const marcas = e.marcas || {};
     const ultimaVisita = e.ultimaVisita || 0;
+    // Marca que ainda vale (existe e não venceu o prazo do tipo do processo).
+    const vale = (m, tipo) => !!m && !marcaVencida(m, tipo, e.prazos, e.agora);
     // Mesmo processo em mais de uma entrada: mostra a de chegada mais antiga; se alguma tarefa é de fluxo
     // paralelo, com o selo "Fluxo paralelo".
     const grupos = new Map();
@@ -573,8 +584,11 @@
       const paralelo = tarefas.size > 1 && lista.some(x => (mapa.get(normTexto(x.t)) || {}).paralelo);
       // Fica a de chegada mais antiga. Se uma das entradas já foi concluída (a marca é pela chave número|chegada), fica ela,
       // para a conclusão feita quando a regra mostrava a mais recente (até 31/10/2026) continuar valendo.
-      const concluidas = lista.filter(x => marcas[chaveItem(x)]);
-      const escolhido = (concluidas.length ? concluidas : lista).reduce((a, b) => (ch(b) < ch(a) ? b : a));
+      const concluidas = lista.filter(x => vale(marcas[chaveItem(x)], tipoItem(x, mapa)));
+      let escolhido = (concluidas.length ? concluidas : lista).reduce((a, b) => (ch(b) < ch(a) ? b : a));
+      // Nenhuma conclusão valendo, mas alguma venceu o prazo: o processo volta com o selo, mesmo pela outra entrada.
+      const vencidas = concluidas.length ? [] : lista.map(x => marcas[chaveItem(x)]).filter(m => m && m.em != null);
+      if (vencidas.length) escolhido = Object.assign({}, escolhido, { retornoGrupo: Math.max(...vencidas.map(m => m.em)) });
       const uniao = campo => [...new Set(lista.flatMap(x => x[campo] || []))];
       const eu = uniao('eu'), ep = uniao('ep'), ecu = uniao('ecu'), ecp = uniao('ecp');
       porNumero.set(k, paralelo ? Object.assign({}, escolhido, { fp: true, u: lista.some(x => x.u) || escolhido.u, p: lista.some(x => x.p) || escolhido.p }, eu.length ? { eu } : {}, ep.length ? { ep } : {}, ecu.length ? { ecu } : {}, ecp.length ? { ecp } : {}) : escolhido);
@@ -600,9 +614,12 @@
       if (usados.has(k)) continue;
       const tipo = tipoItem(it, mapa);
       const chave = chaveItem(it);
+      const m = marcas[chave], ok = vale(m, tipo);
       linhas.push(Object.assign({}, it, {
         origem: 'lista', tipo, chave,
-        concluido: !!marcas[chave], devolvido: !!(marcas[chave] && marcas[chave].dev),
+        concluido: ok, devolvido: ok && !!m.dev,
+        // concluído, mas o prazo venceu e o processo continua na tarefa: volta aberto, com o selo
+        retornou: m && !ok ? m.em : (!m && it.retornoGrupo) || null,
         novo: tipo !== 'normal' && !!it.vistoEm && it.vistoEm > ultimaVisita,
       }));
     }
@@ -614,7 +631,7 @@
     const cols = [
       ['Número do Processo', l => l.n],
       ...(comResp ? [['Responsável', l => (nomes && nomes[l.dono]) || l.dono || '']] : []),
-      ['Situação', l => ({ urgente: 'Urgente', devolvido: 'Devolvido', prioritaria: 'Prioritária', normal: '' })[l.tipo] + (l.concluido ? ' (concluído)' : '')],
+      ['Situação', l => ({ urgente: 'Urgente', devolvido: 'Devolvido', prioritaria: 'Prioritária', normal: '' })[l.tipo] + (l.concluido ? ' (concluído)' : l.retornou ? ` (voltou: concluído em ${new Date(l.retornou).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })})` : '')],
       ['Critério', l => (l.criterios || []).map(c => c.r + (c.e && c.e.length ? ': ' + c.e.join('; ') : '')).join(' | ')],
       ['Classe', l => l.c], ['Tarefa', l => l.t], ['Magistrado(a)', l => ({ T: 'Titular', S: 'Substituta' })[magistradoDeCargo(l.cg)] || ''],
       ['Data de Chegada', l => l.ch ? new Date(l.ch).toLocaleDateString('pt-BR') : ''],
@@ -653,7 +670,7 @@
 
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
-    atribuir, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, montarFila, comparar, chaveItem,
+    atribuir, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, marcaVencida, montarFila, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -721,6 +721,14 @@
         <p class="small muted">A fila do gestor, no topo desta aba, mostra os processos com esta etiqueta e os que servidores e o diretor enviarem para o gestor. Para mais de uma etiqueta, separe com | (ex.: Alberto - Acompanhar|# Secretaria - Cadastrar condenação de improbidade). Deixe em branco para usar só os envios.</p>
         <div class="regra so-etiqueta"><input type="text" id="cfg-etg" value="${esc(c.etiquetaGestor == null ? R.ETIQUETA_GESTOR_PADRAO : c.etiquetaGestor)}" aria-label="Etiqueta da fila do gestor" placeholder="${esc(R.ETIQUETA_GESTOR_PADRAO)}"></div>
       </div>
+      <div class="cfg-sub" data-sub="retorno">
+        <h3>Concluídos que continuam na tarefa</h3>
+        <p class="small muted">Processo concluído que continua na mesma tarefa do PJe, com a mesma data de chegada, volta para a fila depois destes dias corridos, contados da conclusão, com o selo “Concluído em … e ainda na tarefa”. Não volta para quem enviou ou devolveu o processo a outra pessoa. Padrão: 15 e 30 dias.</p>
+        <div class="linha-botoes retorno-cfg">
+          <label class="campo"><span>Urgentes voltam após (dias)</span><input type="number" id="cfg-ret-urg" min="1" max="90" step="1" inputmode="numeric" value="${esc(String(c.retornoUrgente || 15))}"></label>
+          <label class="campo"><span>Prioritários e demais voltam após (dias)</span><input type="number" id="cfg-ret-dem" min="1" max="90" step="1" inputmode="numeric" value="${esc(String(c.retornoDemais || 30))}"></label>
+        </div>
+      </div>
       <div class="cfg-sub" data-sub="excecoes">
         <h3>Exceções por classe ou etiqueta <span class="muted mono">${(c.regrasClasse || []).length}</span></h3>
         <p class="small muted">Valem antes da divisão do setor, na ordem da lista (a primeira que casar decide). Classe: use a sigla do PJe+R (ex.: ACPCiv|ACIA); etiqueta: o texto completo (ex.: $ Ação civil pública).</p>
@@ -769,6 +777,8 @@
     });
     (c.etiquetasDiretor || []).forEach((x, i) => { const e = val(`cfg-ed-${i}`); if (e != null) x.e = e.trim(); const u = document.getElementById(`cfg-edu-${i}`); if (u) x.u = u.checked; });
     const etg = val('cfg-etg'); if (etg != null) c.etiquetaGestor = etg.trim();
+    const ru = val('cfg-ret-urg'); if (ru != null) c.retornoUrgente = ru.trim() === '' ? null : Number(ru);
+    const rd = val('cfg-ret-dem'); if (rd != null) c.retornoDemais = rd.trim() === '' ? null : Number(rd);
     (c.etiquetasFiltro || []).forEach((x, i) => { const v = val(`cfg-et-${i}`); if (v != null) c.etiquetasFiltro[i] = v.trim(); });
     (c.visoes || []).forEach((v, i) => {
       const tipo = val(`cfg-v-tipo-${i}`); if (tipo) v.tipo = tipo;
@@ -797,6 +807,11 @@
     const vistosEd = new Set();
     c.etiquetasDiretor = (c.etiquetasDiretor || []).filter(x => { const k = R.normTexto(x.e); if (!k || vistosEd.has(k)) return false; vistosEd.add(k); return true; }).map(x => ({ e: x.e, u: !!x.u }));
     if (c.etiquetaGestor == null) c.etiquetaGestor = R.ETIQUETA_GESTOR_PADRAO;
+    // Prazos de retorno dos concluídos: dias inteiros de 1 a 90 (vazio volta ao padrão de 15 e 30).
+    for (const [k, padrao, rot] of [['retornoUrgente', 15, 'urgentes'], ['retornoDemais', 30, 'prioritários e demais']]) {
+      if (c[k] == null) c[k] = padrao;
+      if (!Number.isInteger(c[k]) || c[k] < 1 || c[k] > 90) { toast(`O prazo de retorno dos ${rot} deve ser um número inteiro de 1 a 90 dias.`); return; }
+    }
     const desejados = [];
     const vistos = new Set();
     const checa = (nome, email, rotulo) => {

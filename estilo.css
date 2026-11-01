@@ -184,6 +184,10 @@ ol.linhas { list-style: none; margin: 0; padding: 0; }
 .c-anot .quando { color: var(--muted); font-size: 11px; }
 .c-anot .anotar-form { padding-top: 0; width: 100%; }
 .selo.paralelo { background: var(--sunken); color: var(--dev); border: 1px dashed var(--dev); cursor: help; }
+/* Concluído que voltou pelo prazo (continua na tarefa). As variáveis já mudam com o tema claro/escuro. */
+.selo.retornou { background: var(--sunken); color: var(--pri); border: 1px dashed var(--pri); cursor: help; }
+.retorno-cfg { align-items: flex-end; }
+.retorno-cfg input { width: 7rem; }
 .selo.feito { background: var(--ok-bg); color: var(--ok); }
 .linha:last-child { border-bottom: 0; }
 .linha:hover { background: var(--hover); }

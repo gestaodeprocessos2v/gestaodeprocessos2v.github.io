@@ -305,6 +305,12 @@
   }
 
   // ---------- montagem da fila ----------
+  // Conclusão com prazo (Gestão → Configuração): concluído que continua parado na tarefa volta depois desses dias corridos.
+  const PRAZOS_RETORNO = { urgente: 15, demais: 30 };
+  const prazosRetorno = () => {
+    const c = st.config || {};
+    return { urgente: c.retornoUrgente || PRAZOS_RETORNO.urgente, demais: c.retornoDemais || PRAZOS_RETORNO.demais };
+  };
   function filaDe(p) {
     const c = st.cache;
     if (c.ver !== st.ver) { c.ver = st.ver; c.m = {}; }
@@ -324,10 +330,12 @@
       urgencias: st.urgencias.filter(u => u.via !== 'lista' && u.responsavel === p && (!u.concluidaEm || u.concluidaEm > umMes)),
       devolucoes: st.devolucoes.filter(d => d.para === p && (!d.concluidaEm || d.concluidaEm > umMes)),
       marcas: Object.fromEntries(Object.entries(st.marcas[p] || {}).filter(([, m]) => !m.desfeito)), tarefas: ehEspecial(p) ? new Map() : st.mapaTarefas, ultimaVisita: st.ultimaVisita,
+      prazos: prazosRetorno(), agora: Date.now(),
     });
     // Concluídos que já saíram da lista continuam aparecendo (só em "Mostrar concluídos"), pelas marcas guardadas.
     const marcasP = Object.fromEntries(Object.entries(st.marcas[p] || {}).filter(([, m]) => !m.desfeito));
-    const presentes = new Set(fila.filter(l => l.ch != null).map(l => R.chaveItem({ n: l.n, ch: l.ch })));
+    // Todas as entradas da lista contam (processo em mais de uma tarefa mostra só uma, mas as outras continuam na lista).
+    const presentes = new Set([...fila, ...itens].filter(l => l.ch != null).map(l => R.chaveItem({ n: l.n, ch: l.ch })));
     for (const chave of Object.keys(marcasP)) {
       const m = marcasP[chave];
       if (presentes.has(chave) || fila.some(l => l.chave === chave)) continue;
@@ -603,6 +611,10 @@
     // "por <nome>" só quando quem concluiu não é o dono do processo (o dono já aparece em "Responsável" no Geral).
     const porQuem = l.concluidoPor && l.concluidoPor !== l.dono ? ' por ' + esc(nomeDe(l.concluidoPor)) : '';
     if (l.concluido) selos.push(`<span class="selo feito">Concluído${porQuem}${l.concluidoEm ? ' em ' + dataHoraBR(l.concluidoEm) : ''}</span>`);
+    else if (l.retornou) {
+      const balaoRet = `Esse processo foi concluído em ${dataHoraBR(l.retornou)}, mas continua na mesma tarefa do PJe, com a mesma data de chegada. Voltou para a fila depois de ${l.tipo === 'urgente' ? prazosRetorno().urgente : prazosRetorno().demais} dias.`;
+      selos.push(`<span class="selo retornou" tabindex="0" role="note" aria-label="${esc('Voltou. ' + balaoRet)}" data-balao="${esc(balaoRet)}">Concluído em ${dataBR(l.retornou)} e ainda na tarefa</span>`);
+    }
     else if (l.concluidoAntes) selos.push(`<span class="selo anterior" tabindex="0" role="note" data-balao="Esse processo foi concluído e a conclusão foi desfeita" aria-description="Esse processo foi concluído e a conclusão foi desfeita">Concluído antes em ${dataHoraBR(l.concluidoAntes)}</span>`);
     if (l.foraDaLista) {
       const balao = l.dono === st.pessoa ? 'Esse processo não apareceu mais na sua lista na última atualização.' : `Esse processo não apareceu mais na lista de ${nomeDe(l.dono)} na última atualização.`;
@@ -883,8 +895,10 @@
   // ---------- gravações da fila ----------
   // Guarda junto os dados do processo: assim o concluído continua aparecendo (em "Mostrar concluídos") mesmo que saia da lista nova.
   const fotoDe = l => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'tipo', 'ed', 'eu', 'ep']) if (l[k] != null) o[k] = l[k]; return o; };
-  async function gravarMarca(pessoa, chave, dev, agora, linha) {
+  // env: conclusão de quem enviou ou devolveu o processo a outra pessoa; não volta pelo prazo (marcaVencida em regras.js).
+  async function gravarMarca(pessoa, chave, dev, agora, linha, env) {
     const item = linha ? fotoDe(linha) : null;
+    if (item && env) item.env = true;
     const reg = { pessoa, chave, em: iso(agora), devolvido: !!dev, desfeito: false };
     if (item) reg.item = item;
     const { error } = await st.sb.from('marcas').upsert(reg, { onConflict: 'pessoa,chave' });
@@ -904,9 +918,9 @@
 
   // Conclui na fila do dono da linha (quem está logado, ou o servidor responsável quando o eventual conclui):
   // marca da lista (número + chegada) ou fecha a urgência/devolução.
-  async function concluirLinha(l) {
+  async function concluirLinha(l, env) {
     const agora = Date.now(), p = l.dono || st.pessoa;
-    if (l.origem === 'lista') { await gravarMarca(p, l.chave, false, agora, l); return; }
+    if (l.origem === 'lista') { await gravarMarca(p, l.chave, false, agora, l, env); return; }
     const urg = l.origem === 'urgencia';
     const campos = urg ? { concluida_em: iso(agora), concluida_por: st.pessoa } : { concluida_em: iso(agora) };
     const { error } = await st.sb.from(urg ? 'urgencias' : 'devolucoes').update(campos).eq('id', l.id);
@@ -914,7 +928,7 @@
     const lista = urg ? st.urgencias : st.devolucoes;
     const r = lista.find(x => x.id === l.id); if (r) r.concluidaEm = agora;
     // evita que o mesmo processo volte como item comum da lista (mesmo número e mesma chegada)
-    if (l.ch != null) await gravarMarca(p, R.chaveItem({ n: l.n, ch: l.ch }), false, agora, l);
+    if (l.ch != null) await gravarMarca(p, R.chaveItem({ n: l.n, ch: l.ch }), false, agora, l, env);
     st.ver++;
   }
 
@@ -959,7 +973,7 @@
     const jaTinha = !!error && error.code === '23505';   // reenvio: a urgência já está na fila dele, segue com o resto
     if (error && !jaTinha) throw error;
     try {
-      await concluirLinha(l);
+      await concluirLinha(l, true);
       const antiga = ((st.notas[st.pessoa] || {})[R.soDigitos(l.n)] || {}).texto || '';
       const nova = `Enviado para ${nomeDe(para)} em ${dataHoraBR(agora)}${motivo ? ' — ' + motivo : ''}`;
       let texto = antiga ? antiga + '\n' + nova : nova;
@@ -985,7 +999,7 @@
         const { error } = await st.sb.from('devolucoes').insert({ item: itemDe(l), de: st.pessoa, para, motivo: motivo || null });
         if (error) throw error;
       }
-      await concluirLinha(l);
+      await concluirLinha(l, true);
       const antiga = ((st.notas[st.pessoa] || {})[R.soDigitos(l.n)] || {}).texto || '';
       const nova = `Devolvido para ${nomeDe(para)} em ${dataHoraBR(agora)}${motivo ? ' — ' + motivo : ''}`;
       let texto = antiga ? antiga + '\n' + nova : nova;
