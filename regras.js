@@ -548,7 +548,7 @@
 
   // Conclusão com prazo: processo da lista concluído que continua na mesma tarefa, com a mesma chegada, volta à fila
   // depois de N dias corridos da conclusão (prazos.urgente para urgentes; prazos.demais para os outros). Não vence:
-  // sem prazos (testes antigos), conclusão de quem enviou ou devolveu o processo (env ou dev) e prazo zerado.
+  // sem prazos (testes antigos), conclusão de quem devolveu o processo (env ou dev; o envio para outra pessoa vence normalmente) e prazo zerado.
   function marcaVencida(marca, tipo, prazos, agora) {
     if (!marca || !prazos || marca.dev || (marca.item && marca.item.env) || marca.em == null) return false;
     const dias = Number(tipo === 'urgente' ? prazos.urgente : prazos.demais);

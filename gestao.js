@@ -723,7 +723,7 @@
       </div>
       <div class="cfg-sub" data-sub="retorno">
         <h3>Concluídos que continuam na tarefa</h3>
-        <p class="small muted">Processo concluído que continua na mesma tarefa do PJe, com a mesma data de chegada, volta para a fila depois destes dias corridos, contados da conclusão, com o selo “Concluído em … e ainda na tarefa”. Não volta para quem enviou ou devolveu o processo a outra pessoa. Padrão: 15 e 30 dias.</p>
+        <p class="small muted">Processo concluído que continua na mesma tarefa do PJe, com a mesma data de chegada, volta para a fila depois destes dias corridos, contados da conclusão, com o selo “Concluído em … e ainda na tarefa”. Vale também para quem enviou o processo a outra pessoa; não volta para quem o devolveu. Padrão: 15 e 30 dias.</p>
         <div class="linha-botoes retorno-cfg">
           <label class="campo"><span>Urgentes voltam após (dias)</span><input type="number" id="cfg-ret-urg" min="1" max="90" step="1" inputmode="numeric" value="${esc(String(c.retornoUrgente || 15))}"></label>
           <label class="campo"><span>Prioritários e demais voltam após (dias)</span><input type="number" id="cfg-ret-dem" min="1" max="90" step="1" inputmode="numeric" value="${esc(String(c.retornoDemais || 30))}"></label>

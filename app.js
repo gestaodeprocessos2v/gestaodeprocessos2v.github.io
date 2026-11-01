@@ -895,7 +895,8 @@
   // ---------- gravações da fila ----------
   // Guarda junto os dados do processo: assim o concluído continua aparecendo (em "Mostrar concluídos") mesmo que saia da lista nova.
   const fotoDe = l => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'tipo', 'ed', 'eu', 'ep']) if (l[k] != null) o[k] = l[k]; return o; };
-  // env: conclusão de quem enviou ou devolveu o processo a outra pessoa; não volta pelo prazo (marcaVencida em regras.js).
+  // env: conclusão de quem devolveu o processo a outra pessoa (diretor); não volta pelo prazo (marcaVencida em regras.js).
+  // O envio para outra pessoa não usa: quem envia também tem de movimentar no PJe (decisão do Alberto, 01/11/2026).
   async function gravarMarca(pessoa, chave, dev, agora, linha, env) {
     const item = linha ? fotoDe(linha) : null;
     if (item && env) item.env = true;
@@ -973,7 +974,7 @@
     const jaTinha = !!error && error.code === '23505';   // reenvio: a urgência já está na fila dele, segue com o resto
     if (error && !jaTinha) throw error;
     try {
-      await concluirLinha(l, true);
+      await concluirLinha(l);   // quem enviou também precisa movimentar no PJe: a conclusão vence pelo prazo, como as outras
       const antiga = ((st.notas[st.pessoa] || {})[R.soDigitos(l.n)] || {}).texto || '';
       const nova = `Enviado para ${nomeDe(para)} em ${dataHoraBR(agora)}${motivo ? ' — ' + motivo : ''}`;
       let texto = antiga ? antiga + '\n' + nova : nova;
