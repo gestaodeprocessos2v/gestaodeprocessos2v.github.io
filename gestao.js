@@ -19,6 +19,7 @@
     if (st.rascOutros) return;
     const porPessoa = Object.fromEntries(st.acessos.filter(a => a.pessoa_id).map(a => [a.pessoa_id, a.email]));
     for (const p of st.rascunho.pessoas || []) if (p.email == null) p.email = porPessoa[p.id] || '';
+    st.rascunho.etiquetasFiltro = R.etiquetasFiltro(st.rascunho);   // formato antigo (só texto) vira { e, s: 'pagamentos' }
     st.rascOutros = st.acessos.filter(a => !a.pessoa_id).map(a => ({ nome: a.nome, email: a.email, perfil: a.perfil, magistrado: a.magistrado || '' }));
   }
 
@@ -677,8 +678,9 @@
       ${sel(`cfg-v-pessoa-${i}`, v.pessoa || '', 'Pessoa')}
       <input type="text" id="cfg-v-nome-${i}" value="${esc(v.nome || '')}" aria-label="Nome da visão" placeholder="Nome que aparece no filtro" maxlength="40">
       <button class="btn" type="button" data-acao="cfg-remover-visao" data-i="${i}">Remover</button></div>`).join('');
-    const etiquetasH = (c.etiquetasFiltro || []).map((x, i) => `<div class="regra so-etiqueta">
-      <input type="text" id="cfg-et-${i}" value="${esc(x)}" aria-label="Etiqueta" placeholder="# RPV - 01. Expedir">
+    const etiquetasH = (c.etiquetasFiltro || []).map((x, i) => `<div class="regra et-setor">
+      <input type="text" id="cfg-et-${i}" value="${esc(x.e)}" aria-label="Etiqueta" placeholder="# RPV - 01. Expedir">
+      <select id="cfg-ets-${i}" aria-label="Setor em que a etiqueta vale">${SETORES.map(([id, n]) => `<option value="${id}"${x.s === id ? ' selected' : ''}>${n}</option>`).join('')}</select>
       <button class="btn" type="button" data-acao="cfg-remover-etiqueta" data-i="${i}">Remover</button></div>`).join('');
     const etDirH = (c.etiquetasDiretor || []).map((x, i) => `<div class="regra dir-etiqueta">
       <input type="text" id="cfg-ed-${i}" value="${esc(x.e)}" aria-label="Etiqueta" placeholder="Etiqueta exatamente como no PJe">
@@ -709,8 +711,8 @@
         <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-visao">Adicionar visão</button></div>
       </div>
       <div class="cfg-sub" data-sub="etiquetas">
-        <h3>Etiquetas para filtro (Pagamentos) <span class="muted mono">${(c.etiquetasFiltro || []).length}</span></h3>
-        <p class="small muted">Só as etiquetas listadas aqui são guardadas, e apenas nos processos de tarefas de Pagamentos. Elas viram o filtro “Etiqueta” na fila e no painel geral. Escreva exatamente como no PJe (ex.: # RPV - 01. Expedir). Depois de incluir ou mudar uma etiqueta, envie o CSV completo de novo para ela passar a valer.</p>
+        <h3>Etiquetas para filtro (por setor) <span class="muted mono">${(c.etiquetasFiltro || []).length}</span></h3>
+        <p class="small muted">Só as etiquetas listadas aqui são guardadas, e cada uma apenas nos processos de tarefas do setor escolhido ao lado (ex.: Pagamentos, Audiência, Perícia). Elas viram o filtro “Etiqueta” na fila e no painel geral. A mesma etiqueta pode ser cadastrada para mais de um setor. Escreva exatamente como no PJe (ex.: # RPV - 01. Expedir). Depois de incluir ou mudar uma etiqueta, envie o CSV completo de novo para ela passar a valer.</p>
         ${etiquetasH}
         <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-etiqueta">Adicionar etiqueta</button></div>
       </div>
@@ -796,7 +798,7 @@
       for (const d of [1, 2, 3, 4, 5]) { const v = val(`cfg-magdia-${d}`); if (v === 'T' || v === 'S') md[d] = v; }
       c.magPorDia = md;
     }
-    (c.etiquetasFiltro || []).forEach((x, i) => { const v = val(`cfg-et-${i}`); if (v != null) c.etiquetasFiltro[i] = v.trim(); });
+    (c.etiquetasFiltro || []).forEach((x, i) => { const v = val(`cfg-et-${i}`), s = val(`cfg-ets-${i}`); if (v != null) x.e = v.trim(); if (s != null) x.s = s; });
     (c.visoes || []).forEach((v, i) => {
       const tipo = val(`cfg-v-tipo-${i}`); if (tipo) v.tipo = tipo;
       const valor = val(`cfg-v-valor-${i}`); if (valor != null) v.valor = valor.trim();
@@ -820,7 +822,8 @@
     const c = st.rascunho, outros = st.rascOutros || [];
     c.regrasClasse = (c.regrasClasse || []).filter(r => r.padrao && r.responsavel);
     c.visoes = (c.visoes || []).filter(v => v.pessoa && v.nome && v.valor);
-    c.etiquetasFiltro = [...new Set((c.etiquetasFiltro || []).filter(Boolean))];
+    const vistosEt = new Set();   // a mesma etiqueta pode valer em mais de um setor; repetida no mesmo setor sai
+    c.etiquetasFiltro = (c.etiquetasFiltro || []).filter(x => { const k = R.normTexto(x.e) + '|' + x.s; if (!x.e || vistosEt.has(k)) return false; vistosEt.add(k); return true; }).map(x => ({ e: x.e, s: x.s }));
     const vistosEd = new Set();
     c.etiquetasDiretor = (c.etiquetasDiretor || []).filter(x => { const k = R.normTexto(x.e); if (!k || vistosEd.has(k)) return false; vistosEd.add(k); return true; }).map(x => ({ e: x.e, u: !!x.u }));
     if (c.etiquetaGestor == null) c.etiquetaGestor = R.ETIQUETA_GESTOR_PADRAO;
@@ -921,7 +924,7 @@
       else if (acao === 'cfg-add-visao') { c.visoes = (c.visoes || []).concat({ pessoa: '', nome: '', tipo: 'setor', valor: 'triagem' }); render(); }
       else if (acao === 'cfg-add-etdir') { c.etiquetasDiretor = (c.etiquetasDiretor || []).concat({ e: '', u: false }); render(); }
       else if (acao === 'cfg-remover-etdir') { c.etiquetasDiretor.splice(Number(alvo.dataset.i), 1); render(); }
-      else if (acao === 'cfg-add-etiqueta') { c.etiquetasFiltro = (c.etiquetasFiltro || []).concat(''); render(); }
+      else if (acao === 'cfg-add-etiqueta') { c.etiquetasFiltro = (c.etiquetasFiltro || []).concat({ e: '', s: 'pagamentos' }); render(); }
       else if (acao === 'cfg-remover-etiqueta') { c.etiquetasFiltro.splice(Number(alvo.dataset.i), 1); render(); }
       else if (acao === 'cfg-remover-visao') { c.visoes.splice(Number(alvo.dataset.i), 1); render(); }
       else if (acao === 'cfg-remover-regra') { c.regrasClasse.splice(Number(alvo.dataset.i), 1); render(); }

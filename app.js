@@ -734,12 +734,12 @@
     return h;
   }
 
-  // Filtro de etiqueta: fila do diretor usa as etiquetas dele ("ed"); as demais, as de Pagamentos ("et").
+  // Filtro de etiqueta: fila do diretor usa as etiquetas dele ("ed"); as demais, as etiquetas para filtro de cada setor ("et").
   function etConfig(modo) {
     const alvo = modo === 'geral' ? st.vis.geral.pessoa : donoDe(modo);
     const dir = !!alvo && tipoDe(alvo) === 'diretor';
     const cfg = st.config || {};
-    return { campo: dir ? 'ed' : 'et', lista: dir ? (cfg.etiquetasDiretor || []).map(x => x.e).filter(Boolean) : (cfg.etiquetasFiltro || []), especial: !!alvo && ehEspecial(alvo) };
+    return { campo: dir ? 'ed' : 'et', lista: dir ? (cfg.etiquetasDiretor || []).map(x => x.e).filter(Boolean) : [...new Set(R.etiquetasFiltro(cfg).map(x => x.e).filter(Boolean))], especial: !!alvo && ehEspecial(alvo) };
   }
 
   function renderLista(modo) {

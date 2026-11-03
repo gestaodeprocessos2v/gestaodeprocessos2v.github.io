@@ -304,6 +304,7 @@ td.mono { white-space: nowrap; }
 .regra { display: grid; grid-template-columns: minmax(0, 7rem) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; }
 .regra.so-etiqueta { grid-template-columns: minmax(0, 1fr) auto; }
 .regra.dir-etiqueta { grid-template-columns: minmax(0, 1fr) auto auto; }
+.regra.et-setor { grid-template-columns: minmax(0, 1fr) minmax(0, 10rem) auto; }
 .regra.pri-cad { grid-template-columns: auto minmax(0, 18rem) auto auto auto; justify-content: start; }
 .gestor-fila { grid-column: 1 / -1; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; box-shadow: var(--shadow); }
 .gestor-fila.oculta { padding: 8px 14px; }
@@ -322,6 +323,7 @@ td.mono { white-space: nowrap; }
   .regra { grid-template-columns: 1fr 1fr; }
   .regra.so-etiqueta { grid-template-columns: minmax(0, 1fr) auto; }
   .regra.dir-etiqueta { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .regra.et-setor { grid-template-columns: minmax(0, 1fr) auto auto; }
   .regra.pri-cad { grid-template-columns: 1.3fr 1fr; justify-content: stretch; }
   .regra.pri-cad > :nth-child(1) { grid-area: 1 / 1; }
   .regra.pri-cad > :nth-child(3) { grid-area: 1 / 2; }

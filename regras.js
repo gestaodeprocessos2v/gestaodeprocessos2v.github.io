@@ -198,6 +198,12 @@
   }
 
   // Etiquetas vêm separadas por ", " e algumas têm vírgula interna; compara a etiqueta inteira, com delimitadores.
+  // Etiquetas para filtro (Gestão → Configuração): cada uma vale num setor. Formato antigo, só o texto,
+  // é de Pagamentos (era o único setor até 03/11/2026).
+  function etiquetasFiltro(cfg) {
+    return ((cfg && cfg.etiquetasFiltro) || []).map(x => (typeof x === 'string' ? { e: x, s: 'pagamentos' } : { e: (x && x.e) || '', s: (x && x.s) || 'pagamentos' }));
+  }
+
   function temEtiqueta(etiquetas, alvos) {
     if (!etiquetas || !alvos) return false;
     const lista = ', ' + normTexto(etiquetas) + ',';
@@ -444,9 +450,9 @@
         const depois = tipoItem(item, mapa);
         if (depois !== antes) porEtiqueta[depois]++;
       }
-      // Só as etiquetas escolhidas na configuração, e só em tarefas de Pagamentos, são gravadas (filtro "Etiqueta").
-      if (s === 'pagamentos' && it.e) {
-        const et = ((config && config.etiquetasFiltro) || []).filter(x => x && temEtiqueta(it.e, x));
+      // Só as etiquetas escolhidas na configuração, e só nas tarefas do setor de cada uma, são gravadas (filtro "Etiqueta").
+      if (it.e) {
+        const et = [...new Set(etiquetasFiltro(config).filter(x => x.e && x.s === s && temEtiqueta(it.e, x.e)).map(x => x.e))];
         if (et.length) item.et = et;
       }
       porSetor[s] = (porSetor[s] || 0) + 1;
@@ -677,7 +683,7 @@
 
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, regrasDoSetor, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
-    atribuir, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, marcaVencida, montarFila, comparar, chaveItem,
+    atribuir, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, marcaVencida, montarFila, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
