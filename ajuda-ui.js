@@ -15,6 +15,9 @@
   const CORES = ['--prod-1', '--prod-3', '--prod-2', '--prod-6', '--prod-0', '--prod-7', '--prod-4'];
   const COR_MISTA = '--prod-5'; // assunto com guias de mais de uma categoria
   const CAT_PAINEL = 'Usando o painel'; // os assuntos desta categoria ficam num quadro próprio no início
+  // Ordem das categorias de cima para baixo (decisão do gestor); categoria fora da lista vai para o fim, em ordem alfabética.
+  const ORDEM_CATEGORIAS = [CAT_PAINEL, 'PJe 2.x', 'RPV e PRC', 'Outras ferramentas'];
+  const posCat = nome => { const i = ORDEM_CATEGORIAS.indexOf(nome); return i < 0 ? ORDEM_CATEGORIAS.length : i; };
 
   // ---------- estado ----------
   const A = () => st.ajuda || (st.ajuda = { lista: [], carregado: false, carregando: false, erro: false, busca: '', palavra: null, abertas: new Set(), aberto: null, guias: {}, erroGuia: null });
@@ -26,7 +29,7 @@
     s.carregando = true; s.erro = false;
     const { data, error } = await st.sb.from('ajuda_guias').select('id,titulo,categoria,ordem,palavras').order('categoria').order('ordem').order('titulo');
     s.carregando = false;
-    if (error) { console.error(error); s.erro = true; } else { s.lista = data || []; s.carregado = true; }
+    if (error) { console.error(error); s.erro = true; } else { s.lista = (data || []).sort((a, b) => posCat(a.categoria) - posCat(b.categoria)); s.carregado = true; }   // sort estável: dentro da categoria vale a ordem do banco
     render();
   }
 
@@ -75,10 +78,12 @@
   }
 
   // ---------- dados da tela ----------
-  // Categorias na ordem da lista, cada uma com a sua cor e os seus guias.
+  // Categorias na ordem de ORDEM_CATEGORIAS, cada uma com a sua cor (pela posição) e os seus guias.
   function categorias() {
     const cats = [];
-    for (const g of A().lista) { let c = cats.find(x => x.nome === g.categoria); if (!c) cats.push(c = { nome: g.categoria, cor: CORES[cats.length % CORES.length], itens: [] }); c.itens.push(g); }
+    for (const g of A().lista) { let c = cats.find(x => x.nome === g.categoria); if (!c) cats.push(c = { nome: g.categoria, itens: [] }); c.itens.push(g); }
+    cats.sort((x, y) => posCat(x.nome) - posCat(y.nome) || x.nome.localeCompare(y.nome, 'pt-BR'));
+    cats.forEach((c, i) => { c.cor = CORES[i % CORES.length]; });
     return cats;
   }
   const corDe = (cats, nome) => (cats.find(c => c.nome === nome) || {}).cor || COR_MISTA;
