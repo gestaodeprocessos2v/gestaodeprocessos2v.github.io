@@ -547,10 +547,12 @@
   // Padrão ao abrir: quem entra como magistrado (titular ou substituta, cadastrado na Gestão) vê só os seus processos, com o botão do outro
   // desligado; os demais perfis, e magistrado sem cadastro de titular/substituta, abrem com os dois ligados. Nada é lembrado entre acessos.
   // Divisão por dia da semana (Gestão → Configuração): servidor e servidor eventual abrem a Fila, o Geral e a Eventual só com o(a)
-  // magistrado(a) do dia; as Metas não seguem. O dia é o da abertura da tela (magOff fica guardado até recarregar a página).
+  // magistrado(a) do dia; as Metas e a fila do gestor não seguem. Vale também no "Ver a fila como…" de um servidor (tipoAtivo).
+  // O dia é o da abertura da tela (magOff fica guardado até recarregar a página ou trocar a pessoa do "Ver a fila como…").
   const DIAS_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
   const magDoDia = f => {
-    if (!f || f === st.fMetas || (st.perfil !== 'servidor' && st.perfil !== 'eventual')) return '';
+    const tipo = tipoAtivo();
+    if (!f || f === st.fMetas || f === st.vis.gestor || (tipo !== 'servidor' && tipo !== 'eventual')) return '';
     const l = ((st.config || {}).magPorDia || {})[new Date().getDay()];
     return l === 'T' || l === 'S' ? l : '';
   };
@@ -1047,8 +1049,11 @@
     (alvo || $('#env-para')).focus();
   }
 
+  // Ao trocar a pessoa do "Ver a fila como…" (ou sair), os botões Titular/Substituta voltam ao padrão de quem passa a ser vista.
+  const zerarMagVis = () => { for (const k of ['fila', 'geral', 'eventual']) if (st.vis[k]) st.vis[k].magOff = null; };
+
   function sairVerComo() {
-    st.verComo = ''; st.anotando = null; st.devolvendo = null; st.modal = null;
+    st.verComo = ''; st.anotando = null; st.devolvendo = null; st.modal = null; zerarMagVis();
     if (!abasDisponiveis().includes(st.aba)) st.aba = abasDisponiveis()[0];
     render();
   }
@@ -1192,7 +1197,7 @@
     });
     $('#ver-como').addEventListener('change', e => {
       st.anotando = null; st.devolvendo = null; st.modal = null;
-      if (e.target.value) { st.verComo = e.target.value; st.aba = 'fila'; render(); } else sairVerComo();
+      if (e.target.value) { st.verComo = e.target.value; st.aba = 'fila'; zerarMagVis(); render(); } else sairVerComo();
     });
     $('#abas').addEventListener('click', e => {
       const b = e.target.closest('.aba'); if (!b) return;
