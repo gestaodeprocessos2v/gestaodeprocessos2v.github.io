@@ -188,6 +188,9 @@ ol.linhas { list-style: none; margin: 0; padding: 0; }
 .selo.retornou { background: var(--sunken); color: var(--pri); border: 1px dashed var(--pri); cursor: help; }
 .retorno-cfg { align-items: flex-end; }
 .retorno-cfg input { width: 7rem; }
+.mag-dia-cfg { align-items: flex-end; }
+.mag-dia-cfg select { min-width: 9rem; }
+.mag-dia { margin: 2px 0 0; }
 .selo.feito { background: var(--ok-bg); color: var(--ok); }
 .linha:last-child { border-bottom: 0; }
 .linha:hover { background: var(--hover); }

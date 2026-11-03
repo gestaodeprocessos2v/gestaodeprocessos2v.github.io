@@ -733,6 +733,13 @@
           <label class="campo"><span>Prioritários e demais voltam após (dias)</span><input type="number" id="cfg-ret-dem" min="1" max="90" step="1" inputmode="numeric" value="${esc(String(c.retornoDemais || 30))}"></label>
         </div>
       </div>
+      <div class="cfg-sub" data-sub="magdia">
+        <h3>Magistrado(a) por dia da semana</h3>
+        <p class="small muted">Servidores e servidores eventuais abrem a Fila, o Geral e a Eventual só com os processos do(a) magistrado(a) escolhido(a) para o dia. É só o filtro de abertura: eles podem ligar o outro botão e ver todos. Não vale nas Metas CNJ nem nos outros perfis. Sábado e domingo abrem com os dois.</p>
+        <div class="linha-botoes mag-dia-cfg">
+          ${[1, 2, 3, 4, 5].map(d => { const v = (c.magPorDia || {})[d] || ''; return `<label class="campo"><span>${['', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'][d]}</span><select id="cfg-magdia-${d}">${[['', 'Os dois'], ['T', 'Só Titular'], ['S', 'Só Substituta']].map(([x, r]) => `<option value="${x}"${x === v ? ' selected' : ''}>${r}</option>`).join('')}</select></label>`; }).join('')}
+        </div>
+      </div>
       <div class="cfg-sub" data-sub="excecoes">
         <h3>Exceções por classe ou etiqueta <span class="muted mono">${(c.regrasClasse || []).length}</span></h3>
         <p class="small muted">Valem antes da divisão do setor, na ordem da lista (a primeira que casar decide). Classe: use a sigla do PJe+R (ex.: ACPCiv|ACIA); etiqueta: o texto completo (ex.: $ Ação civil pública).</p>
@@ -783,6 +790,12 @@
     const etg = val('cfg-etg'); if (etg != null) c.etiquetaGestor = etg.trim();
     const ru = val('cfg-ret-urg'); if (ru != null) c.retornoUrgente = ru.trim() === '' ? null : Number(ru);
     const rd = val('cfg-ret-dem'); if (rd != null) c.retornoDemais = rd.trim() === '' ? null : Number(rd);
+    // Magistrado(a) por dia: { 1..5: 'T' | 'S' } (dia de Date.getDay); "Os dois" não é gravado.
+    if (document.getElementById('cfg-magdia-1')) {
+      const md = {};
+      for (const d of [1, 2, 3, 4, 5]) { const v = val(`cfg-magdia-${d}`); if (v === 'T' || v === 'S') md[d] = v; }
+      c.magPorDia = md;
+    }
     (c.etiquetasFiltro || []).forEach((x, i) => { const v = val(`cfg-et-${i}`); if (v != null) c.etiquetasFiltro[i] = v.trim(); });
     (c.visoes || []).forEach((v, i) => {
       const tipo = val(`cfg-v-tipo-${i}`); if (tipo) v.tipo = tipo;

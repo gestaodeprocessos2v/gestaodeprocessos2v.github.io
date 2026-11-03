@@ -243,7 +243,7 @@
       const v = a.dataset.v;
       alternarMag(st.fMetas, v); st.fMetas.limite = LIMITE_PASSO; render();
       const b = document.querySelector(`#v-metas [data-acao="metas-mag"][data-v="${v}"]`); if (b) b.focus();
-    } else if (a.dataset.acao === 'metas-mag-padrao') { st.fMetas.magOff = magPadrao(); st.fMetas.limite = LIMITE_PASSO; render(); }
+    } else if (a.dataset.acao === 'metas-mag-padrao') { st.fMetas.magOff = magPadrao(st.fMetas); st.fMetas.limite = LIMITE_PASSO; render(); }
     else if (a.dataset.acao === 'metas-mais') { st.fMetas.limite += LIMITE_PASSO; render(); }
     else if (a.dataset.acao === 'metas-csv') baixar('pendentes-metas-' + new Date().toISOString().slice(0, 10) + '.csv', csvPendentes());
   });

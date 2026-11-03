@@ -546,10 +546,21 @@
   const magDoCargo = cg => R.magistradoDeCargo(cg);
   // Padrão ao abrir: quem entra como magistrado (titular ou substituta, cadastrado na Gestão) vê só os seus processos, com o botão do outro
   // desligado; os demais perfis, e magistrado sem cadastro de titular/substituta, abrem com os dois ligados. Nada é lembrado entre acessos.
-  const magPadrao = () => st.perfil === 'magistrado' && (st.magistrado === 'T' || st.magistrado === 'S') ? MAGISTRADOS.map(x => x[0]).filter(l => l !== st.magistrado) : [];
+  // Divisão por dia da semana (Gestão → Configuração): servidor e servidor eventual abrem a Fila, o Geral e a Eventual só com o(a)
+  // magistrado(a) do dia; as Metas não seguem. O dia é o da abertura da tela (magOff fica guardado até recarregar a página).
+  const DIAS_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+  const magDoDia = f => {
+    if (!f || f === st.fMetas || (st.perfil !== 'servidor' && st.perfil !== 'eventual')) return '';
+    const l = ((st.config || {}).magPorDia || {})[new Date().getDay()];
+    return l === 'T' || l === 'S' ? l : '';
+  };
+  const magPadrao = f => {
+    const so = st.perfil === 'magistrado' && (st.magistrado === 'T' || st.magistrado === 'S') ? st.magistrado : magDoDia(f);
+    return so ? MAGISTRADOS.map(x => x[0]).filter(l => l !== so) : [];
+  };
   // f: o estado de filtros da tela (st.vis[modo] ou st.fMetas); magOff guarda o que está desligado e começa no padrão do perfil.
-  const magOffDe = f => f.magOff || (f.magOff = magPadrao());
-  const noPadraoMag = f => { const off = magOffDe(f), pad = magPadrao(); return off.length === pad.length && off.every(l => pad.includes(l)); };
+  const magOffDe = f => f.magOff || (f.magOff = magPadrao(f));
+  const noPadraoMag = f => { const off = magOffDe(f), pad = magPadrao(f); return off.length === pad.length && off.every(l => pad.includes(l)); };
   // Sem informação de magistrado (letra vazia) só aparece com os dois botões ligados.
   const magPassa = (f, letra) => { const off = magOffDe(f); return !off.length || (!!letra && !off.includes(letra)); };
   const alternarMag = (f, letra) => { const off = magOffDe(f); f.magOff = off.includes(letra) ? off.filter(x => x !== letra) : [...off, letra]; };
@@ -559,7 +570,11 @@
   function faixaMagHTML(f, contar, pre, idRot) {
     const off = magOffDe(f);
     const botoes = MAGISTRADOS.map(([l, nome, cargo, cor]) => { const n = contar(l); return `<button type="button" class="prod-chip" aria-pressed="${!off.includes(l)}" data-acao="${pre}mag" data-v="${l}" style="--c:var(${cor})" data-balao="${esc(`${cargo}: ${n.toLocaleString('pt-BR')} ${n === 1 ? 'processo' : 'processos'} (letra ${l})`)}"><i></i>${esc(nome)}</button>`; }).join('');
-    return `<div class="prod-chips"><div class="prod-chips-bloco"><span class="prod-chips-rot" id="${idRot}">Magistrado(a)</span><div class="prod-chips-lista" role="group" aria-labelledby="${idRot}">${botoes}</div></div>${noPadraoMag(f) ? '' : `<button class="btn discreto" type="button" data-acao="${pre}mag-padrao">Restaurar padrão</button>`}</div>`;
+    // Aviso do dia: só enquanto a tela está no padrão do dia, para ninguém achar que os processos sumiram.
+    const dia = magDoDia(f), noPadrao = noPadraoMag(f);
+    const md = dia && MAGISTRADOS.find(x => x[0] === dia), outro = dia && MAGISTRADOS.find(x => x[0] !== dia);
+    const aviso = md && noPadrao ? `<p class="mag-dia small muted">Hoje (${DIAS_SEMANA[new Date().getDay()]}): processos ${dia === 'T' ? 'do' : 'da'} ${esc(md[2])}. Ligue ${esc(outro[1])} para ver todos.</p>` : '';
+    return `<div class="prod-chips"><div class="prod-chips-bloco"><span class="prod-chips-rot" id="${idRot}">Magistrado(a)</span><div class="prod-chips-lista" role="group" aria-labelledby="${idRot}">${botoes}</div>${aviso}</div>${noPadrao ? '' : `<button class="btn discreto" type="button" data-acao="${pre}mag-padrao">Restaurar padrão</button>`}</div>`;
   }
 
   function numeroHTML(n) {
@@ -1055,7 +1070,7 @@
     if (acao === 'mag' || acao === 'mag-padrao') {
       // botões Titular e Substituta: só mudam a tela (valem também em "Ver a fila como…")
       const fm = st.vis[modo], v = alvo.dataset.v;
-      if (acao === 'mag') alternarMag(fm, v); else fm.magOff = magPadrao();
+      if (acao === 'mag') alternarMag(fm, v); else fm.magOff = magPadrao(fm);
       fm.limite = LIMITE_NORMAL; render();
       const b = v && document.querySelector((modo === 'gestor' ? '#gestor-fila' : '#v-' + modo) + ` [data-acao="mag"][data-v="${v}"]`); if (b) b.focus();
       return;
