@@ -34,7 +34,7 @@
     filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
     ver: 0, cache: { ver: -1, m: {} },
     aba: 'fila', verComo: '', area: 'fila', menuAreas: false,
-    abaMetas: 'visao', abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null, fParados: { limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null },
+    abaMetas: 'visao', abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null },
     vis: {
       fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
       geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
@@ -146,7 +146,7 @@
       tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
       anotando: null, devolvendo: null, modal: null, importacao: null,
       area: 'fila', menuAreas: false, abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, metasImp: null,
-      abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, fParados: { limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null },
+      abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null },
     });
     // o padrão dos botões de magistrado depende de quem entra: quem entrar depois não herda o filtro do usuário anterior
     for (const k of Object.keys(st.vis)) st.vis[k].magOff = null;
@@ -198,7 +198,7 @@
     fila: { rotulo: 'Fila de Trabalho', titulo: 'Fila de Trabalho', subtitulo: 'Gestão de Processos · 2ª Vara Federal · ' + HOJE, pagina: 'Fila de Trabalho · Gestão de Processos' },
     metas: { rotulo: 'Metas CNJ', titulo: 'Metas CNJ', subtitulo: 'Metas Nacionais 2026 · 2ª Vara Federal', pagina: 'Metas CNJ · Gestão de Processos' },
     produtividade: { rotulo: 'Produtividade da Vara', titulo: 'Produtividade da Vara', subtitulo: 'Atividades da equipe · 2ª Vara Federal', pagina: 'Produtividade da Vara · Gestão de Processos' },
-    parados: { rotulo: 'Processos Parados', titulo: 'Processos Parados', subtitulo: 'Tarefas de Secretaria · 2ª Vara Federal', pagina: 'Processos Parados · Gestão de Processos' },
+    parados: { rotulo: 'Processos Parados', titulo: 'Processos Parados', subtitulo: 'Tempo na tarefa por setor · 2ª Vara Federal', pagina: 'Processos Parados · Gestão de Processos' },
     emails: { rotulo: 'E-mails', titulo: 'E-mails', subtitulo: 'Resumo diário dos e-mails da vara · 2ª Vara Federal', pagina: 'E-mails · Gestão de Processos' },
     ajuda: { rotulo: 'Ajuda', titulo: 'Ajuda', subtitulo: 'Guias passo a passo · 2ª Vara Federal', pagina: 'Ajuda · Gestão de Processos' },
   };

@@ -1,23 +1,24 @@
-/* Fila de Trabalho da Vara — área "Processos Parados" (só gestor, diretor e magistrado(a)): processos em tarefas de Secretaria
-   há mais dias que o limite. Os dados são os das filas gravadas no envio do PJe+R; a regra está em R.linhasSecretaria (regras.js). */
+/* Fila de Trabalho da Vara — área "Processos Parados" (só gestor, diretor e magistrado(a)): processos dos setores do painel
+   há mais dias que o limite. Os dados são os das filas gravadas no envio do PJe+R; a regra está em R.linhasPorSetor (regras.js). */
 (function () {
   'use strict';
   const P = window.PAINEL;
   if (!P || !P.render) return;
-  const { st, R, esc, toast, dataBR, dataHoraBR, ms, nomeDe, faixaMagHTML, magPassa, magOffDe, alternarMag, magPadrao, letraMagHTML, numeroHTML, MAGISTRADOS } = P;
+  const { st, R, esc, toast, dataBR, dataHoraBR, ms, nomeDe, faixaMagHTML, magPassa, magOffDe, alternarMag, magPadrao, letraMagHTML, numeroHTML, MAGISTRADOS, SETORES, NOME_SETOR } = P;
   const $ = sel => document.querySelector(sel);
   const render = () => P.render();
   const nBR = n => Number(n || 0).toLocaleString('pt-BR');
   const LIMITE_PADRAO = 120;
+  const CHAVES_SETOR = SETORES.map(s => s[0]);
   const podeVer = () => P.PERFIS_PARADOS.includes(st.perfil);
   const processos = ls => new Set(ls.map(l => R.soDigitos(l.n))).size;
   const acima = (l, limite) => l.dias != null && l.dias > limite;
 
-  // Mesma ordem e mesmos nomes da Fila de Trabalho; Dias na tarefa e Servidor responsável em seguida.
+  // Mesma ordem e mesmos nomes da Fila de Trabalho; Setor depois de Tarefa; Dias na tarefa e Servidor responsável em seguida.
   const COLUNAS = [
-    ['n', 'Número do processo'], ['c', 'Classe'], ['t', 'Tarefa'], ['ch', 'Data de chegada'], ['dias', 'Dias na tarefa', 'n'], ['resp', 'Servidor responsável'],
+    ['n', 'Número do processo'], ['c', 'Classe'], ['t', 'Tarefa'], ['s', 'Setor'], ['ch', 'Data de chegada'], ['dias', 'Dias na tarefa', 'n'], ['resp', 'Servidor responsável'],
   ];
-  const valorOrdem = (l, c) => (c === 'resp' ? nomeDe(l.resp) : l[c]);
+  const valorOrdem = (l, c) => (c === 'resp' ? nomeDe(l.resp) : c === 's' ? NOME_SETOR[l.s] : l[c]);
   function ordenar(ls, f) {
     const dir = f.dir;
     return [...ls].sort((a, b) => {
@@ -42,7 +43,7 @@
   function linhaHTML(l, limite) {
     return `<tr${acima(l, limite) ? '' : ' class="par-abaixo"'}>
       <td class="nowrap"><button type="button" class="num" data-acao="copiar" data-n="${esc(l.n)}" data-balao="Copiar número" aria-description="Copiar número">${numeroHTML(l.n)}${letraMagHTML(l.mag)}</button>${selos(l)}</td>
-      <td>${esc(l.c || '—')}</td><td>${esc(l.t || '—')}</td><td class="nowrap">${l.ch ? dataBR(l.ch) : '—'}</td>
+      <td>${esc(l.c || '—')}</td><td>${esc(l.t || '—')}</td><td>${esc(NOME_SETOR[l.s] || '—')}</td><td class="nowrap">${l.ch ? dataBR(l.ch) : '—'}</td>
       <td class="n par-dias">${l.dias == null ? '—' : nBR(l.dias)}</td><td>${esc(nomeDe(l.resp))}</td></tr>`;
   }
 
@@ -61,23 +62,43 @@
       </tbody></table></div></section>`;
   }
 
+  // Opções de um filtro: só as que têm linhas, com a quantidade. A opção já escolhida fica no menu mesmo com zero.
+  const opcaoHTML = (x, rot, n, atual) => `<option value="${esc(x)}"${x === atual ? ' selected' : ''}>${esc(rot)} (${nBR(n)})</option>`;
+  function contarPor(ls, campo) {
+    const c = new Map();
+    for (const l of ls) c.set(l[campo], (c.get(l[campo]) || 0) + 1);
+    return c;
+  }
+
   function tela() {
     const f = st.fParados;
-    const base = R.linhasSecretaria({ filas: st.filas, tarefas: st.mapaTarefas, marcas: st.marcas, urgencias: st.urgencias, prazos: P.prazosRetorno() });
+    const base = R.linhasPorSetor({ filas: st.filas, setores: CHAVES_SETOR, tarefas: st.mapaTarefas, marcas: st.marcas, urgencias: st.urgencias, prazos: P.prazosRetorno() });
     const nenhumMag = magOffDe(f).length >= MAGISTRADOS.length;
-    const todos = nenhumMag ? [] : base.filter(l => magPassa(f, l.mag));
+    // ign: o filtro que fica de fora, para contar as opções dele com os outros aplicados.
+    const passa = (l, ign) => (ign === 'mag' || (!nenhumMag && magPassa(f, l.mag)))
+      && (ign === 'setor' || !f.setor || l.s === f.setor)
+      && (ign === 'servidor' || !f.servidor || l.resp === f.servidor);
+    const naLista = l => f.todos || acima(l, f.limite);
+    const todos = base.filter(l => passa(l));
     const parados = todos.filter(l => acima(l, f.limite));
     const lista = ordenar(f.todos ? todos : parados, f);
     const nProc = processos(todos), nPar = processos(parados);
     const maior = todos.reduce((m, l) => Math.max(m, l.dias || 0), 0);
     const ultimaLista = st.filas.reduce((m, r) => Math.max(m, ms(r.importado_em) || 0), 0);
-    const faixa = faixaMagHTML(f, letra => processos(base.filter(l => l.mag === letra)), 'par-', 'rot-mag-parados');
+    const faixa = faixaMagHTML(f, letra => processos(base.filter(l => l.mag === letra && passa(l, 'mag'))), 'par-', 'rot-mag-parados');
+    const nSetor = contarPor(base.filter(l => passa(l, 'setor') && naLista(l)), 's');
+    const nServ = contarPor(base.filter(l => passa(l, 'servidor') && naLista(l)), 'resp');
+    const opSetores = SETORES.filter(([x]) => nSetor.get(x) || x === f.setor).map(([x, rot]) => opcaoHTML(x, rot, nSetor.get(x) || 0, f.setor)).join('');
+    const idsServ = new Set(nServ.keys()); if (f.servidor) idsServ.add(f.servidor);
+    const opServ = [...idsServ].sort((a, b) => nomeDe(a).localeCompare(nomeDe(b), 'pt-BR')).map(id => opcaoHTML(id, nomeDe(id), nServ.get(id) || 0, f.servidor)).join('');
+    const nomeSetor = NOME_SETOR[f.setor];
     const th = ([c, r, cls]) => `<th${cls ? ` class="${cls}"` : ''} aria-sort="${f.ordem === c ? (f.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" class="prod-th" data-acao="par-ordem" data-campo="${c}">${r}${f.ordem === c ? (f.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`;
+    const tituloLista = f.todos ? (nomeSetor ? `Todos os processos de ${nomeSetor}` : 'Todos os processos') : `Parados há mais de ${nBR(f.limite)} dias`;
     const corpo = nenhumMag ? '<div class="vazio"><p>Selecione ao menos um(a) magistrado(a).</p></div>'
-      : !lista.length ? `<div class="vazio"><p>${f.todos ? 'Nenhum processo em tarefas de Secretaria.' : `Nenhum processo há mais de ${nBR(f.limite)} dias nas tarefas de Secretaria.`}</p></div>`
-      : `${resumoTarefas(todos, f.limite)}<section class="painel largo"><h3>${f.todos ? 'Todos os processos em tarefas de Secretaria' : `Parados há mais de ${nBR(f.limite)} dias`}</h3><div class="tabela-wrap"><table class="par-tabela"><thead><tr>${COLUNAS.map(th).join('')}</tr></thead><tbody>${lista.map(l => linhaHTML(l, f.limite)).join('')}</tbody></table></div></section>`;
+      : !lista.length ? `<div class="vazio"><p>${f.todos ? 'Nenhum processo com esses filtros.' : `Nenhum processo com esses filtros há mais de ${nBR(f.limite)} dias.`}</p></div>`
+      : `${resumoTarefas(todos, f.limite)}<section class="painel largo"><h3>${esc(tituloLista)}</h3><div class="tabela-wrap"><table class="par-tabela"><thead><tr>${COLUNAS.map(th).join('')}</tr></thead><tbody>${lista.map(l => linhaHTML(l, f.limite)).join('')}</tbody></table></div></section>`;
     return `<div class="contagens par-contagens">
-        <div class="tile"><span>Processos em Secretaria</span><b>${nBR(nProc)}</b></div>
+        <div class="tile"><span>${esc(nomeSetor ? `Processos em ${nomeSetor}` : 'Processos')}</span><b>${nBR(nProc)}</b></div>
         <div class="tile"><span>Parados há mais de ${nBR(f.limite)} dias</span><b>${nBR(nPar)}</b></div>
         <div class="tile"><span>% parado</span><b>${nProc ? (nPar / nProc * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0,0'}%</b></div>
         <div class="tile"><span>Maior tempo (dias)</span><b>${nBR(maior)}</b></div>
@@ -85,6 +106,8 @@
       <p class="atualizacao">Lista do PJe: ${ultimaLista ? dataHoraBR(ultimaLista) : 'ainda não enviada'} · Dias contados desde a chegada na tarefa · Clique no número para copiar.</p>
       ${faixa}
       <div class="filtros par-filtros">
+        <select id="par-setor" aria-label="Filtrar por setor"><option value="">Todos os setores</option>${opSetores}</select>
+        <select id="par-servidor" aria-label="Filtrar por servidor"><option value="">Todos os servidores</option>${opServ}</select>
         <label class="campo"><span>Parado há mais de</span><input type="number" id="par-limite" min="0" step="1" value="${f.limite}"><span>dias</span></label>
         <button type="button" class="btn" data-acao="par-todos" aria-pressed="${f.todos}">${f.todos ? 'Mostrar só os parados' : 'Mostrar todos'}</button>
         ${f.limite !== LIMITE_PADRAO ? `<button type="button" class="btn discreto" data-acao="par-limite-padrao">Voltar a ${LIMITE_PADRAO} dias</button>` : ''}
@@ -125,10 +148,14 @@
     }
   });
   v.addEventListener('change', e => {
-    if (e.target.id !== 'par-limite') return;
-    const n = Math.floor(Number(e.target.value));
-    st.fParados.limite = e.target.value !== '' && Number.isFinite(n) && n >= 0 ? n : LIMITE_PADRAO;
+    const f = st.fParados, id = e.target.id;
+    if (id === 'par-setor') f.setor = e.target.value;
+    else if (id === 'par-servidor') f.servidor = e.target.value;
+    else if (id === 'par-limite') {
+      const n = Math.floor(Number(e.target.value));
+      f.limite = e.target.value !== '' && Number.isFinite(n) && n >= 0 ? n : LIMITE_PADRAO;
+    } else return;
     render();
-    const b = $('#par-limite'); if (b) b.focus();
+    const b = document.getElementById(id); if (b) b.focus();
   });
 })();
