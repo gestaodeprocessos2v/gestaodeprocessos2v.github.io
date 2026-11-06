@@ -362,7 +362,7 @@
   function painelResumo() {
     const resumo = st.resumo || {};
     const conta = (lista, p) => st.filas.filter(r => r.lista === lista && r.pessoa === p).reduce((s, r) => s + (r.itens || []).length, 0);
-    const lista = [...pessoas(), { id: GESTOR_ID, nome: 'Gestor', tipo: 'gestor' }];
+    const lista = [...pessoas(), { id: GESTOR_ID, nome: nomeDe(GESTOR_ID), tipo: 'gestor' }];
     const linhas = lista.map(p => `<tr><td>${esc(p.nome)}${p.tipo && p.tipo !== 'servidor' ? ` <span class="muted small">(${esc((ROTULO_TIPO[p.tipo] || (p.tipo === 'gestor' ? 'fila própria, por etiqueta' : p.tipo)).toLowerCase())})</span>` : ''}${(resumo.fixos || {})[p.id] ? ' <span class="muted small">(lista própria)</span>' : ''}</td>
       <td class="n">${conta('semanal', p.id)}</td>
       <td class="n">${P.filaDe(p.id).filter(l => l.tipo === 'urgente' && !l.concluido).length}</td>
@@ -723,7 +723,9 @@
         <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-etdir">Adicionar etiqueta</button></div>
       </div>
       <div class="cfg-sub" data-sub="gestor">
-        <h3>Fila do gestor (por etiqueta)</h3>
+        <h3>Gestor: nome e fila (por etiqueta)</h3>
+        <p class="small muted">O nome aparece no painel como “Gestor (nome)”, por exemplo no menu “Enviar para” e em “Enviado por”. Em branco, aparece só “Gestor”.</p>
+        <div class="linha-botoes"><label class="campo"><span>Nome do Gestor</span><input type="text" id="cfg-nome-gestor" maxlength="60" value="${esc(c.nomeGestor || '')}"></label></div>
         <p class="small muted">A fila do gestor, no topo desta aba, mostra os processos com esta etiqueta e os que servidores e o diretor enviarem para o gestor. Para mais de uma etiqueta, separe com | (ex.: Alberto - Acompanhar|# Secretaria - Cadastrar condenação de improbidade). Deixe em branco para usar só os envios.</p>
         <div class="regra so-etiqueta"><input type="text" id="cfg-etg" value="${esc(c.etiquetaGestor == null ? R.ETIQUETA_GESTOR_PADRAO : c.etiquetaGestor)}" aria-label="Etiqueta da fila do gestor" placeholder="${esc(R.ETIQUETA_GESTOR_PADRAO)}"></div>
       </div>
@@ -790,6 +792,7 @@
     });
     (c.etiquetasDiretor || []).forEach((x, i) => { const e = val(`cfg-ed-${i}`); if (e != null) x.e = e.trim(); const u = document.getElementById(`cfg-edu-${i}`); if (u) x.u = u.checked; });
     const etg = val('cfg-etg'); if (etg != null) c.etiquetaGestor = etg.trim();
+    const ng = val('cfg-nome-gestor'); if (ng != null) c.nomeGestor = ng.trim();
     const ru = val('cfg-ret-urg'); if (ru != null) c.retornoUrgente = ru.trim() === '' ? null : Number(ru);
     const rd = val('cfg-ret-dem'); if (rd != null) c.retornoDemais = rd.trim() === '' ? null : Number(rd);
     // Magistrado(a) por dia: { 1..5: 'T' | 'S' } (dia de Date.getDay); "Os dois" não é gravado.

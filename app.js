@@ -65,7 +65,9 @@
   }
 
   const pessoas = () => (st.config && st.config.pessoas) || [];
-  const nomes = () => Object.assign({ [GESTOR_ID]: 'Gestor' }, Object.fromEntries(pessoas().map(p => [p.id, p.nome])));
+  // Nome do Gestor: vem da configuração (o repositório é público e não guarda nomes). Em branco, fica só "Gestor".
+  const rotuloGestor = () => { const n = String((st.config && st.config.nomeGestor) || '').trim(); return n ? `Gestor (${n})` : 'Gestor'; };
+  const nomes = () => Object.assign({ [GESTOR_ID]: rotuloGestor() }, Object.fromEntries(pessoas().map(p => [p.id, p.nome])));
   const nomeDe = id => nomes()[id] || id || '—';
   const tipoDe = id => id === GESTOR_ID ? 'gestor' : (pessoas().find(p => p.id === id) || {}).tipo;
   // Diretor e gestor têm fila própria, escolhida só por etiquetas, em paralelo com a dos servidores.
@@ -84,7 +86,7 @@
   function opcoesPessoas(sel, vazio, excluir, inc) {
     inc = inc || {};
     let h = vazio != null ? `<option value="">${esc(vazio)}</option>` : '';
-    if (inc.gestor && excluir !== GESTOR_ID) h += `<option value="${GESTOR_ID}"${sel === GESTOR_ID ? ' selected' : ''}>Gestor</option>`;
+    if (inc.gestor && excluir !== GESTOR_ID) h += `<option value="${GESTOR_ID}"${sel === GESTOR_ID ? ' selected' : ''}>${esc(rotuloGestor())}</option>`;
     for (const [tipo, plural] of TIPOS) {
       if (tipo === 'diretor' && !inc.diretor) continue;
       const ps = pessoas().filter(p => (p.tipo || 'servidor') === tipo && p.id !== excluir);
@@ -843,7 +845,7 @@
     const form = st.duAberta ? `<form class="campos" data-form="urgencia-diretor">
         <p class="small muted">A urgência vai para o topo da fila do responsável e fica lá até ele marcar como concluída.</p>
         <label class="campo"><span>Número do processo</span><input type="text" id="du-numero" class="mono" inputmode="numeric" placeholder="0000000-00.0000.0.00.0000" value="${esc(u.numero)}" required></label>
-        <label class="campo"><span>Setor</span><select id="du-setor">${SETORES.map(([id, n]) => `<option value="${id}"${id === setor ? ' selected' : ''}>${n}</option>`).join('')}<option value="${GESTOR_ID}"${paraGestor ? ' selected' : ''}>Gestor</option></select></label>
+        <label class="campo"><span>Setor</span><select id="du-setor">${SETORES.map(([id, n]) => `<option value="${id}"${id === setor ? ' selected' : ''}>${n}</option>`).join('')}<option value="${GESTOR_ID}"${paraGestor ? ' selected' : ''}>${esc(rotuloGestor())}</option></select></label>
         ${paraGestor ? '' : `<label class="campo"><span>Responsável</span><select id="du-resp" required>${respOpc}</select></label>`}
         <label class="campo"><span>Motivo</span><input type="text" id="du-motivo" maxlength="300" placeholder="Ex.: pedido do juiz, assunto da sua área" value="${esc(u.motivo)}"></label>
         <div class="linha-botoes"><button class="btn primario" type="submit">Incluir urgência</button><button class="btn" type="button" data-acao="du-abrir">Fechar</button></div>
