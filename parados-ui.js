@@ -62,12 +62,17 @@
       </tbody></table></div></section>`;
   }
 
-  // Opções de um filtro: só as que têm linhas, com a quantidade. A opção já escolhida fica no menu mesmo com zero.
+  // Opções de um filtro: só as que têm processos, com a quantidade. A opção já escolhida fica no menu mesmo com zero.
   const opcaoHTML = (x, rot, n, atual) => `<option value="${esc(x)}"${x === atual ? ' selected' : ''}>${esc(rot)} (${nBR(n)})</option>`;
   function contarPor(ls, campo) {
-    const c = new Map();
-    for (const l of ls) c.set(l[campo], (c.get(l[campo]) || 0) + 1);
-    return c;
+    const grupos = new Map();
+    for (const l of ls) (grupos.get(l[campo]) || grupos.set(l[campo], new Set()).get(l[campo])).add(R.soDigitos(l.n));
+    return new Map([...grupos].map(([k, nums]) => [k, nums.size]));
+  }
+  // Processos da lista; se algum estiver em duas tarefas, avisa as linhas, para a tabela não parecer maior que o total.
+  function totalLista(ls) {
+    const n = processos(ls), txt = `${nBR(n)} ${n === 1 ? 'processo' : 'processos'}`;
+    return n === ls.length ? txt : `${txt} em ${nBR(ls.length)} linhas`;
   }
 
   function tela() {
@@ -111,7 +116,7 @@
         <label class="campo"><span>Parado há mais de</span><input type="number" id="par-limite" min="0" step="1" value="${f.limite}"><span>dias</span></label>
         <button type="button" class="btn" data-acao="par-todos" aria-pressed="${f.todos}">${f.todos ? 'Mostrar só os parados' : 'Mostrar todos'}</button>
         ${f.limite !== LIMITE_PADRAO ? `<button type="button" class="btn discreto" data-acao="par-limite-padrao">Voltar a ${LIMITE_PADRAO} dias</button>` : ''}
-        <span class="direita"><span class="small muted mono">${nBR(lista.length)} ${lista.length === 1 ? 'linha' : 'linhas'}</span></span>
+        <span class="direita"><span class="small muted mono">${totalLista(lista)}</span></span>
       </div>
       ${corpo}`;
   }
