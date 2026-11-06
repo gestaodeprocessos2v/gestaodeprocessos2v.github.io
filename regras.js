@@ -640,6 +640,38 @@
     return linhas;
   }
 
+  // Processos Parados (magistrado, gestor e diretor): cada entrada de tarefa do setor Secretaria, a partir das filas gravadas.
+  // Mesmo processo em duas tarefas de Secretaria dá duas linhas; na mesma tarefa, em duas filas (lista fixa de estagiário), uma só.
+  // Situação: a do painel do servidor (tipoItem, urgência incluída à mão ainda aberta e conclusão dentro do prazo).
+  function linhasSecretaria(entrada) {
+    const e = entrada || {};
+    const mapa = mapaTarefas(e.tarefas), agora = e.agora == null ? Date.now() : e.agora;
+    const urgentes = new Set((e.urgencias || []).filter(u => u.via !== 'lista' && !u.concluidaEm).map(u => soDigitos(u.numero)));
+    const porEntrada = new Map();
+    for (const r of e.filas || []) {
+      for (const it of (r && r.itens) || []) {
+        if (it.fora || it.s !== 'secretaria') continue;
+        const k = chaveItem(it) + '|' + normTexto(it.t);
+        const tipoBase = tipoItem(it, mapa);
+        const m = ((e.marcas || {})[r.pessoa] || {})[chaveItem(it)];
+        const concluido = !!m && !m.desfeito && !marcaVencida(m, tipoBase, e.prazos, agora);
+        const ja = porEntrada.get(k);
+        if (ja) {
+          if (concluido) ja.concluido = true;
+          if (it.resp && r.pessoa === it.resp) ja.resp = it.resp;
+          continue;
+        }
+        porEntrada.set(k, {
+          n: it.n, c: it.c, t: it.t, ch: it.ch == null ? null : it.ch, cg: it.cg, sg: !!it.sg, mag: magistradoDeCargo(it.cg),
+          resp: it.resp || r.pessoa, concluido,
+          dias: it.ch == null ? null : Math.max(0, Math.floor((agora - it.ch) / 86400000)),
+          tipo: tipoBase === 'urgente' || urgentes.has(soDigitos(it.n)) ? 'urgente' : tipoBase,
+        });
+      }
+    }
+    return [...porEntrada.values()];
+  }
+
   function paraCsv(linhas, nomes, comResp) {
     const cols = [
       ['Número do Processo', l => l.n],
@@ -683,7 +715,7 @@
 
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, regrasDoSetor, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
-    atribuir, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, marcaVencida, montarFila, comparar, chaveItem,
+    atribuir, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasSecretaria, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

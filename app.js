@@ -34,7 +34,7 @@
     filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
     ver: 0, cache: { ver: -1, m: {} },
     aba: 'fila', verComo: '', area: 'fila', menuAreas: false,
-    abaMetas: 'visao', abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null,
+    abaMetas: 'visao', abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null, fParados: { limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null },
     vis: {
       fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
       geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
@@ -146,7 +146,7 @@
       tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
       anotando: null, devolvendo: null, modal: null, importacao: null,
       area: 'fila', menuAreas: false, abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, metasImp: null,
-      abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null,
+      abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, fParados: { limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null },
     });
     // o padrão dos botões de magistrado depende de quem entra: quem entrar depois não herda o filtro do usuário anterior
     for (const k of Object.keys(st.vis)) st.vis[k].magOff = null;
@@ -198,6 +198,7 @@
     fila: { rotulo: 'Fila de Trabalho', titulo: 'Fila de Trabalho', subtitulo: 'Gestão de Processos · 2ª Vara Federal · ' + HOJE, pagina: 'Fila de Trabalho · Gestão de Processos' },
     metas: { rotulo: 'Metas CNJ', titulo: 'Metas CNJ', subtitulo: 'Metas Nacionais 2026 · 2ª Vara Federal', pagina: 'Metas CNJ · Gestão de Processos' },
     produtividade: { rotulo: 'Produtividade da Vara', titulo: 'Produtividade da Vara', subtitulo: 'Atividades da equipe · 2ª Vara Federal', pagina: 'Produtividade da Vara · Gestão de Processos' },
+    parados: { rotulo: 'Processos Parados', titulo: 'Processos Parados', subtitulo: 'Tarefas de Secretaria · 2ª Vara Federal', pagina: 'Processos Parados · Gestão de Processos' },
     emails: { rotulo: 'E-mails', titulo: 'E-mails', subtitulo: 'Resumo diário dos e-mails da vara · 2ª Vara Federal', pagina: 'E-mails · Gestão de Processos' },
     ajuda: { rotulo: 'Ajuda', titulo: 'Ajuda', subtitulo: 'Guias passo a passo · 2ª Vara Federal', pagina: 'Ajuda · Gestão de Processos' },
   };
@@ -206,16 +207,19 @@
   const PERFIS_PRODUTIVIDADE = ['gestor', 'diretor', 'magistrado'];
   // E-mails (resumo diário da rotina): gestor, diretor e magistrado(a). O banco decide o que cada um vê (RLS).
   const PERFIS_EMAILS = ['gestor', 'diretor', 'magistrado'];
+  // Processos Parados (tarefas de Secretaria): gestor, diretor e magistrado(a). Os dados são os das filas; a restrição é de menu e de tela.
+  const PERFIS_PARADOS = ['gestor', 'diretor', 'magistrado'];
   function areasDisponiveis() {
     const a = ['fila'];
     if (PERFIS_METAS.includes(st.perfil)) a.push('metas');
     if (PERFIS_PRODUTIVIDADE.includes(st.perfil)) a.push('produtividade');
+    if (PERFIS_PARADOS.includes(st.perfil)) a.push('parados');
     if (PERFIS_EMAILS.includes(st.perfil)) a.push('emails');
     a.push('ajuda'); // Ajuda (guias passo a passo): todos os perfis
     return a;
   }
   // Abas de cada área que não é a Fila (a Fila usa abasDisponiveis(), que depende do perfil).
-  const ABAS_AREA = { metas: ['visao', 'pendentes'], produtividade: ['resumo', 'pessoas'], get emails() { return window.PAINEL.abasEmails ? window.PAINEL.abasEmails() : ['emsub']; }, ajuda: [] };
+  const ABAS_AREA = { metas: ['visao', 'pendentes'], produtividade: ['resumo', 'pessoas'], get emails() { return window.PAINEL.abasEmails ? window.PAINEL.abasEmails() : ['emsub']; }, parados: [], ajuda: [] };
   function irParaArea(area) {
     st.menuAreas = false;
     if (!areasDisponiveis().includes(area)) area = 'fila';
@@ -411,19 +415,21 @@
     renderTopo();
     renderAvisos();
     const ok = st.estado === 'ok';
-    const emMetas = ok && st.area === 'metas', emProd = ok && st.area === 'produtividade', emEml = ok && st.area === 'emails', emAju = ok && st.area === 'ajuda';
+    const emMetas = ok && st.area === 'metas', emProd = ok && st.area === 'produtividade', emPar = ok && st.area === 'parados', emEml = ok && st.area === 'emails', emAju = ok && st.area === 'ajuda';
     $('#v-estado').hidden = ok;
-    for (const a of ['fila', 'geral', 'gestao', 'eventual']) $('#v-' + a).hidden = !ok || emMetas || emProd || emEml || emAju || st.aba !== a;
+    for (const a of ['fila', 'geral', 'gestao', 'eventual']) $('#v-' + a).hidden = !ok || emMetas || emProd || emPar || emEml || emAju || st.aba !== a;
     $('#v-metas').hidden = !emMetas;
     $('#v-prod').hidden = !emProd;
+    $('#v-parados').hidden = !emPar;
     $('#v-emails').hidden = !emEml;
     $('#v-ajuda').hidden = !emAju;
     if (!ok) {
-      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod', 'emails', 'ajuda']) $('#v-' + a).innerHTML = '';
+      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod', 'parados', 'emails', 'ajuda']) $('#v-' + a).innerHTML = '';
       renderEstado(); renderModal(); return;
     }
     $('#v-estado').innerHTML = '';
     if (!emAju) $('#v-ajuda').innerHTML = '';
+    if (!emPar) $('#v-parados').innerHTML = '';
     if (emMetas) {
       for (const a of ['fila', 'geral', 'gestao', 'eventual', 'prod', 'emails']) $('#v-' + a).innerHTML = '';
       renderMetas(); renderModal(); return;
@@ -431,6 +437,11 @@
     if (emProd) {
       for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'emails']) $('#v-' + a).innerHTML = '';
       renderProd(); renderModal(); return;
+    }
+    if (emPar) {
+      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod', 'emails']) $('#v-' + a).innerHTML = '';
+      if (window.PAINEL.renderParados) window.PAINEL.renderParados();
+      renderModal(); return;
     }
     if (emEml) {
       for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod']) $('#v-' + a).innerHTML = '';
@@ -554,7 +565,7 @@
   const DIAS_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
   const magDoDia = f => {
     const tipo = tipoAtivo();
-    if (!f || f === st.fMetas || f === st.vis.gestor || (tipo !== 'servidor' && tipo !== 'eventual')) return '';
+    if (!f || f === st.fMetas || f === st.fParados || f === st.vis.gestor || (tipo !== 'servidor' && tipo !== 'eventual')) return '';
     const l = ((st.config || {}).magPorDia || {})[new Date().getDay()];
     return l === 'T' || l === 'S' ? l : '';
   };
@@ -1278,7 +1289,7 @@
     st.sb.auth.onAuthStateChange((evento) => {
       if (evento === 'SIGNED_OUT' && st.estado === 'ok') setTimeout(() => { reiniciarEstado(); st.estado = 'login'; render(); }, 0);
     });
-    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, atualizar, baixar, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS, PERFIS_PRODUTIVIDADE, PERFIS_EMAILS, MAGISTRADOS, magDoCargo, magPadrao, magOffDe, noPadraoMag, magPassa, alternarMag, letraMagHTML, faixaMagHTML });
+    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, atualizar, baixar, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS, PERFIS_PRODUTIVIDADE, PERFIS_EMAILS, PERFIS_PARADOS, prazosRetorno, numeroHTML, MAGISTRADOS, magDoCargo, magPadrao, magOffDe, noPadraoMag, magPassa, alternarMag, letraMagHTML, faixaMagHTML });
     iniciarSessao();
   }
   iniciar();
