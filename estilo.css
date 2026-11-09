@@ -196,6 +196,10 @@ ol.linhas { list-style: none; margin: 0; padding: 0; }
 .anot-acao:hover { color: var(--ink); background: var(--sunken); }
 .anot-confirma { color: var(--muted); font-size: 11.5px; }
 .anot-confirma .btn { padding-block: 0; }
+/* Balão na caixa em volta do campo de anotação: só com o campo vazio, para não cobrir as anotações enquanto se escreve. */
+.anot-campo[data-balao] { display: block; width: 100%; cursor: auto; }
+.anot-campo textarea { display: block; }
+.anot-campo[data-balao]:has(textarea:not(:placeholder-shown))::after { opacity: 0; visibility: hidden; }
 .selo.paralelo { background: var(--sunken); color: var(--dev); border: 1px dashed var(--dev); cursor: help; }
 /* Concluído que voltou pelo prazo (continua na tarefa). As variáveis já mudam com o tema claro/escuro. */
 .selo.retornou { background: var(--sunken); color: var(--pri); border: 1px dashed var(--pri); cursor: help; }

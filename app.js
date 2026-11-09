@@ -647,8 +647,10 @@
   const ICONE_EDITAR = '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 2.5l2.5 2.5L5.5 13H3v-2.5z"/></svg>';
   const ICONE_APAGAR = '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5"/></svg>';
   const souAutor = a => (!!a.autorEmail && a.autorEmail === String(st.email || '').toLowerCase()) || (!!a.autorPessoa && a.autorPessoa === st.pessoa);
+  const BALAO_ANOTAR = 'Esta anotação fica neste painel e não acompanha o processo se ele mudar de fila. Se quiser incluir uma informação que acompanhe o processo para os outros servidores, crie um lembrete no PJe.';
+  // O navegador não desenha o balão dentro de textarea: ele fica na caixa em volta (e some quando há texto; ver .anot-campo em estilo.css).
   const formAnotacaoHTML = () => `<form class="anotar-form" data-form="anotar">
-      <textarea id="nota-texto" maxlength="2000" rows="3" aria-label="Anotação sobre o processo" placeholder="Ex.: aguardando resposta do INSS ao ofício">${esc(st.notaRascunho)}</textarea>
+      <div class="anot-campo" data-balao="${esc(BALAO_ANOTAR)}"><textarea id="nota-texto" maxlength="2000" rows="3" aria-label="Anotação sobre o processo" aria-description="${esc(BALAO_ANOTAR)}" placeholder="Ex.: aguardando resposta do INSS ao ofício">${esc(st.notaRascunho)}</textarea></div>
       <div class="linha-botoes"><button class="btn primario" type="submit">Salvar</button><button class="btn" type="button" data-acao="cancelar-nota">Cancelar</button></div>
     </form>`;
 
@@ -681,7 +683,7 @@
     }
     let novo = '';
     if (ed && ed.id == null) novo = formAnotacaoHTML();
-    else if (dis || !leitura) novo = `<button class="btn discreto" type="button" data-acao="anotar"${dis}>+ Anotar</button>`;
+    else if (dis || !leitura) novo = `<button class="btn discreto" type="button" data-acao="anotar"${dis || ` data-balao="${esc(BALAO_ANOTAR)}" aria-description="${esc(BALAO_ANOTAR)}"`}>+ Anotar</button>`;
     return (blocos + prioridade + novo) || '<span class="muted">—</span>';
   }
 
