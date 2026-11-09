@@ -336,14 +336,29 @@
     return out;
   }
 
+  // A exceção vale para este processo? Confere "Vale para" (setor), "Só nas tarefas" (nome inteiro; vazio = todas) e a classe ou etiqueta.
+  function casaExcecao(r, item, setor) {
+    if (r.setores && r.setores.length && !r.setores.includes(setor)) return false;
+    if (r.tarefas && !String(r.tarefas).split('|').map(normTexto).filter(Boolean).includes(normTexto(item && item.t))) return false;
+    return r.campo === 'etiqueta' ? temEtiqueta(item && item.e, r.padrao) : casaPadrao(item && item.c, r.padrao);
+  }
+
+  // Exceção com destino "setor": o processo muda de setor e segue a divisão do novo setor. Mantém "a primeira que casar decide":
+  // se antes dela casar uma exceção de pessoa, o processo fica no setor e vai para essa pessoa.
+  function setorPorExcecao(item, setor, config) {
+    for (const r of (config && config.regrasClasse) || []) {
+      if (!r || !r.padrao || !(r.responsavel || r.setorDestino)) continue;
+      if (casaExcecao(r, item, setor)) return r.responsavel ? null : r.setorDestino;
+    }
+    return null;
+  }
+
   // Regras de exceção (classe ou etiqueta), na ordem da configuração, antes da divisão do setor.
   function atribuir(item, setor, config) {
     const cfg = config || {};
     for (const r of cfg.regrasClasse || []) {
       if (!r || !r.padrao || !r.responsavel) continue;
-      if (r.setores && r.setores.length && !r.setores.includes(setor)) continue;
-      const ok = r.campo === 'etiqueta' ? temEtiqueta(item && item.e, r.padrao) : casaPadrao(item && item.c, r.padrao);
-      if (ok) return { pessoa: r.responsavel, motivo: (r.campo === 'etiqueta' ? 'etiqueta' : 'classe') + ': ' + r.padrao };
+      if (casaExcecao(r, item, setor)) return { pessoa: r.responsavel, motivo: (r.campo === 'etiqueta' ? 'etiqueta' : 'classe') + ': ' + r.padrao };
     }
     const s = (cfg.setores || {})[setor];
     if (!s) return { pessoa: null, motivo: 'setor sem regra' };
@@ -375,7 +390,7 @@
   function excecaoSemSetor(item, config) {
     for (const r of (config && config.regrasClasse) || []) {
       if (!r || r.campo !== 'etiqueta' || !r.padrao || !r.responsavel || (r.setores && r.setores.length)) continue;
-      if (temEtiqueta(item && item.e, r.padrao)) return { pessoa: r.responsavel, motivo: 'etiqueta: ' + r.padrao };
+      if (casaExcecao(r, item, null)) return { pessoa: r.responsavel, motivo: 'etiqueta: ' + r.padrao };
     }
     return null;
   }
@@ -419,7 +434,7 @@
         s = SETOR_SEM_PAINEL; r = ex;
       } else {
         if (linha.etiqueta && !temEtiqueta(it.e, linha.etiqueta)) { ignorados.semEtiqueta++; guardarOutro(it); continue; }
-        s = linha.painel;
+        s = setorPorExcecao(it, linha.painel, config) || linha.painel;
         r = atribuir(it, s, config);
       }
       const item = { n: it.n, s };
@@ -775,7 +790,7 @@
 
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, regrasDoSetor, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
-    atribuir, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, estadoAnotacoes, conclusaoReaberta, marcasVigentes, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, comparar, chaveItem,
+    atribuir, setorPorExcecao, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, estadoAnotacoes, conclusaoReaberta, marcasVigentes, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

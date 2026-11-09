@@ -670,9 +670,10 @@
     const regrasH = (c.regrasClasse || []).map((r, i) => `<div class="regra">
       <select id="cfg-r-campo-${i}" aria-label="Verificar"><option value="classe"${r.campo !== 'etiqueta' ? ' selected' : ''}>Classe</option><option value="etiqueta"${r.campo === 'etiqueta' ? ' selected' : ''}>Etiqueta</option></select>
       <input type="text" id="cfg-r-padrao-${i}" value="${esc(r.padrao)}" aria-label="Siglas ou etiquetas" placeholder="Siglas ou nomes, separados por |">
-      ${sel(`cfg-r-resp-${i}`, r.responsavel || '', 'Responsável')}
+      <select id="cfg-r-resp-${i}" aria-label="Destino">${opcoesPessoasDe(c.pessoas, r.setorDestino ? '' : r.responsavel || '', 'Destino')}<optgroup label="Mudar para o setor (segue a divisão dele)">${SETORES.map(([id, n]) => `<option value="setor:${id}"${r.setorDestino === id ? ' selected' : ''}>Setor: ${n}</option>`).join('')}</optgroup></select>
       <select id="cfg-r-setor-${i}" aria-label="Vale para"><option value="">Todos os setores</option>${SETORES.map(([id, n]) => `<option value="${id}"${(r.setores || [])[0] === id ? ' selected' : ''}>Só ${n}</option>`).join('')}</select>
-      <button class="btn" type="button" data-acao="cfg-remover-regra" data-i="${i}">Remover</button></div>`).join('');
+      <button class="btn" type="button" data-acao="cfg-remover-regra" data-i="${i}">Remover</button>
+      <input type="text" class="regra-tarefas" id="cfg-r-tarefas-${i}" value="${esc(r.tarefas || '')}" aria-label="Só nas tarefas" placeholder="Só nas tarefas (opcional): nomes como no PJe, separados por |"></div>`).join('');
     const visoesH = (c.visoes || []).map((v, i) => `<div class="regra">
       <select id="cfg-v-tipo-${i}" aria-label="Filtrar por"><option value="setor"${v.tipo === 'setor' ? ' selected' : ''}>Setor</option><option value="classe"${v.tipo === 'classe' ? ' selected' : ''}>Só as classes</option><option value="semclasse"${v.tipo === 'semclasse' ? ' selected' : ''}>Todas menos as classes</option></select>
       ${v.tipo === 'setor'
@@ -749,7 +750,7 @@
       </div>
       <div class="cfg-sub" data-sub="excecoes">
         <h3>Exceções por classe ou etiqueta <span class="muted mono">${(c.regrasClasse || []).length}</span></h3>
-        <p class="small muted">Valem antes da divisão do setor, na ordem da lista (a primeira que casar decide). Classe: use a sigla do PJe+R (ex.: ACPCiv|ACIA); etiqueta: o texto completo (ex.: $ Ação civil pública).</p>
+        <p class="small muted">Valem antes da divisão do setor, na ordem da lista (a primeira que casar decide). Classe: use a sigla do PJe+R (ex.: ACPCiv|ACIA); etiqueta: o texto completo (ex.: $ Ação civil pública). O destino pode ser uma pessoa ou um setor; no setor, o processo segue a divisão daquele setor. “Só nas tarefas” é opcional: em branco, a exceção vale para todas as tarefas. Depois de mudar uma exceção, envie a lista do PJe+R de novo para ela passar a valer.</p>
         ${regrasH}
         <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-regra">Adicionar exceção</button></div>
       </div>
@@ -790,8 +791,10 @@
     (c.regrasClasse || []).forEach((r, i) => {
       const campo = val(`cfg-r-campo-${i}`); if (campo) r.campo = campo;
       const pad = val(`cfg-r-padrao-${i}`); if (pad != null) r.padrao = pad.trim();
-      const resp = val(`cfg-r-resp-${i}`); if (resp != null) r.responsavel = resp;
+      const resp = val(`cfg-r-resp-${i}`);
+      if (resp != null) { const destino = resp.startsWith('setor:') ? resp.slice(6) : ''; r.setorDestino = destino; r.responsavel = destino ? '' : resp; }
       const s = val(`cfg-r-setor-${i}`); if (s != null) r.setores = s ? [s] : [];
+      const tarefas = val(`cfg-r-tarefas-${i}`); if (tarefas != null) r.tarefas = tarefas.trim();
     });
     (c.etiquetasDiretor || []).forEach((x, i) => { const e = val(`cfg-ed-${i}`); if (e != null) x.e = e.trim(); const u = document.getElementById(`cfg-edu-${i}`); if (u) x.u = u.checked; });
     const etg = val('cfg-etg'); if (etg != null) c.etiquetaGestor = etg.trim();
@@ -826,7 +829,7 @@
   // Salva a configuração e sincroniza os e-mails (tabela `acesso`): quem sai da lista perde o acesso.
   async function salvarConfiguracao() {
     const c = st.rascunho, outros = st.rascOutros || [];
-    c.regrasClasse = (c.regrasClasse || []).filter(r => r.padrao && r.responsavel);
+    c.regrasClasse = (c.regrasClasse || []).filter(r => r.padrao && (r.responsavel || r.setorDestino));
     c.visoes = (c.visoes || []).filter(v => v.pessoa && v.nome && v.valor);
     const vistosEt = new Set();   // a mesma etiqueta pode valer em mais de um setor; repetida no mesmo setor sai
     c.etiquetasFiltro = (c.etiquetasFiltro || []).filter(x => { const k = R.normTexto(x.e) + '|' + x.s; if (!x.e || vistosEt.has(k)) return false; vistosEt.add(k); return true; }).map(x => ({ e: x.e, s: x.s }));
@@ -926,7 +929,7 @@
       else if (acao === 'cfg-remover-pessoa') { c.pessoas.splice(Number(alvo.dataset.i), 1); render(); }
       else if (acao === 'cfg-add-outro') { st.rascOutros = (st.rascOutros || []).concat({ nome: '', email: '', perfil: 'magistrado' }); render(); }
       else if (acao === 'cfg-remover-outro') { st.rascOutros.splice(Number(alvo.dataset.i), 1); render(); }
-      else if (acao === 'cfg-add-regra') { c.regrasClasse = (c.regrasClasse || []).concat({ campo: 'classe', padrao: '', responsavel: '', setores: [] }); render(); }
+      else if (acao === 'cfg-add-regra') { c.regrasClasse = (c.regrasClasse || []).concat({ campo: 'classe', padrao: '', responsavel: '', setorDestino: '', setores: [], tarefas: '' }); render(); }
       else if (acao === 'cfg-add-visao') { c.visoes = (c.visoes || []).concat({ pessoa: '', nome: '', tipo: 'setor', valor: 'triagem' }); render(); }
       else if (acao === 'cfg-add-etdir') { c.etiquetasDiretor = (c.etiquetasDiretor || []).concat({ e: '', u: false }); render(); }
       else if (acao === 'cfg-remover-etdir') { c.etiquetasDiretor.splice(Number(alvo.dataset.i), 1); render(); }
