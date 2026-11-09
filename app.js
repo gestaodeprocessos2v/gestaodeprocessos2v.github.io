@@ -366,12 +366,13 @@
     for (const l of fila) {
       const num = R.soDigitos(l.n), lista = anotP[num];
       if (lista && lista.length) {
-        const e = estadoDe(num);
+        const e = R.estadoAnotacoes(p, lista, dispP[num], l.ch);
         l.anotacoes = lista;
         l.anot = R.textoAnotacoes(lista, dataHoraBR);   // texto corrido, para a busca e o CSV
         if (e.sobe) l.anotEm = e.dataOrdem;
-        l.anotTerceiros = e.terceiros;
-        l.anotDispensada = dispP[num] != null && !e.terceiros && lista.some(a => a.autorPessoa !== p);
+        // O botão só aparece quando tem efeito: anotação de terceiro fazendo subir, ou segurando na fila processo que saiu da lista.
+        l.anotTerceiros = e.terceiros || (!!l.fora && e.terceirosSeguram);
+        l.anotDispensada = dispP[num] != null && !l.anotTerceiros && R.estadoAnotacoes(p, lista, undefined, l.ch).terceiros;
         l.anotNova = R.temAnotacaoNova(p, lista, dispP[num], st.ultimaVisita);
       }
       if (l.fora) l.foraDaLista = true;

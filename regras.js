@@ -568,18 +568,20 @@
   const valeEdicao = (a, dispensaEm) => a.editadaEm != null && (dispensaEm == null || a.editadaEm > dispensaEm);
 
   // segura: mantém na fila o processo que saiu da lista. sobe: leva ao topo da seção. Edição depois da dispensa só sobe.
-  // terceiros: há anotação de outra pessoa que está valendo (é o que o botão "Não priorizar" dispensa).
-  function estadoAnotacoes(pessoa, anotacoes, dispensaEm) {
-    let segura = false, terceiros = false, dataOrdem = null;
+  // terceiros: há anotação de outra pessoa fazendo o processo subir (é o que o botão "Não priorizar" dispensa); terceirosSeguram: mantendo-o na fila.
+  // chegada: data de chegada atual. Anotação anterior a ela continua visível e segurando o processo, mas não o faz subir (decisão do Alberto, 09/11/2026).
+  function estadoAnotacoes(pessoa, anotacoes, dispensaEm, chegada) {
+    let segura = false, terceiros = false, terceirosSeguram = false, dataOrdem = null;
     for (const a of anotacoes || []) {
-      const criacao = valeCriacao(pessoa, a, dispensaEm);
+      const criacao = valeCriacao(pessoa, a, dispensaEm), deTerceiro = !anotDoDono(pessoa, a);
       if (!criacao && !valeEdicao(a, dispensaEm)) continue;
-      if (criacao) segura = true;
-      if (!anotDoDono(pessoa, a)) terceiros = true;
+      if (criacao) { segura = true; if (deTerceiro) terceirosSeguram = true; }
       const data = Math.max(a.em, a.editadaEm || 0);
+      if (chegada != null && data < chegada) continue;
+      if (deTerceiro) terceiros = true;
       if (dataOrdem == null || data > dataOrdem) dataOrdem = data;
     }
-    return { segura, sobe: dataOrdem != null, dataOrdem, terceiros };
+    return { segura, sobe: dataOrdem != null, dataOrdem, terceiros, terceirosSeguram };
   }
 
   // A conclusão deixa de valer se, depois dela, veio anotação que reabre (não automática nem migrada) ou alguma edição.
