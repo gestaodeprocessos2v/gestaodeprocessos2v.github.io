@@ -333,6 +333,9 @@
       if (l.ep && l.ep.length) out.push({ r: 'Prioridade pela etiqueta', e: l.ep });
       if (l.ecp && l.ecp.length) out.push({ r: 'Prioridade pela classe', e: l.ecp });
     }
+    // Motivo da exceção por classe ou etiqueta: vale em qualquer seção da lista.
+    if (l.xe && l.xe.length) out.push({ r: 'Nesta fila pela etiqueta', e: l.xe });
+    if (l.xc && l.xc.length) out.push({ r: 'Nesta fila pela classe', e: l.xc });
     return out;
   }
 
@@ -345,12 +348,22 @@
 
   // Exceção com destino "setor": o processo muda de setor e segue a divisão do novo setor. Mantém "a primeira que casar decide":
   // se antes dela casar uma exceção de pessoa, o processo fica no setor e vai para essa pessoa.
-  function setorPorExcecao(item, setor, config) {
+  function regraDeMudancaDeSetor(item, setor, config) {
     for (const r of (config && config.regrasClasse) || []) {
       if (!r || !r.padrao || !(r.responsavel || r.setorDestino)) continue;
-      if (casaExcecao(r, item, setor)) return r.responsavel ? null : r.setorDestino;
+      if (casaExcecao(r, item, setor)) return r.responsavel ? null : r;
     }
     return null;
+  }
+  function setorPorExcecao(item, setor, config) {
+    const r = regraDeMudancaDeSetor(item, setor, config);
+    return r ? r.setorDestino : null;
+  }
+
+  // O que fez a exceção valer para o processo: as etiquetas dele que estão na regra, ou a sua classe (o motivo mostrado na lista).
+  function causaExcecao(regra, item) {
+    if (!regra) return { xe: [], xc: [] };
+    return regra.campo === 'etiqueta' ? { xe: etiquetasQueCasam(item && item.e, regra.padrao), xc: [] } : { xe: [], xc: item && item.c ? [item.c] : [] };
   }
 
   // Regras de exceção (classe ou etiqueta), na ordem da configuração, antes da divisão do setor.
@@ -358,7 +371,7 @@
     const cfg = config || {};
     for (const r of cfg.regrasClasse || []) {
       if (!r || !r.padrao || !r.responsavel) continue;
-      if (casaExcecao(r, item, setor)) return { pessoa: r.responsavel, motivo: (r.campo === 'etiqueta' ? 'etiqueta' : 'classe') + ': ' + r.padrao };
+      if (casaExcecao(r, item, setor)) return { pessoa: r.responsavel, motivo: (r.campo === 'etiqueta' ? 'etiqueta' : 'classe') + ': ' + r.padrao, regra: r };
     }
     const s = (cfg.setores || {})[setor];
     if (!s) return { pessoa: null, motivo: 'setor sem regra' };
@@ -390,7 +403,7 @@
   function excecaoSemSetor(item, config) {
     for (const r of (config && config.regrasClasse) || []) {
       if (!r || r.campo !== 'etiqueta' || !r.padrao || !r.responsavel || (r.setores && r.setores.length)) continue;
-      if (casaExcecao(r, item, null)) return { pessoa: r.responsavel, motivo: 'etiqueta: ' + r.padrao };
+      if (casaExcecao(r, item, null)) return { pessoa: r.responsavel, motivo: 'etiqueta: ' + r.padrao, regra: r };
     }
     return null;
   }
@@ -424,7 +437,7 @@
     for (const it of itens) {
       const linha = mapa.get(normTexto(it.t));
       if (!linha) contarSemCadastro(it);
-      let s, r;
+      let s, r, regraSetor = null;
       if (!linha || !linha.painel) {
         // Tarefa cadastrada sem setor no painel (ex.: Assessoria): continua só nas Metas CNJ, salvo exceção por etiqueta
         // válida em todos os setores (ex.: minutas do residente); aí entra também na fila de quem a regra indica.
@@ -434,12 +447,21 @@
         s = SETOR_SEM_PAINEL; r = ex;
       } else {
         if (linha.etiqueta && !temEtiqueta(it.e, linha.etiqueta)) { ignorados.semEtiqueta++; guardarOutro(it); continue; }
-        s = setorPorExcecao(it, linha.painel, config) || linha.painel;
+        regraSetor = regraDeMudancaDeSetor(it, linha.painel, config);
+        s = (regraSetor && regraSetor.setorDestino) || linha.painel;
         r = atribuir(it, s, config);
       }
       const item = { n: it.n, s };
       for (const k of ['c', 't', 'cg', 'ch', 'sg']) if (it[k] != null) item[k] = it[k];
       if (r.pessoa && s !== SETOR_SEM_PAINEL) item.resp = r.pessoa;
+      // "xe" e "xc": a etiqueta ou a classe que trouxe o processo para esta fila por exceção (mudança de setor, pessoa ou as duas).
+      // Com pessoaFixa a lista inteira vai para a pessoa, e a exceção não decide nada.
+      if (!pessoaFixa) {
+        const cx = [regraSetor, r.regra].map(x => causaExcecao(x, it));
+        const xe = [...new Set(cx.flatMap(x => x.xe))], xc = [...new Set(cx.flatMap(x => x.xc))];
+        if (xe.length) item.xe = xe;
+        if (xc.length) item.xc = xc;
+      }
       // "eu" e "ep": as etiquetas do processo que causaram a urgência e a prioridade (as do CSV não ficam guardadas; estas sim).
       const cu = linha.etiquetaUrgente ? etiquetasQueCasam(it.e, linha.etiquetaUrgente) : [];
       if (cu.length) { item.u = true; item.eu = cu; }
@@ -678,8 +700,8 @@
       const vencidas = concluidas.length ? [] : lista.map(x => marcas[chaveItem(x)]).filter(m => m && m.em != null);
       if (vencidas.length) escolhido = Object.assign({}, escolhido, { retornoGrupo: Math.max(...vencidas.map(m => m.em)) });
       const uniao = campo => [...new Set(lista.flatMap(x => x[campo] || []))];
-      const eu = uniao('eu'), ep = uniao('ep'), ecu = uniao('ecu'), ecp = uniao('ecp');
-      porNumero.set(k, paralelo ? Object.assign({}, escolhido, { fp: true, u: lista.some(x => x.u) || escolhido.u, p: lista.some(x => x.p) || escolhido.p }, eu.length ? { eu } : {}, ep.length ? { ep } : {}, ecu.length ? { ecu } : {}, ecp.length ? { ecp } : {}) : escolhido);
+      const eu = uniao('eu'), ep = uniao('ep'), ecu = uniao('ecu'), ecp = uniao('ecp'), xe = uniao('xe'), xc = uniao('xc');
+      porNumero.set(k, paralelo ? Object.assign({}, escolhido, { fp: true, u: lista.some(x => x.u) || escolhido.u, p: lista.some(x => x.p) || escolhido.p }, eu.length ? { eu } : {}, ep.length ? { ep } : {}, ecu.length ? { ecu } : {}, ecp.length ? { ecp } : {}, xe.length ? { xe } : {}, xc.length ? { xc } : {}) : escolhido);
     }
     const linhas = [];
     const especiais = [
@@ -790,7 +812,7 @@
 
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, regrasDoSetor, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
-    atribuir, setorPorExcecao, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, estadoAnotacoes, conclusaoReaberta, marcasVigentes, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, comparar, chaveItem,
+    atribuir, setorPorExcecao, causaExcecao, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, estadoAnotacoes, conclusaoReaberta, marcasVigentes, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

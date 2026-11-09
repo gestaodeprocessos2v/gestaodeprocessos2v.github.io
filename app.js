@@ -378,7 +378,7 @@
       if (l.fora) l.foraDaLista = true;
       l.dono = p;
       // Por que é urgente ou prioritário (etiquetas gravadas na importação e tarefa); as filas do diretor e do gestor não usam a tabela de tarefas.
-      if (l.tipo === 'urgente' || l.tipo === 'prioritaria') l.criterios = R.criteriosItem(l, ehEspecial(p) ? new Map() : st.mapaTarefas);
+      if (l.tipo === 'urgente' || l.tipo === 'prioritaria' || l.xe || l.xc) l.criterios = R.criteriosItem(l, ehEspecial(p) ? new Map() : st.mapaTarefas);
     }
     fila.sort(R.comparar);
     const todasMarcas = marcasV;
