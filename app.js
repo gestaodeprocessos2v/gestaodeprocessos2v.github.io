@@ -31,7 +31,7 @@
     filtroTabela: { busca: '', painel: '' },
     etiquetasPrioridade: [], rascEtPri: [], etPriAlteradas: false, classesProc: [],
     resumo: null, jd: null,
-    filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
+    filas: [], urgencias: [], devolucoes: [], marcas: {}, anotacoes: {}, dispensas: {}, acessos: [], negados: [],
     ver: 0, cache: { ver: -1, m: {} },
     aba: 'fila', verComo: '', area: 'fila', menuAreas: false,
     abaMetas: 'visao', abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null },
@@ -42,7 +42,7 @@
       eventual: { busca: '', setor: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
     },
     gOculta: false, gBase: 0, duAberta: false, novaUrgDir: { numero: '', setor: 'secretaria', responsavel: '', motivo: '' },
-    anotando: null, notaRascunho: '', devolvendo: null, devMotivo: '', modal: null,
+    anotando: null, notaRascunho: '', confirmaNota: null, devolvendo: null, devMotivo: '', modal: null,
     ultimaVisita: 0, importacao: null, gravando: false, confirmarRemocao: null,
     novaUrgencia: null, novaPessoa: '', rascOutros: null,
   };
@@ -143,8 +143,8 @@
   function reiniciarEstado() {
     Object.assign(st, {
       email: '', perfil: '', nome: '', pessoa: '', magistrado: '', fMetas: { meta: '', inst: '', busca: '', limite: 300 }, config: null, rascunho: null, tarefas: [], mapaTarefas: new Map(), rascTarefas: null,
-      tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, notas: {}, acessos: [], negados: [],
-      anotando: null, devolvendo: null, modal: null, importacao: null,
+      tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, anotacoes: {}, dispensas: {}, acessos: [], negados: [],
+      anotando: null, confirmaNota: null, devolvendo: null, modal: null, importacao: null,
       area: 'fila', menuAreas: false, abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, metasImp: null,
       abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null },
     });
@@ -223,7 +223,7 @@
   function irParaArea(area) {
     st.menuAreas = false;
     if (!areasDisponiveis().includes(area)) area = 'fila';
-    if (st.area !== area) { st.area = area; st.anotando = null; st.devolvendo = null; st.modal = null; window.scrollTo({ top: 0 }); }
+    if (st.area !== area) { st.area = area; st.anotando = null; st.confirmaNota = null; st.devolvendo = null; st.modal = null; window.scrollTo({ top: 0 }); }
     render();
   }
 
@@ -243,17 +243,21 @@
     } catch (e) { console.warn('JD indisponível', e); st.jd = null; }
   }
 
+  const COL_ANOT = 'id,pessoa,numero,autor_email,autor_pessoa,autor_nome,texto,em,editada_em,reabre';
+  const anotDe = r => ({ id: r.id, pessoa: r.pessoa, numero: r.numero, autorEmail: r.autor_email, autorPessoa: r.autor_pessoa, autorNome: r.autor_nome, texto: r.texto, em: ms(r.em), editadaEm: ms(r.editada_em), reabre: r.reabre });
+
   async function carregar() {
     const sb = st.sb;
     const desdeConcl = iso(Date.now() - 35 * DIA), desdeMarcas = iso(Date.now() - 95 * DIA);
     const gestor = st.perfil === 'gestor';
-    const [cfg, filas, urg, dev, marcas, notas, acessos, negados] = await Promise.all([
+    const [cfg, filas, urg, dev, marcas, anotacoes, dispensas, acessos, negados] = await Promise.all([
       sb.from('config').select('chave,valor,atualizado_em'),
       todas((a, b) => sb.from('filas').select('lista,pessoa,itens,importado_em').order('lista').order('pessoa').range(a, b)),
       todas((a, b) => sb.from('urgencias').select('*').or(`concluida_em.is.null,concluida_em.gte.${desdeConcl}`).order('id').range(a, b)),
       todas((a, b) => sb.from('devolucoes').select('*').or(`concluida_em.is.null,concluida_em.gte.${desdeConcl}`).order('id').range(a, b)),
       todas((a, b) => sb.from('marcas').select('pessoa,chave,em,devolvido,item,desfeito,concluida_por').gte('em', desdeMarcas).order('pessoa').order('chave').range(a, b)),
-      todas((a, b) => sb.from('notas').select('pessoa,numero,texto,em').order('pessoa').order('numero').range(a, b)),
+      todas((a, b) => sb.from('anotacoes').select(COL_ANOT).order('id').range(a, b)),
+      todas((a, b) => sb.from('anotacoes_dispensa').select('pessoa,numero,em').order('pessoa').order('numero').range(a, b)),
       gestor ? todas((a, b) => sb.from('acesso').select('email,nome,perfil,pessoa_id,magistrado').order('email').range(a, b)) : Promise.resolve([]),
       gestor ? sb.from('acessos_negados').select('email,em').order('em', { ascending: false }).limit(200) : Promise.resolve({ data: [] }),
     ]);
@@ -293,8 +297,11 @@
     st.devolucoes = dev.map(r => ({ id: r.id, item: r.item, de: r.de, para: r.para, motivo: r.motivo || '', em: ms(r.em), concluidaEm: ms(r.concluida_em) }));
     st.marcas = {};
     for (const m of marcas) (st.marcas[m.pessoa] = st.marcas[m.pessoa] || {})[m.chave] = { em: ms(m.em), dev: !!m.devolvido, item: m.item || null, desfeito: !!m.desfeito, por: m.concluida_por || null };
-    st.notas = {};
-    for (const n of notas) (st.notas[n.pessoa] = st.notas[n.pessoa] || {})[n.numero] = { texto: n.texto, em: ms(n.em) };
+    st.anotacoes = {};
+    for (const r of anotacoes) { const p = st.anotacoes[r.pessoa] = st.anotacoes[r.pessoa] || {}; (p[r.numero] = p[r.numero] || []).push(anotDe(r)); }
+    for (const p of Object.values(st.anotacoes)) for (const lista of Object.values(p)) lista.sort((a, b) => a.em - b.em || a.id - b.id);
+    st.dispensas = {};
+    for (const d of dispensas) (st.dispensas[d.pessoa] = st.dispensas[d.pessoa] || {})[d.numero] = ms(d.em);
     st.acessos = acessos;
     st.negados = (negados.data || []).map(r => ({ email: r.email, em: ms(r.em) }));
     await carregarJD();
@@ -322,24 +329,27 @@
     if (c.ver !== st.ver) { c.ver = st.ver; c.m = {}; }
     if (c.m[p]) return c.m[p];
     const itens = [];
-    const notasP = st.notas[p] || {};
-    // Processo que saiu da lista mas segue na fila por causa da anotação: some assim que a anotação for excluída.
+    const anotP = st.anotacoes[p] || {}, dispP = st.dispensas[p] || {};
+    const estadoDe = num => R.estadoAnotacoes(p, anotP[num], dispP[num]);
+    // Processo que saiu da lista mas segue na fila por causa da anotação: some assim que deixar de haver anotação que o segure.
     // Fila do gestor gravada antes de a etiqueta ir junto no processo: mostra a etiqueta configurada hoje,
     // mas só se for uma; com várias (separadas por |) não dá para saber qual o processo tem, até o próximo envio.
     const cfgG = st.config || {};
     const etGestor = p === GESTOR_ID ? (cfgG.etiquetaGestor == null ? R.ETIQUETA_GESTOR_PADRAO : cfgG.etiquetaGestor).trim() : '';
     const umaEt = etGestor && !etGestor.includes('|') ? etGestor : '';
-    for (const r of st.filas) if (r.pessoa === p) for (const it of r.itens || []) if (!it.fora || (notasP[R.soDigitos(it.n)] || {}).texto) itens.push(umaEt && !it.ed ? Object.assign({}, it, { ed: [umaEt] }) : it);
+    for (const r of st.filas) if (r.pessoa === p) for (const it of r.itens || []) if (!it.fora || estadoDe(R.soDigitos(it.n)).segura) itens.push(umaEt && !it.ed ? Object.assign({}, it, { ed: [umaEt] }) : it);
+    // Conclusão reaberta por anotação, com o processo na lista atual, conta como desfeita.
+    const marcasV = R.marcasVigentes(p, st.marcas[p], itens, anotP, dispP);
     const umMes = Date.now() - 30 * DIA;
     const fila = R.montarFila({
       itens,
       urgencias: st.urgencias.filter(u => u.via !== 'lista' && u.responsavel === p && (!u.concluidaEm || u.concluidaEm > umMes)),
       devolucoes: st.devolucoes.filter(d => d.para === p && (!d.concluidaEm || d.concluidaEm > umMes)),
-      marcas: Object.fromEntries(Object.entries(st.marcas[p] || {}).filter(([, m]) => !m.desfeito)), tarefas: ehEspecial(p) ? new Map() : st.mapaTarefas, ultimaVisita: st.ultimaVisita,
+      marcas: Object.fromEntries(Object.entries(marcasV).filter(([, m]) => !m.desfeito)), tarefas: ehEspecial(p) ? new Map() : st.mapaTarefas, ultimaVisita: st.ultimaVisita,
       prazos: prazosRetorno(), agora: Date.now(),
     });
     // Concluídos que já saíram da lista continuam aparecendo (só em "Mostrar concluídos"), pelas marcas guardadas.
-    const marcasP = Object.fromEntries(Object.entries(st.marcas[p] || {}).filter(([, m]) => !m.desfeito));
+    const marcasP = Object.fromEntries(Object.entries(marcasV).filter(([, m]) => !m.desfeito));
     // Todas as entradas da lista contam (processo em mais de uma tarefa mostra só uma, mas as outras continuam na lista).
     const presentes = new Set([...fila, ...itens].filter(l => l.ch != null).map(l => R.chaveItem({ n: l.n, ch: l.ch })));
     for (const chave of Object.keys(marcasP)) {
@@ -354,15 +364,23 @@
       fila.push(Object.assign({}, it, { origem: 'lista', tipo: it.tipo || 'normal', chave, concluido: true, devolvido: !!m.dev, novo: false, foraDaLista: true }));
     }
     for (const l of fila) {
-      const nota = notasP[R.soDigitos(l.n)];
-      if (nota && nota.texto) { l.anot = nota.texto; l.anotEm = nota.em; }
+      const num = R.soDigitos(l.n), lista = anotP[num];
+      if (lista && lista.length) {
+        const e = estadoDe(num);
+        l.anotacoes = lista;
+        l.anot = R.textoAnotacoes(lista, dataHoraBR);   // texto corrido, para a busca e o CSV
+        if (e.sobe) l.anotEm = e.dataOrdem;
+        l.anotTerceiros = e.terceiros;
+        l.anotDispensada = dispP[num] != null && !e.terceiros && lista.some(a => a.autorPessoa !== p);
+        l.anotNova = R.temAnotacaoNova(p, lista, dispP[num], st.ultimaVisita);
+      }
       if (l.fora) l.foraDaLista = true;
       l.dono = p;
       // Por que é urgente ou prioritário (etiquetas gravadas na importação e tarefa); as filas do diretor e do gestor não usam a tabela de tarefas.
       if (l.tipo === 'urgente' || l.tipo === 'prioritaria') l.criterios = R.criteriosItem(l, ehEspecial(p) ? new Map() : st.mapaTarefas);
     }
     fila.sort(R.comparar);
-    const todasMarcas = st.marcas[p] || {};
+    const todasMarcas = marcasV;
     for (const l of fila) {
       const m = l.ch != null ? todasMarcas[R.chaveItem({ n: l.n, ch: l.ch })] : null;
       const mm = todasMarcas[l.chave] || m;
@@ -625,6 +643,47 @@
     return `<div class="jd-card${it.prc > 0 ? ' com-prc' : ''}" tabindex="0" role="note" aria-label="${esc('JD. ' + balao.replace(/\n/g, '. '))}" data-balao="${esc(balao)}"><span class="jd-rot">JD</span><span>${txt}</span>${prc}</div>`;
   }
 
+  const ICONE_EDITAR = '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 2.5l2.5 2.5L5.5 13H3v-2.5z"/></svg>';
+  const ICONE_APAGAR = '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5"/></svg>';
+  const souAutor = a => (!!a.autorEmail && a.autorEmail === String(st.email || '').toLowerCase()) || (!!a.autorPessoa && a.autorPessoa === st.pessoa);
+  const formAnotacaoHTML = () => `<form class="anotar-form" data-form="anotar">
+      <textarea id="nota-texto" maxlength="2000" rows="3" aria-label="Anotação sobre o processo" placeholder="Ex.: aguardando resposta do INSS ao ofício">${esc(st.notaRascunho)}</textarea>
+      <div class="linha-botoes"><button class="btn primario" type="submit">Salvar</button><button class="btn" type="button" data-acao="cancelar-nota">Cancelar</button></div>
+    </form>`;
+
+  // Coluna Anotação: um bloco para cada anotação daquele painel, da mais antiga para a mais nova.
+  function anotacoesHTML(l, dis) {
+    const leitura = !!dis || st.perfil === 'visitante';
+    const ed = st.anotando && st.anotando.chave === l.chave && st.anotando.dono === l.dono ? st.anotando : null;
+    const conf = st.confirmaNota;
+    const blocos = (l.anotacoes || []).map(a => {
+      if (ed && ed.id === a.id) return formAnotacaoHTML();
+      const autor = souAutor(a);
+      let botoes = '';
+      if (conf && conf.tipo === 'apagar' && conf.id === a.id) {
+        botoes = `<span class="anot-confirma">Apagar? <button class="btn discreto perigo" type="button" data-acao="apagar-sim" data-id="${a.id}">Sim</button><button class="btn discreto" type="button" data-acao="confirma-nao">Não</button></span>`;
+      } else if (!leitura) {
+        if (autor) botoes += `<button class="anot-acao" type="button" data-acao="editar-nota" data-id="${a.id}" aria-label="Editar anotação" data-balao="Editar anotação">${ICONE_EDITAR}</button>`;
+        if (autor || l.dono === st.pessoa) botoes += `<button class="anot-acao" type="button" data-acao="apagar-nota" data-id="${a.id}" aria-label="Apagar anotação" data-balao="Apagar anotação">${ICONE_APAGAR}</button>`;
+      }
+      return `<div class="anot-bloco"><div class="anot-cab"><span class="anot-carimbo">${esc(R.carimboAnotacao(a, dataHoraBR))}</span>${botoes}</div><div class="anot-texto">${esc(a.texto)}</div></div>`;
+    }).join('');
+    let prioridade = '';
+    if (!leitura && l.dono === st.pessoa && !l.concluido) {
+      if (conf && conf.tipo === 'dispensar' && conf.chave === l.chave && conf.dono === l.dono) {
+        prioridade = `<div class="anot-confirma">Este processo já saiu da lista e vai sumir da fila. As anotações ficam guardadas. <button class="btn discreto perigo" type="button" data-acao="nao-priorizar-sim">Confirmar</button><button class="btn discreto" type="button" data-acao="confirma-nao">Cancelar</button></div>`;
+      } else if (l.anotTerceiros) {
+        prioridade = '<button class="btn discreto" type="button" data-acao="nao-priorizar" data-balao="O processo volta à posição por antiguidade. As anotações continuam guardadas." aria-description="O processo volta à posição por antiguidade. As anotações continuam guardadas.">Não priorizar</button>';
+      } else if (l.anotDispensada) {
+        prioridade = '<button class="btn discreto" type="button" data-acao="voltar-priorizar">Voltar a priorizar</button>';
+      }
+    }
+    let novo = '';
+    if (ed && ed.id == null) novo = formAnotacaoHTML();
+    else if (dis || !leitura) novo = `<button class="btn discreto" type="button" data-acao="anotar"${dis}>+ Anotar</button>`;
+    return (blocos + prioridade + novo) || '<span class="muted">—</span>';
+  }
+
   function linhaHTML(l, modo) {
     const geral = modo === 'geral', eventual = modo === 'eventual';
     const selos = [];
@@ -632,6 +691,7 @@
     if (l.tipo === 'devolvido') selos.push('<span class="selo devolvido">Devolvido</span>');
     if (l.tipo === 'prioritaria') selos.push('<span class="selo prioritaria">Prioritária</span>');
     if (l.novo && !l.concluido) selos.push('<span class="selo novo">Novo</span>');
+    if (l.anotNova && !l.concluido && !geral && !eventual) selos.push('<span class="selo novo" tabindex="0" role="note" aria-label="Nova anotação de outra pessoa desde a sua última visita" data-balao="Outra pessoa anotou neste processo desde a sua última visita">Nova anotação</span>');
     if (l.sg) selos.push('<span class="selo sigilo">Sigiloso</span>');
     if (l.fp) {
       const balaoFp = 'O processo aparece em uma tarefa principal e em pelo menos um fluxo paralelo. Verificar a necessidade de encerrar o(s) fluxo(s) paralelo(s)';
@@ -663,11 +723,11 @@
     const resp = geral || eventual ? `<div class="sub sub-resp">Responsável: ${esc(nomeDe(l.dono))}</div>` : '';
     // Fila do diretor: mostra só as etiquetas da lista dele que o processo tem. Fila do gestor: a etiqueta que o selecionou.
     const etqHTML = l.ed && l.ed.length ? `<div class="etiquetas" aria-label="Etiquetas do filtro">${l.ed.map(x => `<span class="chip">${esc(x)}</span>`).join('')}</div>` : '';
-    let acoes = '', anot, form = '';
+    let acoes = '', form = '';
     const dis = st.verComo && modo !== 'gestor' ? ' disabled data-balao="Visualização somente leitura" aria-description="Visualização somente leitura"' : '';
+    const anot = anotacoesHTML(l, dis);
     if (geral || eventual) {
-      anot = l.anot ? `<span class="anot-texto">${esc(l.anot)}</span><span class="quando">${dataHoraBR(l.anotEm)}</span>` : '<span class="muted">—</span>';
-      // Servidor eventual: só marca e desfaz a conclusão (sem anotar, enviar nem devolver)
+      // Servidor eventual: só marca e desfaz a conclusão (sem enviar nem devolver)
       if (eventual) acoes = l.concluido ? '<button class="btn" data-acao="desfazer">Desfazer</button>' : '<button class="btn feito" data-acao="concluir">Marcar como concluído</button>';
     } else {
       if (l.concluido) {
@@ -679,18 +739,6 @@
       }
       // Minuta feita por IA (residente; o gestor também vê em "ver como"). Só leitura: não depende do "ver como".
       if (window.PAINEL.botaoMinuta) acoes += window.PAINEL.botaoMinuta(l);
-      if (st.anotando === l.chave) {
-        anot = `<form class="anotar-form" data-form="anotar">
-          <textarea id="nota-texto" maxlength="2000" rows="3" aria-label="Anotação sobre o processo" placeholder="Ex.: aguardando resposta do INSS ao ofício">${esc(st.notaRascunho)}</textarea>
-          <div class="linha-botoes"><button class="btn primario" type="submit">Salvar</button>
-          ${l.anot ? '<button class="btn perigo" type="button" data-acao="apagar-nota">Apagar</button>' : ''}
-          <button class="btn" type="button" data-acao="cancelar-nota">Cancelar</button></div>
-        </form>`;
-      } else if (l.anot) {
-        anot = `<button class="anot-texto" data-acao="anotar"${dis ? dis : ' data-balao="Editar anotação" aria-description="Editar anotação"'}>${esc(l.anot)}</button><span class="quando">${dataHoraBR(l.anotEm)}</span>`;
-      } else {
-        anot = `<button class="btn discreto" data-acao="anotar"${dis}>+ Anotar</button>`;
-      }
       if (st.devolvendo === l.chave) {
         const doDiretor = tipoAtivo() === 'diretor';
         const sugerido = doDiretor ? (l.via === 'envio' && l.de ? l.de : GESTOR_ID) : (l.resp || (l.s === R.SETOR_SEM_PAINEL ? '' : R.atribuir(l, l.s, st.config || {}).pessoa) || '');
@@ -977,19 +1025,70 @@
     st.ver++;
   }
 
-  async function gravarNota(numero, texto, pessoa) {
-    const chave = R.soDigitos(numero);
-    if (texto) {
-      const em = Date.now();
-      const { error } = await st.sb.from('notas').upsert({ pessoa, numero: chave, texto, em: iso(em) }, { onConflict: 'pessoa,numero' });
-      if (error) throw error;
-      (st.notas[pessoa] = st.notas[pessoa] || {})[chave] = { texto, em };
-    } else {
-      const { error } = await st.sb.from('notas').delete().eq('pessoa', pessoa).eq('numero', chave);
-      if (error) throw error;
-      if (st.notas[pessoa]) delete st.notas[pessoa][chave];
-    }
+  // Autor, nome e datas vêm do banco (gatilho anotacoes_carimbar); a tela só espelha o que ele devolve.
+  const listaAnot = (pessoa, num) => { const p = st.anotacoes[pessoa] = st.anotacoes[pessoa] || {}; return p[num] = p[num] || []; };
+
+  async function inserirAnotacao(pessoa, numero, texto, reabre = true) {
+    const num = R.soDigitos(numero);
+    const { data, error } = await st.sb.from('anotacoes').insert({ pessoa, numero: num, texto, reabre }).select(COL_ANOT).single();
+    if (error) throw error;
+    listaAnot(pessoa, num).push(anotDe(data));
     st.ver++;
+  }
+
+  async function editarAnotacao(pessoa, numero, id, texto) {
+    const num = R.soDigitos(numero);
+    const { data, error } = await st.sb.from('anotacoes').update({ texto }).eq('id', id).select(COL_ANOT).single();
+    if (error) throw error;
+    const lista = listaAnot(pessoa, num), i = lista.findIndex(a => a.id === id);
+    if (i >= 0) lista[i] = anotDe(data);
+    st.ver++;
+  }
+
+  // Devolve false se nada foi apagado (sem permissão, ou outra pessoa já apagou).
+  async function apagarAnotacao(pessoa, numero, id) {
+    const num = R.soDigitos(numero);
+    const { data, error } = await st.sb.from('anotacoes').delete().eq('id', id).select('id');
+    if (error) throw error;
+    if (!data || !data.length) return false;
+    const lista = listaAnot(pessoa, num), i = lista.findIndex(a => a.id === id);
+    if (i >= 0) lista.splice(i, 1);
+    st.ver++;
+    return true;
+  }
+
+  // "Não priorizar": anotações de terceiros já feitas deixam de subir e de segurar o processo no painel de quem clicou.
+  async function dispensarAnotacoes(numero) {
+    const num = R.soDigitos(numero);
+    const { data, error } = await st.sb.from('anotacoes_dispensa').upsert({ pessoa: st.pessoa, numero: num }, { onConflict: 'pessoa,numero' }).select('em').single();
+    if (error) throw error;
+    (st.dispensas[st.pessoa] = st.dispensas[st.pessoa] || {})[num] = ms(data.em);
+    st.ver++;
+  }
+
+  async function voltarAPriorizar(numero) {
+    const num = R.soDigitos(numero);
+    const { error } = await st.sb.from('anotacoes_dispensa').delete().eq('pessoa', st.pessoa).eq('numero', num);
+    if (error) throw error;
+    if (st.dispensas[st.pessoa]) delete st.dispensas[st.pessoa][num];
+    st.ver++;
+  }
+
+  // Processo que só continua na fila por causa de anotações de terceiros: ao dispensá-las, ele some.
+  const somemAoDispensar = l => l.foraDaLista && !(l.anotacoes || []).some(a => a.autorPessoa === l.dono);
+
+  // Para a importação (gestao.js): o que segura cada processo do painel e as conclusões que continuam valendo.
+  function anotadosDe(p, itensAtuais) {
+    const anotP = st.anotacoes[p] || {}, dispP = st.dispensas[p] || {}, notas = {};
+    for (const num of Object.keys(anotP)) if (R.estadoAnotacoes(p, anotP[num], dispP[num]).segura) notas[num] = { texto: 'anotado' };
+    return { notas, marcas: R.marcasVigentes(p, st.marcas[p], itensAtuais, anotP, dispP) };
+  }
+
+  // Marcas de todas as pessoas, já sem as reabertas por anotação (Processos Parados).
+  function marcasVigentesTodas() {
+    const out = {};
+    for (const p of Object.keys(st.marcas)) out[p] = R.marcasVigentes(p, st.marcas[p], st.filas.filter(r => r.pessoa === p).flatMap(r => r.itens || []), st.anotacoes[p], st.dispensas[p]);
+    return out;
   }
 
   const itemDe = l => { const item = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u', 'p', 'et', 'resp']) if (l[k] != null) item[k] = l[k]; return item; };
@@ -1005,11 +1104,7 @@
     if (error && !jaTinha) throw error;
     try {
       await concluirLinha(l);   // quem enviou também precisa movimentar no PJe: a conclusão vence pelo prazo, como as outras
-      const antiga = ((st.notas[st.pessoa] || {})[R.soDigitos(l.n)] || {}).texto || '';
-      const nova = `Enviado para ${nomeDe(para)} em ${dataHoraBR(agora)}${motivo ? ' — ' + motivo : ''}`;
-      let texto = antiga ? antiga + '\n' + nova : nova;
-      if (texto.length > 2000) texto = texto.slice(-2000);
-      await gravarNota(l.n, texto, st.pessoa);
+      await inserirAnotacao(st.pessoa, l.n, `Enviado para ${nomeDe(para)} em ${dataHoraBR(agora)}${motivo ? ' — ' + motivo : ''}`, false);
     } catch (e) {
       console.error(e);
       toast('O processo foi enviado, mas não consegui concluir na sua fila. Marque como concluído.');
@@ -1031,11 +1126,7 @@
         if (error) throw error;
       }
       await concluirLinha(l, true);
-      const antiga = ((st.notas[st.pessoa] || {})[R.soDigitos(l.n)] || {}).texto || '';
-      const nova = `Devolvido para ${nomeDe(para)} em ${dataHoraBR(agora)}${motivo ? ' — ' + motivo : ''}`;
-      let texto = antiga ? antiga + '\n' + nova : nova;
-      if (texto.length > 2000) texto = texto.slice(-2000);
-      await gravarNota(l.n, texto, st.pessoa);
+      await inserirAnotacao(st.pessoa, l.n, `Devolvido para ${nomeDe(para)} em ${dataHoraBR(agora)}${motivo ? ' — ' + motivo : ''}`, false);
       return;
     }
     const { error } = await st.sb.from('devolucoes').insert({ item: itemDe(l), de: st.pessoa, para, motivo: motivo || null });
@@ -1066,7 +1157,7 @@
   const zerarMagVis = () => { for (const k of ['fila', 'geral', 'eventual']) if (st.vis[k]) st.vis[k].magOff = null; };
 
   function sairVerComo() {
-    st.verComo = ''; st.anotando = null; st.devolvendo = null; st.modal = null; zerarMagVis();
+    st.verComo = ''; st.anotando = null; st.confirmaNota = null; st.devolvendo = null; st.modal = null; zerarMagVis();
     if (!abasDisponiveis().includes(st.aba)) st.aba = abasDisponiveis()[0];
     render();
   }
@@ -1093,12 +1184,12 @@
       const b = v && document.querySelector((modo === 'gestor' ? '#gestor-fila' : '#v-' + modo) + ` [data-acao="mag"][data-v="${v}"]`); if (b) b.focus();
       return;
     }
-    if (st.verComo && modo !== 'gestor' && ['concluir', 'desfazer', 'devolver', 'enviar', 'anotar', 'apagar-nota', 'du-abrir'].includes(acao)) { toast('Visualização somente leitura.'); return; }
+    if (st.verComo && modo !== 'gestor' && ['concluir', 'desfazer', 'devolver', 'enviar', 'anotar', 'editar-nota', 'apagar-nota', 'apagar-sim', 'nao-priorizar', 'nao-priorizar-sim', 'voltar-priorizar', 'du-abrir'].includes(acao)) { toast('Visualização somente leitura.'); return; }
     const f = st.vis[modo];
     const li = alvo.closest('.linha');
     const chave = li && li.dataset.chave;
-    // Na aba do servidor eventual cada linha tem o seu dono (o servidor responsável), guardado na própria linha.
-    const linha = (modo === 'fila' || modo === 'gestor' || modo === 'eventual') && chave ? acharLinha(chave, modo === 'eventual' ? li.dataset.dono : donoDe(modo)) : null;
+    // Nas abas Geral e Eventual cada linha tem o seu dono (o servidor responsável), guardado na própria linha.
+    const linha = chave ? acharLinha(chave, modo === 'eventual' || modo === 'geral' ? li.dataset.dono : donoDe(modo)) : null;
     try {
       if (acao === 'du-abrir') {
         st.duAberta = !st.duAberta; render();
@@ -1119,14 +1210,32 @@
         st.devolvendo = linha.chave; st.devMotivo = ''; st.anotando = null; render();
         const m = $('#dev-motivo'); if (m) m.focus();
       } else if (acao === 'enviar' && linha) {
-        st.modal = { chave: linha.chave, pessoa: donoDe(modo), para: '', motivo: '', enviando: false }; st.anotando = null; st.devolvendo = null; render();
+        st.modal = { chave: linha.chave, pessoa: donoDe(modo), para: '', motivo: '', enviando: false }; st.anotando = null; st.confirmaNota = null; st.devolvendo = null; render();
       } else if (acao === 'anotar' && linha) {
-        st.anotando = linha.chave; st.notaRascunho = linha.anot || ''; st.devolvendo = null; render();
+        st.anotando = { chave: linha.chave, dono: linha.dono, id: null }; st.notaRascunho = ''; st.confirmaNota = null; st.devolvendo = null; render();
+        const t = $('#nota-texto'); if (t) t.focus();
+      } else if (acao === 'editar-nota' && linha) {
+        const a = (linha.anotacoes || []).find(x => x.id === Number(alvo.dataset.id)); if (!a) return;
+        st.anotando = { chave: linha.chave, dono: linha.dono, id: a.id }; st.notaRascunho = a.texto; st.confirmaNota = null; st.devolvendo = null; render();
         const t = $('#nota-texto'); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
       } else if (acao === 'cancelar-nota') {
         st.anotando = null; render();
-      } else if (acao === 'apagar-nota' && linha) {
-        await gravarNota(linha.n, '', st.pessoa); st.anotando = null; toast('Anotação apagada.'); render();
+      } else if (acao === 'apagar-nota') {
+        st.confirmaNota = { tipo: 'apagar', id: Number(alvo.dataset.id) }; st.anotando = null; render();
+      } else if (acao === 'confirma-nao') {
+        st.confirmaNota = null; render();
+      } else if (acao === 'apagar-sim' && linha) {
+        const apagou = await apagarAnotacao(linha.dono, linha.n, Number(alvo.dataset.id));
+        st.confirmaNota = null;
+        if (apagou) toast('Anotação apagada.'); else { toast('Não foi possível apagar: a anotação já não existe ou você não tem permissão.'); await carregar(); }
+        render();
+      } else if (acao === 'nao-priorizar' && linha) {
+        if (somemAoDispensar(linha)) { st.confirmaNota = { tipo: 'dispensar', chave: linha.chave, dono: linha.dono }; st.anotando = null; render(); }
+        else { await dispensarAnotacoes(linha.n); toast('O processo voltou à posição por antiguidade.'); render(); }
+      } else if (acao === 'nao-priorizar-sim' && linha) {
+        await dispensarAnotacoes(linha.n); st.confirmaNota = null; toast('O processo saiu da fila. As anotações ficam guardadas.'); render();
+      } else if (acao === 'voltar-priorizar' && linha) {
+        await voltarAPriorizar(linha.n); toast('O processo voltou a ser priorizado.'); render();
       } else if (acao === 'cancelar-devolucao') {
         st.devolvendo = null; render();
       } else if (acao === 'mais') {
@@ -1148,8 +1257,11 @@
     const tipo = ev.target.dataset.form;
     try {
       if (tipo === 'anotar') {
-        const linha = acharLinha(st.anotando, donoDe(modo)); if (!linha) return;
-        await gravarNota(linha.n, $('#nota-texto').value.trim(), st.pessoa);
+        const ed = st.anotando; if (!ed) return;
+        const linha = acharLinha(ed.chave, ed.dono); if (!linha) return;
+        const texto = $('#nota-texto').value.trim();
+        if (!texto) { toast('Escreva o texto da anotação.'); return; }
+        if (ed.id != null) await editarAnotacao(ed.dono, linha.n, ed.id, texto); else await inserirAnotacao(ed.dono, linha.n, texto);
         st.anotando = null; st.notaRascunho = ''; toast('Anotação salva.'); render();
       } else if (tipo === 'devolver') {
         const linha = acharLinha(st.devolvendo, donoDe(modo)); if (!linha) return;
@@ -1209,7 +1321,7 @@
       if (e.target.closest('[data-acao="sair-ver-como"]')) sairVerComo();
     });
     $('#ver-como').addEventListener('change', e => {
-      st.anotando = null; st.devolvendo = null; st.modal = null;
+      st.anotando = null; st.confirmaNota = null; st.devolvendo = null; st.modal = null;
       if (e.target.value) { st.verComo = e.target.value; st.aba = 'fila'; zerarMagVis(); render(); } else sairVerComo();
     });
     $('#abas').addEventListener('click', e => {
@@ -1218,7 +1330,7 @@
       if (st.area === 'produtividade') { st.abaProd = b.dataset.aba; render(); return; }
       if (st.area === 'emails') { st.abaEmails = b.dataset.aba; render(); return; }
       st.aba = b.dataset.aba; guardar('fila.aba.' + st.email, st.aba);
-      st.anotando = null; st.devolvendo = null; render();
+      st.anotando = null; st.confirmaNota = null; st.devolvendo = null; render();
     });
     $('#v-estado').addEventListener('click', e => {
       const a = e.target.closest('[data-acao]'); if (!a) return;
@@ -1289,7 +1401,7 @@
     st.sb.auth.onAuthStateChange((evento) => {
       if (evento === 'SIGNED_OUT' && st.estado === 'ok') setTimeout(() => { reiniciarEstado(); st.estado = 'login'; render(); }, 0);
     });
-    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, atualizar, baixar, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS, PERFIS_PRODUTIVIDADE, PERFIS_EMAILS, PERFIS_PARADOS, prazosRetorno, numeroHTML, MAGISTRADOS, magDoCargo, magPadrao, magOffDe, noPadraoMag, magPassa, alternarMag, letraMagHTML, faixaMagHTML });
+    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, atualizar, baixar, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS, PERFIS_PRODUTIVIDADE, PERFIS_EMAILS, PERFIS_PARADOS, prazosRetorno, anotadosDe, marcasVigentesTodas, numeroHTML, MAGISTRADOS, magDoCargo, magPadrao, magOffDe, noPadraoMag, magPassa, alternarMag, letraMagHTML, faixaMagHTML });
     iniciarSessao();
   }
   iniciar();

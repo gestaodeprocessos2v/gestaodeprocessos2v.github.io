@@ -77,7 +77,7 @@
 
   function tela() {
     const f = st.fParados;
-    const base = R.linhasPorSetor({ filas: st.filas, setores: CHAVES_SETOR, tarefas: st.mapaTarefas, marcas: st.marcas, urgencias: st.urgencias, prazos: P.prazosRetorno() });
+    const base = R.linhasPorSetor({ filas: st.filas, setores: CHAVES_SETOR, tarefas: st.mapaTarefas, marcas: P.marcasVigentesTodas(), urgencias: st.urgencias, prazos: P.prazosRetorno() });
     const nenhumMag = magOffDe(f).length >= MAGISTRADOS.length;
     // ign: o filtro que fica de fora, para contar as opções dele com os outros aplicados.
     const passa = (l, ign) => (ign === 'mag' || (!nenhumMag && magPassa(f, l.mag)))

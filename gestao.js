@@ -234,8 +234,11 @@
       const alvo = new Set(fixa ? [fixa] : [...existentes, ...Object.keys(porPessoa)].filter(p => !fixos[p] && !idsEspeciais.has(p)));
       const gravar = Object.entries(porPessoa).filter(([p]) => (fixa || !fixos[p]) && !idsEspeciais.has(p));
       const doPessoa = (lista, p) => (st.filas.find(r => r.lista === lista && r.pessoa === p) || {}).itens || [];
-      // Processo com anotação e não concluído não some quando sai do arquivo novo: fica (como "Saiu da lista") até ser concluído ou a anotação ser excluída.
-      const anotados = (p, presentes) => R.guardarAnotados([...doPessoa('semanal', p), ...doPessoa('diaria', p)], presentes, st.notas[p], st.marcas[p]);
+      // Processo com anotação e não concluído não some quando sai do arquivo novo: fica (como "Saiu da lista") até ser concluído ou deixar de haver anotação que o segure.
+      const anotados = (p, presentes) => {
+        const antigos = [...doPessoa('semanal', p), ...doPessoa('diaria', p)], d = P.anotadosDe(p, antigos);
+        return R.guardarAnotados(antigos, presentes, d.notas, d.marcas);
+      };
       const rows = gravar.map(([p, itens]) => {
         const vistos = new Map([...doPessoa('semanal', p), ...doPessoa('diaria', p)].map(i => [R.chaveItem(i), i.vistoEm]));
         const marcados = itens.map(it => R.tipoItem(it, st.mapaTarefas) !== 'normal' ? Object.assign({}, it, { vistoEm: vistos.get(R.chaveItem(it)) || agora }) : it);

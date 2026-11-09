@@ -559,6 +559,64 @@
     return [...por.values()].map(it => Object.assign({}, it, { fora: true }));
   }
 
+  // ---------- anotações (lista por painel e processo) ----------
+  // Anotação: { autorPessoa, autorNome, texto, em, editadaEm, reabre }, com datas em milissegundos.
+  // pessoa: dono do painel; dispensaEm: quando ele clicou em "Não priorizar" naquele processo (ou vazio).
+  const anotDoDono = (pessoa, a) => !!a.autorPessoa && a.autorPessoa === pessoa;
+  // A criação conta se a anotação é do dono, se não houve dispensa ou se veio depois dela.
+  const valeCriacao = (pessoa, a, dispensaEm) => anotDoDono(pessoa, a) || dispensaEm == null || a.em > dispensaEm;
+  const valeEdicao = (a, dispensaEm) => a.editadaEm != null && (dispensaEm == null || a.editadaEm > dispensaEm);
+
+  // segura: mantém na fila o processo que saiu da lista. sobe: leva ao topo da seção. Edição depois da dispensa só sobe.
+  // terceiros: há anotação de outra pessoa que está valendo (é o que o botão "Não priorizar" dispensa).
+  function estadoAnotacoes(pessoa, anotacoes, dispensaEm) {
+    let segura = false, terceiros = false, dataOrdem = null;
+    for (const a of anotacoes || []) {
+      const criacao = valeCriacao(pessoa, a, dispensaEm);
+      if (!criacao && !valeEdicao(a, dispensaEm)) continue;
+      if (criacao) segura = true;
+      if (!anotDoDono(pessoa, a)) terceiros = true;
+      const data = Math.max(a.em, a.editadaEm || 0);
+      if (dataOrdem == null || data > dataOrdem) dataOrdem = data;
+    }
+    return { segura, sobe: dataOrdem != null, dataOrdem, terceiros };
+  }
+
+  // A conclusão deixa de valer se, depois dela, veio anotação que reabre (não automática nem migrada) ou alguma edição.
+  function conclusaoReaberta(pessoa, marca, anotacoes, dispensaEm) {
+    if (!marca || marca.desfeito) return false;
+    return (anotacoes || []).some(a => {
+      const criacao = valeCriacao(pessoa, a, dispensaEm);
+      if (a.reabre && criacao && a.em > marca.em) return true;
+      return a.editadaEm != null && a.editadaEm > marca.em && (criacao || valeEdicao(a, dispensaEm));
+    });
+  }
+
+  // Marcas como devem ser lidas: a reaberta por anotação, se o processo está na lista atual, conta como desfeita ("Concluído antes em…").
+  // É um cálculo: a marca gravada não muda; concluir de novo grava uma data nova, posterior à anotação.
+  function marcasVigentes(pessoa, marcas, itens, anotacoes, dispensas) {
+    const atuais = new Set((itens || []).filter(it => !it.fora).map(chaveItem));
+    const an = anotacoes || {}, di = dispensas || {};
+    const out = {};
+    for (const [chave, m] of Object.entries(marcas || {})) {
+      const num = chave.split('|')[0];
+      out[chave] = atuais.has(chave) && conclusaoReaberta(pessoa, m, an[num], di[num]) ? Object.assign({}, m, { desfeito: true }) : m;
+    }
+    return out;
+  }
+
+  // Selo "Nova anotação": de outra pessoa, criada ou editada desde a última visita e ainda valendo.
+  function temAnotacaoNova(pessoa, anotacoes, dispensaEm, desde) {
+    return (anotacoes || []).some(a => {
+      if (anotDoDono(pessoa, a)) return false;
+      const criacao = valeCriacao(pessoa, a, dispensaEm), edicao = valeEdicao(a, dispensaEm);
+      return (criacao && a.em > desde) || (edicao && a.editadaEm > desde);
+    });
+  }
+
+  const carimboAnotacao = (a, fmt) => `[${a.autorNome || '—'}, em ${fmt(a.em)}${a.editadaEm ? ', editada em ' + fmt(a.editadaEm) : ''}]`;
+  const textoAnotacoes = (anotacoes, fmt) => (anotacoes || []).map(a => carimboAnotacao(a, fmt) + ' ' + a.texto).join('\n');
+
   // Conclusão com prazo: processo da lista concluído que continua na mesma tarefa, com a mesma chegada, volta à fila
   // depois de N dias corridos da conclusão (prazos.urgente para urgentes; prazos.demais para os outros). Não vence:
   // sem prazos (testes antigos), conclusão de quem devolveu o processo (env ou dev; o envio para outra pessoa vence normalmente) e prazo zerado.
@@ -715,7 +773,7 @@
 
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, regrasDoSetor, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
-    atribuir, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, comparar, chaveItem,
+    atribuir, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, estadoAnotacoes, conclusaoReaberta, marcasVigentes, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
