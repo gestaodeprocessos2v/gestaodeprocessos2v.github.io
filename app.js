@@ -543,7 +543,7 @@
     const atual = st.area === 'metas' ? st.abaMetas : st.area === 'produtividade' ? st.abaProd : st.area === 'emails' ? st.abaEmails : st.aba;
     const nav = $('#abas');
     nav.hidden = abas.length < 2;
-    const rot = { fila: 'Fila', eventual: 'Eventual', geral: 'Geral', gestao: 'Gestão', visao: 'Visão geral', pendentes: 'Pendentes', resumo: 'Visão geral', pessoas: 'Por pessoa', emsub: 'Juíza Substituta', emtit: 'Juiz Titular', emnl: 'Não localizado', emsec: 'Secretaria', emdem: 'Demais', emgest: 'Só gestor' };
+    const rot = { fila: 'Fila', eventual: 'Eventual', geral: 'Geral', gestao: 'Gestão', visao: 'Visão geral', pendentes: 'Pendentes', resumo: 'Visão geral', pessoas: 'Por pessoa', emsub: 'Juíza Substituta', emtit: 'Juiz Titular', emnl: 'Não localizado', emsec: 'Secretaria', emdem: 'Demais', emgest: 'Só gestor', emanexo: 'Anexos para juntar', emdesp: 'Despacho com o juiz' };
     const nAvisos = outraArea ? 0 : urgenciasDoGestor();
     const h = abas.map(a => `<button class="aba" role="tab" id="aba-${a}" aria-selected="${a === atual}" data-aba="${a}">${rot[a]}${a === 'gestao' && nAvisos ? ` <span class="contagem">${nAvisos}</span>` : ''}${st.area === 'emails' && window.PAINEL.emailsNaoLidos && window.PAINEL.emailsNaoLidos(a) ? ` <span class="contagem">${window.PAINEL.emailsNaoLidos(a)}</span>` : ''}</button>`).join('');
     if (nav.dataset.h !== h) { nav.innerHTML = h; nav.dataset.h = h; }

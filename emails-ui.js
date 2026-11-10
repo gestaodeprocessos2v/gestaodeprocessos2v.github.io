@@ -1,6 +1,8 @@
 /* Fila de Trabalho da Vara — área "E-mails" (gestor, diretor e magistrado(a)).
    Os e-mails são gravados todo dia útil pela rotina das 7h30; aqui só se lê (e o gestor ou o diretor definem o cargo quando não identificado).
-   Quem vê o quê é decidido pelo banco (RLS): gestor vê tudo; diretor, os e-mails da 2vara@; magistrado(a), só as minutas do próprio cargo. */
+   Quem vê o quê é decidido pelo banco (RLS): gestor vê tudo; diretor, os e-mails da 2vara@; magistrado(a), só as minutas do próprio cargo.
+   Cada card tem uma aba de origem; o gestor vê também, nas abas "Anexos para juntar" e "Despacho com o juiz", os cards que se encaixam nelas
+   (sem saírem da aba de origem). Despacho com o juiz = o advogado pede para tratar do processo com o(a) magistrado(a), não o despacho-documento. */
 (function () {
   'use strict';
   const P = window.PAINEL;
@@ -16,7 +18,8 @@
 
   const ROTULO_CARGO = { T: 'Juiz Titular', S: 'Juíza Substituta' };
   const ROTULO_CAT = { minuta: 'Minuta', cumprimento: 'Cumprimento pela secretaria', informacao: 'Informação ou orientação', juntada: 'Juntada', chamado: 'Chamado', outros: 'Outros' };
-  const ABAS = [['emsub', 'Juíza Substituta'], ['emtit', 'Juiz Titular'], ['emnl', 'Não localizado'], ['emsec', 'Secretaria'], ['emdem', 'Demais'], ['emgest', 'Só gestor']];
+  const ABAS = [['emsub', 'Juíza Substituta'], ['emtit', 'Juiz Titular'], ['emnl', 'Não localizado'], ['emsec', 'Secretaria'], ['emdem', 'Demais'], ['emgest', 'Só gestor'], ['emanexo', 'Anexos para juntar'], ['emdesp', 'Despacho com o juiz']];
+  const ABAS_SO_GESTOR = ['emgest', 'emanexo', 'emdesp'];
 
   // ---------- estado ----------
   const E = () => st.emails || (st.emails = { itens: [], lidos: new Set(), carregado: false, erro: false, busca: '', modal: null, corpos: {},
@@ -25,7 +28,7 @@
   // Abas que a pessoa enxerga. Magistrado(a): só a aba do seu cargo (o banco só entrega as minutas dela).
   P.abasEmails = function () {
     if (st.perfil === 'gestor') return ABAS.map(a => a[0]);
-    if (st.perfil === 'diretor') return ABAS.filter(a => a[0] !== 'emgest').map(a => a[0]);
+    if (st.perfil === 'diretor') return ABAS.filter(a => !ABAS_SO_GESTOR.includes(a[0])).map(a => a[0]);
     return [st.magistrado === 'T' ? 'emtit' : 'emsub'];
   };
 
@@ -36,10 +39,13 @@
     try {
       const lerOpc = (tabela, campos) => todas((a, b) => st.sb.from(tabela).select(campos).order('chave').range(a, b))
         .then(r => ({ ok: true, r }), e => { console.error(tabela + ' indisponível', e); return { ok: false, r: [] }; });
+      const CAMPOS = 'msg_id,publico,numero,categoria,cargo,tarefa,entrada_tarefa,urgente,perecimento,pedido,ato_provavel,remetente,assunto,recebido_em,web_link,anexo_juntar,solucionado,nao_localizado';
+      const lerResumo = campos => todas((a, b) => st.sb.from('emails_resumo').select(campos)
+        .order('recebido_em', { ascending: false }).order('msg_id').range(a, b));
+      // despacho_juiz vem da rotina das 7h30; se a coluna ainda não existir no banco, lê sem ela (a regra do painel cobre).
+      const resumo = lerResumo(CAMPOS + ',despacho_juiz').catch(e => { console.warn('emails_resumo sem despacho_juiz', e); return lerResumo(CAMPOS); });
       const [itens, lidos, conc, notas] = await Promise.all([
-        todas((a, b) => st.sb.from('emails_resumo')
-          .select('msg_id,publico,numero,categoria,cargo,tarefa,entrada_tarefa,urgente,perecimento,pedido,ato_provavel,remetente,assunto,recebido_em,web_link,anexo_juntar,solucionado,nao_localizado')
-          .order('recebido_em', { ascending: false }).order('msg_id').range(a, b)),
+        resumo,
         todas((a, b) => st.sb.from('emails_lidos').select('msg_id').eq('email', st.email).order('msg_id').range(a, b)),
         lerOpc('emails_conclusao', 'chave,concluido_por,em'),
         lerOpc('emails_notas', 'chave,texto,por,em'),
@@ -89,9 +95,14 @@
     else if (minuta || nl) aba = 'emnl';
     else if (sec) aba = 'emsec';
     else aba = 'emdem';
+    // Abas extras (só gestor): o card continua na aba de origem e aparece também nelas.
+    const anexoPend = msgs.some(m => m.anexo_juntar && !m.solucionado);
+    for (const m of msgs) m.despacho = !!m.despacho_juiz || P.R.pedidoDespacho(`${m.assunto || ''} ${m.pedido || ''}`);
+    const despacho = msgs.some(m => m.despacho);
+    const abas = [aba, anexoPend && 'emanexo', despacho && 'emdesp'].filter(Boolean);
     const entrada = rep.entrada_tarefa ? Date.parse(rep.entrada_tarefa) : null;
     const ck = P.R.chaveEmail(msgs[0]), conclusao = E().conclusoes[ck] || null;
-    return { chave: msgs[0].msg_id, ck, conclusao, concluido: P.R.emailConcluido(msgs, conclusao), numero: rep.numero, msgs, rep, cargo, aba, entrada, urgente: msgs.some(m => m.urgente), anexo: msgs.some(m => m.anexo_juntar), ultimo: Date.parse(rep.recebido_em) };
+    return { chave: msgs[0].msg_id, ck, conclusao, concluido: P.R.emailConcluido(msgs, conclusao), numero: rep.numero, msgs, rep, cargo, aba, abas, despacho, entrada, urgente: msgs.some(m => m.urgente), anexo: msgs.some(m => m.anexo_juntar), ultimo: Date.parse(rep.recebido_em) };
   }
   // Marca em cada e-mail se o card dele está concluído (a automação de juntada lê esse campo para pular os já resolvidos).
   function marcarConcluidos() { for (const g of grupos()) for (const m of g.msgs) m.concluido = g.concluido; }
@@ -102,14 +113,16 @@
   P.emailsNaoLidos = function (aba) {
     if (!podeVer() || !st.emails || !st.emails.carregado) return 0;
     let n = 0;
-    for (const g of grupos()) if (!g.concluido && (!aba || g.aba === aba) && P.abasEmails().includes(g.aba)) n += nNaoLidas(g);
+    // Sem aba (total do menu): conta pela aba de origem, para o mesmo card não entrar duas vezes.
+    const minhas = P.abasEmails();
+    for (const g of grupos()) if (!g.concluido && (aba ? g.abas.includes(aba) && minhas.includes(aba) : minhas.includes(g.aba))) n += nNaoLidas(g);
     return n;
   };
 
   // ---------- tela ----------
   function filtrar(lista, aba) {
     const q = norm(E().busca).trim();
-    return lista.filter(g => g.aba === aba && (E().concl || !g.concluido) && (!q || norm([g.numero, fmtCNJ(g.numero), g.rep.tarefa, ...g.msgs.map(m => `${m.remetente} ${m.pedido} ${m.assunto}`)].join(' ')).includes(q)))
+    return lista.filter(g => g.abas.includes(aba) && (E().concl || !g.concluido) && (!q || norm([g.numero, fmtCNJ(g.numero), g.rep.tarefa, ...g.msgs.map(m => `${m.remetente} ${m.pedido} ${m.assunto}`)].join(' ')).includes(q)))
       .sort((a, b) => (b.urgente - a.urgente) || ((a.entrada || Infinity) - (b.entrada || Infinity)) || (b.ultimo - a.ultimo));
   }
 
@@ -138,7 +151,7 @@
       : `<span class="mono em-num">${esc(num)}</span>`;
     const tarefa = r.tarefa ? `${esc(r.tarefa)}${r.entrada_tarefa ? ` <span class="sub">[desde ${esc(dataBR(Date.parse(r.entrada_tarefa)))}]</span>` : ''}` : 'não localizada no painel';
     const msgs = g.msgs.map(m => `<div class="em-msg">
-        <div><b>${esc(dataHoraBR(Date.parse(m.recebido_em)))}</b> · ${esc(m.remetente || '—')}${naoLida(m) ? ' <span class="selo novo">Novo</span>' : ''}${m.anexo_juntar ? ' <span class="selo prioritaria">📎🟥 Anexo para juntar</span>' : ''}</div>
+        <div><b>${esc(dataHoraBR(Date.parse(m.recebido_em)))}</b> · ${esc(m.remetente || '—')}${naoLida(m) ? ' <span class="selo novo">Novo</span>' : ''}${m.anexo_juntar ? ' <span class="selo prioritaria">📎🟥 Anexo para juntar</span>' : ''}${m.despacho ? ' <span class="selo urgente">⚖️ Despacho com o juiz</span>' : ''}</div>
         ${m.pedido ? `<div>${esc(m.pedido)}</div>` : ''}
         <div class="linha-botoes"><button class="btn" type="button" data-eacao="ver" data-id="${esc(m.msg_id)}">Ver mensagem</button>${gestor && m.web_link ? `<a class="btn primario" href="${esc(m.web_link)}" target="_blank" rel="noopener noreferrer">Abrir no Outlook</a>` : ''}</div>
       </div>`).join('');
@@ -154,7 +167,7 @@
       ? (g.conclusao ? `<button class="btn" type="button" data-eacao="desfazer" data-ck="${esc(g.ck)}">Desfazer</button>` : '')
       : `<button class="btn feito" type="button" data-eacao="concluir" data-ck="${esc(g.ck)}">Marcar como concluído</button>`;
     return `<article class="painel em-card${g.urgente ? ' t-urgente' : ''}${g.concluido ? ' concluido' : ''}">
-      <h3>${numH} ${seloCargo(g)}${g.urgente ? ' <span class="selo urgente">Urgente</span>' : ''}${novo ? ' <span class="selo novo">Novo</span>' : ''}<span class="sub">${tipo}</span></h3>
+      <h3>${numH} ${seloCargo(g)}${g.urgente ? ' <span class="selo urgente">Urgente</span>' : ''}${g.despacho ? ' <span class="selo urgente">⚖️ Despacho com o juiz</span>' : ''}${novo ? ' <span class="selo novo">Novo</span>' : ''}<span class="sub">${tipo}</span></h3>
       <p><b>Tarefa atual:</b> ${tarefa}</p>
       ${r.ato_provavel ? `<p><b>Ato provável:</b> ${esc(r.ato_provavel)}</p>` : ''}
       ${r.perecimento ? `<p><b>Perecimento:</b> ${esc(r.perecimento)}</p>` : ''}

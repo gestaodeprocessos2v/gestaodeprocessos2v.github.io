@@ -806,6 +806,22 @@
     return !lista.some(m => Date.parse(m.recebido_em) > em);
   }
 
+  // Pedido de "despacho com o juiz": o advogado quer tratar do processo diretamente com o(a) magistrado(a).
+  // Não confundir com o despacho-documento ("conforme despacho", "cumprimento do despacho de id", "aguardando despacho do juiz").
+  // "Solicito despacho" sozinho fica de fora de propósito: pode ser o pedido do documento.
+  // Reserva do painel: a rotina das 7h30 lê o e-mail inteiro e grava emails_resumo.despacho_juiz; aqui só se olha assunto e pedido.
+  const PADROES_DESPACHO = [
+    /\bdespachar (com|pessoalmente|virtualmente|presencialmente)\b/,
+    /\b(gostaria|desejo|quero|pretendo|possibilidade) de despachar\b/,
+    /\b(agendar|agendamento|marcar|marcacao|designar|combinar)( (de|o|um|uma))* despacho\b/,
+    /\bdespacho (virtual|presencial|telepresencial|por video|online|on-line)\b/,
+    /\b(reuniao|conversa|despacho|atendimento)\b(?: [^ ]+){0,3}? com (?:(?:o|a|os|as)(?:\/(?:o|a))? )?(?:(?:senhor|senhora|sr|sra|mm|exmo|exma|douto|douta)\.? )?(juiz|juiza|magistrad|excelencia|dr\b|dra\b)/,
+  ];
+  const pedidoDespacho = texto => {
+    const t = normTexto(texto).replace(/\bminutas? de despacho\b/g, 'minuta');   // a minuta é o documento
+    return !!t && PADROES_DESPACHO.some(re => re.test(t));
+  };
+
   function slug(s) {
     return semAcento(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'pessoa';
   }
@@ -813,6 +829,6 @@
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, regrasDoSetor, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
     atribuir, setorPorExcecao, causaExcecao, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, estadoAnotacoes, conclusaoReaberta, marcasVigentes, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, comparar, chaveItem,
-    paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido,
+    paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido, pedidoDespacho,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
