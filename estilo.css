@@ -229,6 +229,7 @@ ol.linhas { list-style: none; margin: 0; padding: 0; }
 .selo.devolvido { background: var(--dev-bg); color: var(--dev); }
 .selo.novo { background: var(--novo); color: var(--surface); }
 .selo.sigilo { background: var(--sunken); color: var(--muted); border: 1px solid var(--line); }
+.selo.em-aba { background: var(--surface); color: var(--pri); border: 1px solid var(--pri); }   /* busca em todas as abas: onde o card mora */
 .nota { margin-top: 6px; font-size: 12.5px; padding: 5px 8px; border-radius: 6px; background: var(--sunken); }
 /* Card do Jurisdição Delegada (processos de Pagamentos): resumo das RPV/PRC; o selo PRC usa a cor viva própria (--jd). */
 .jd-card { margin-top: 6px; font-size: 12.5px; padding: 5px 8px; border-radius: 6px; background: var(--sunken); border-left: 3px solid var(--line); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }

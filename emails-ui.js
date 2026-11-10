@@ -120,11 +120,18 @@
   };
 
   // ---------- tela ----------
+  const termoBusca = () => norm(E().busca).trim();
+  const casaBusca = (g, q) => norm([g.numero, fmtCNJ(g.numero), g.rep.tarefa, ...g.msgs.map(m => `${m.remetente} ${m.pedido} ${m.assunto}`)].join(' ')).includes(q);
+  // Sem busca: só a aba selecionada. Com busca: todas as abas que a pessoa enxerga, cada card uma vez.
   function filtrar(lista, aba) {
-    const q = norm(E().busca).trim();
-    return lista.filter(g => g.abas.includes(aba) && (E().concl || !g.concluido) && (!q || norm([g.numero, fmtCNJ(g.numero), g.rep.tarefa, ...g.msgs.map(m => `${m.remetente} ${m.pedido} ${m.assunto}`)].join(' ')).includes(q)))
+    const q = termoBusca(), minhas = P.abasEmails();
+    return lista.filter(g => (q ? g.abas.some(a => minhas.includes(a)) : g.abas.includes(aba)) && (E().concl || !g.concluido) && (!q || casaBusca(g, q)))
       .sort((a, b) => (b.urgente - a.urgente) || ((a.entrada || Infinity) - (b.entrada || Infinity)) || (b.ultimo - a.ultimo));
   }
+
+  // Na busca em todas as abas: onde o card mora (origem primeiro, depois as abas extras que a pessoa vê).
+  const ROTULO_ABA = Object.fromEntries(ABAS);
+  const selosAba = g => { const minhas = P.abasEmails(); return g.abas.filter(a => minhas.includes(a)).map(a => ` <span class="selo em-aba">${esc(ROTULO_ABA[a])}</span>`).join(''); };
 
   const seloCargo = g => g.cargo ? `<span class="selo sigilo">${ROTULO_CARGO[g.cargo]}</span>` : `<span class="selo sigilo">Cargo não identificado</span>`;
 
@@ -167,7 +174,7 @@
       ? (g.conclusao ? `<button class="btn" type="button" data-eacao="desfazer" data-ck="${esc(g.ck)}">Desfazer</button>` : '')
       : `<button class="btn feito" type="button" data-eacao="concluir" data-ck="${esc(g.ck)}">Marcar como concluído</button>`;
     return `<article class="painel em-card${g.urgente ? ' t-urgente' : ''}${g.concluido ? ' concluido' : ''}">
-      <h3>${numH} ${seloCargo(g)}${g.urgente ? ' <span class="selo urgente">Urgente</span>' : ''}${g.despacho ? ' <span class="selo urgente">⚖️ Despacho com o juiz</span>' : ''}${novo ? ' <span class="selo novo">Novo</span>' : ''}<span class="sub">${tipo}</span></h3>
+      <h3>${numH} ${termoBusca() ? selosAba(g) : ''} ${seloCargo(g)}${g.urgente ? ' <span class="selo urgente">Urgente</span>' : ''}${g.despacho ? ' <span class="selo urgente">⚖️ Despacho com o juiz</span>' : ''}${novo ? ' <span class="selo novo">Novo</span>' : ''}<span class="sub">${tipo}</span></h3>
       <p><b>Tarefa atual:</b> ${tarefa}</p>
       ${r.ato_provavel ? `<p><b>Ato provável:</b> ${esc(r.ato_provavel)}</p>` : ''}
       ${r.perecimento ? `<p><b>Perecimento:</b> ${esc(r.perecimento)}</p>` : ''}
@@ -189,9 +196,12 @@
     const todos = grupos(), lista = filtrar(todos, st.abaEmails);
     const foco = document.activeElement && document.activeElement.id, pos = foco === 'em-busca' ? document.activeElement.selectionStart : null;
     const ultima = s.itens.length ? Date.parse(s.itens[0].recebido_em) : null;
-    const corpo = lista.length ? lista.map(cartao).join('')
-      : vazio(s.itens.length ? 'Nada nesta aba' : 'Ainda não há e-mails', s.itens.length ? 'Nenhum e-mail corresponde a esta aba e à busca.' : 'A rotina das 7h30 grava aqui os e-mails de cada dia útil.');
-    v.innerHTML = `<div class="em-barra"><input type="search" id="em-busca" placeholder="Buscar por processo, remetente ou pedido" value="${esc(s.busca)}" aria-label="Buscar nos e-mails">${s.concAtiva ? `<label class="small em-mostrar"><input type="checkbox" id="em-mostrar-concl"${s.concl ? ' checked' : ''}> Mostrar concluídos</label>` : ''}</div>
+    const buscando = !!termoBusca(), rotAba = (ABAS.find(a => a[0] === st.abaEmails) || [])[1] || '';
+    const cabBusca = buscando && lista.length ? `<p class="atualizacao"><b>${lista.length} resultado${lista.length === 1 ? '' : 's'} em todas as abas</b> · apague a busca para voltar à aba ${esc(rotAba)}.</p>` : '';
+    const corpo = lista.length ? cabBusca + lista.map(cartao).join('')
+      : buscando ? vazio('Nada encontrado', 'Nenhum e-mail corresponde à busca em nenhuma aba.')
+      : vazio(s.itens.length ? 'Nada nesta aba' : 'Ainda não há e-mails', s.itens.length ? 'Nenhum e-mail corresponde a esta aba.' : 'A rotina das 7h30 grava aqui os e-mails de cada dia útil.');
+    v.innerHTML = `<div class="em-barra"><input type="search" id="em-busca" placeholder="Buscar em todas as abas por processo, remetente ou pedido" value="${esc(s.busca)}" aria-label="Buscar nos e-mails">${s.concAtiva ? `<label class="small em-mostrar"><input type="checkbox" id="em-mostrar-concl"${s.concl ? ' checked' : ''}> Mostrar concluídos</label>` : ''}</div>
       ${ultima ? `<p class="atualizacao">Último e-mail gravado em ${esc(dataHoraBR(ultima))} · resumo diário gerado pela rotina das 7h30.</p>` : ''}
       <div class="em-lista">${corpo}</div>${renderModalEmail()}`;
     if (foco === 'em-busca') { const b = $('#em-busca'); if (b) { b.focus(); if (pos != null) b.setSelectionRange(pos, pos); } }
