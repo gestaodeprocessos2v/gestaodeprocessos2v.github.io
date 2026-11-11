@@ -623,11 +623,13 @@
   // Jurisdição Delegada: só para processos de tarefas de Pagamentos. Item do JD do processo (ou undefined).
   const ehPagamentos = l => l.s === 'pagamentos';
   const itemJD = l => (st.jd && st.jd.itens ? st.jd.itens[R.soDigitos(l.n)] : undefined);
-  // Filtro "JD": prc (tem precatório), prc-pago (pelo menos 1 PRC pago), rpv-paga (pelo menos 1 RPV paga e nenhum PRC,
-  // sem contar PRC cancelado), rejeitada (tem rejeitada pelo TRF), sem (processo de Pagamentos sem RPV/PRC no JD).
-  // prc-pago e rpv-paga usam a contagem por tipo (`tp`); um envio do JD anterior a ela não entra nesses dois filtros.
-  const OPCOES_JD = [['prc', 'Com precatório (PRC)'], ['prc-pago', 'Com precatório pago'], ['rpv-paga', 'Com RPV paga, sem precatório'], ['rejeitada', 'Com rejeitada pelo TRF'], ['sem', 'Sem RPV/PRC no JD']];
-  const pagasDoTipo = (it, tipo) => (it.tp && it.tp[tipo] && it.tp[tipo]['Paga']) || 0;
+  // Filtro "JD": prc (tem precatório), prc-assinado (pelo menos 1 PRC assinado), prc-pago (pelo menos 1 PRC pago),
+  // rpv-assinada (pelo menos 1 RPV assinada), rpv-paga (pelo menos 1 RPV paga e nenhum PRC, sem contar PRC cancelado),
+  // rejeitada (tem rejeitada pelo TRF), sem (processo de Pagamentos sem RPV/PRC no JD).
+  // Os filtros por tipo usam a contagem por tipo (`tp`); um envio do JD anterior a ela não entra neles.
+  const OPCOES_JD = [['prc', 'Com precatório (PRC)'], ['prc-assinado', 'Com precatório (PRC) assinado'], ['prc-pago', 'Com precatório pago'], ['rpv-assinada', 'Com RPV assinada'], ['rpv-paga', 'Com RPV paga, sem precatório'], ['rejeitada', 'Com rejeitada pelo TRF'], ['sem', 'Sem RPV/PRC no JD']];
+  const doTipo = (it, tipo, sit) => (it.tp && it.tp[tipo] && it.tp[tipo][sit]) || 0;
+  const pagasDoTipo = (it, tipo) => doTipo(it, tipo, 'Paga');
   const prcNaoCancelados = it => Object.entries((it.tp && it.tp.PRC) || {}).reduce((s, [sit, n]) => s + (sit === 'Cancelada' ? 0 : n), 0);
   function casaJD(l, chave) {
     if (!chave) return true;
@@ -636,6 +638,8 @@
     if (chave === 'sem') return !it;
     if (!it) return false;
     if (chave === 'prc') return it.prc > 0;
+    if (chave === 'prc-assinado') return doTipo(it, 'PRC', 'Assinada') > 0;
+    if (chave === 'rpv-assinada') return doTipo(it, 'RPV', 'Assinada') > 0;
     if (chave === 'prc-pago') return pagasDoTipo(it, 'PRC') > 0;
     if (chave === 'rpv-paga') return !!it.tp && pagasDoTipo(it, 'RPV') > 0 && prcNaoCancelados(it) === 0;
     return !!(it.s && it.s['Rejeitada pelo TRF'] > 0);
