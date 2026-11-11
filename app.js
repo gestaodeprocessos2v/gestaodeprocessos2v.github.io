@@ -623,15 +623,22 @@
   // Jurisdição Delegada: só para processos de tarefas de Pagamentos. Item do JD do processo (ou undefined).
   const ehPagamentos = l => l.s === 'pagamentos';
   const itemJD = l => (st.jd && st.jd.itens ? st.jd.itens[R.soDigitos(l.n)] : undefined);
-  // Filtro "JD": prc (tem precatório), rejeitada (tem rejeitada pelo TRF), sem (processo de Pagamentos sem RPV/PRC no JD).
-  const OPCOES_JD = [['prc', 'Com precatório (PRC)'], ['rejeitada', 'Com rejeitada pelo TRF'], ['sem', 'Sem RPV/PRC no JD']];
+  // Filtro "JD": prc (tem precatório), prc-pago (pelo menos 1 PRC pago), rpv-paga (pelo menos 1 RPV paga e nenhum PRC,
+  // sem contar PRC cancelado), rejeitada (tem rejeitada pelo TRF), sem (processo de Pagamentos sem RPV/PRC no JD).
+  // prc-pago e rpv-paga usam a contagem por tipo (`tp`); um envio do JD anterior a ela não entra nesses dois filtros.
+  const OPCOES_JD = [['prc', 'Com precatório (PRC)'], ['prc-pago', 'Com precatório pago'], ['rpv-paga', 'Com RPV paga, sem precatório'], ['rejeitada', 'Com rejeitada pelo TRF'], ['sem', 'Sem RPV/PRC no JD']];
+  const pagasDoTipo = (it, tipo) => (it.tp && it.tp[tipo] && it.tp[tipo]['Paga']) || 0;
+  const prcNaoCancelados = it => Object.entries((it.tp && it.tp.PRC) || {}).reduce((s, [sit, n]) => s + (sit === 'Cancelada' ? 0 : n), 0);
   function casaJD(l, chave) {
     if (!chave) return true;
     if (!st.jd || !ehPagamentos(l)) return false;
     const it = itemJD(l);
     if (chave === 'sem') return !it;
     if (!it) return false;
-    return chave === 'prc' ? it.prc > 0 : !!(it.s && it.s['Rejeitada pelo TRF'] > 0);
+    if (chave === 'prc') return it.prc > 0;
+    if (chave === 'prc-pago') return pagasDoTipo(it, 'PRC') > 0;
+    if (chave === 'rpv-paga') return !!it.tp && pagasDoTipo(it, 'RPV') > 0 && prcNaoCancelados(it) === 0;
+    return !!(it.s && it.s['Rejeitada pelo TRF'] > 0);
   }
   function cardJD(l) {
     if (!st.jd || !ehPagamentos(l)) return '';
