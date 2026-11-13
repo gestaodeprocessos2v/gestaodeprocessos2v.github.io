@@ -168,28 +168,33 @@
   function resumirPJE1(linhas) {
     const cab = (linhas[0] || []).map(c => String(c == null ? '' : c).trim());
     if (CAB_PJE1.some((c, i) => cab[i] !== c)) throw new Error('Esta não é a planilha do PJE1. Ela deve ter, na primeira aba, as colunas ' + CAB_PJE1.join(', ') + '.');
-    const itens = {}, porSit = {}, naoConsultados = [], foraDoPadrao = [], vistas = new Set();
+    const itens = {}, porSit = {}, naoConsultados = [], foraDoPadrao = [], doJD = [], vistas = new Set();
+    const validas = new Set(SITUACOES_PJE1.map(s => s[0]));
     let requisicoes = 0, prc = 0, novos = 0, reaproveitados = 0;
     const txt = v => String(v == null ? '' : v).trim();
     for (const c of linhas.slice(1)) {
       const chave = soDigitos(c && c[0]);
       if (chave.length !== 20) continue;
-      const it = itens[chave] || (itens[chave] = { r: [], cons: txt(c[7]) });
-      const consulta = txt(c[6]);
+      const consulta = txt(c[6]), num = txt(c[1]), trf = txt(c[2]);
       if (consulta === 'não consultado' && !naoConsultados.includes(txt(c[0]))) naoConsultados.push(txt(c[0]));
-      const num = txt(c[1]), trf = txt(c[2]);
+      // Não consultado e sem nada gravado antes: só avisa; não vira item (o card continua "ainda não consultado").
+      if (consulta === 'não consultado' && !num && !trf && !txt(c[7])) continue;
+      const it = itens[chave] || (itens[chave] = { r: [], cons: txt(c[7]) });
       if (!num && !trf) continue;
+      if (soDigitos(num).length === 19) { doJD.push(num); continue; }   // formato do JD: já aparece no card do JD
       const id = num || trf;
       if (vistas.has(id)) continue;
       vistas.add(id);
       const reg = { num, trf, tp: txt(c[3]).toUpperCase() || 'RPV', sit: txt(c[4]), em: txt(c[5]) };
+      if (!validas.has(reg.sit)) throw new Error(`Situação desconhecida na planilha do PJE1: "${reg.sit}" (processo ${txt(c[0])}). As válidas são: ${[...validas].join(', ')}.`);
+      if (reg.tp !== 'RPV' && reg.tp !== 'PRC') throw new Error(`Tipo desconhecido na planilha do PJE1: "${reg.tp}" (processo ${txt(c[0])}). Os válidos são RPV e PRC.`);
       it.r.push(reg); requisicoes++;
       porSit[reg.sit] = (porSit[reg.sit] || 0) + 1;
       if (reg.tp === 'PRC') prc++;
       if (soDigitos(num).length !== 17) foraDoPadrao.push(num || trf);
       if (consulta === 'nova') novos++; else if (consulta === 'reaproveitada') reaproveitados++;
     }
-    return { itens, processos: Object.keys(itens).length, requisicoes, prc, porSit, novos, reaproveitados, naoConsultados, foraDoPadrao };
+    return { itens, processos: Object.keys(itens).length, requisicoes, prc, porSit, novos, reaproveitados, naoConsultados, foraDoPadrao, doJD };
   }
 
   function contarSit(rs) { const s = {}; for (const x of rs) s[x.sit] = (s[x.sit] || 0) + 1; return s; }
