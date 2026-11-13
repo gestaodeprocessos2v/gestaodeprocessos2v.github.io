@@ -94,8 +94,8 @@
     // Posição do cursor no campo em edição: o campo é recriado a cada desenho e, sem isso, o cursor volta ao início.
     let sel = null; try { const ae = document.activeElement; if (foco && ae.selectionStart != null) sel = [ae.selectionStart, ae.selectionEnd]; } catch (e) { /* campo sem cursor */ }
     // Os campos de arquivo são recriados vazios a cada desenho; os que ainda têm arquivo lido são mantidos.
-    const mi = st.metasImp, imp = st.importacao, ji = st.jdImp, pe = st.prod && st.prod.eq, pi = st.prod && st.prod.imp;
-    const manter = [['imp-arquivo', imp && (imp.resultado || imp.erro)], ['jd-arquivo', ji && (ji.resumo || ji.erro)],
+    const mi = st.metasImp, imp = st.importacao, ji = st.jdImp, p1 = st.pje1Imp, pe = st.prod && st.prod.eq, pi = st.prod && st.prod.imp;
+    const manter = [['imp-arquivo', imp && (imp.resultado || imp.erro)], ['jd-arquivo', ji && (ji.resumo || ji.erro)], ['pje1-arquivo', p1 && (p1.resumo || p1.erro)],
       ['pr-lista-arq', pe && (pe.rasc || pe.erro)], ['pr-arq', pi && (pi.rel || pi.erro)], ['metas-arq-resumo', mi && (mi.resumo || mi.erroResumo)], ['metas-arq-pend', mi && (mi.pendentes || mi.erroPendentes)]]
       .map(([id, ativo]) => { const el = ativo && document.getElementById(id); return el && el.files && el.files.length ? el : null; }).filter(Boolean);
     v.innerHTML = `<div class="paineis">
@@ -103,6 +103,7 @@
       ${painelUrgencia()}
       ${painelImportar()}
       ${P.painelJDGestao ? P.painelJDGestao() : ''}
+      ${P.painelPJE1Gestao ? P.painelPJE1Gestao() : ''}
       ${P.painelBIGestao ? P.painelBIGestao() : ''}
       ${P.painelProdGestao ? P.painelProdGestao() : ''}
       ${P.painelMetasGestao ? P.painelMetasGestao() : ''}
