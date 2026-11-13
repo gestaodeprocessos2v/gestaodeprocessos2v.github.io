@@ -152,6 +152,90 @@
     return linhas.join('\n');
   }
 
+  // ---------- Requisitórios expedidos fora do JD (PJE1), lidos do portal RPV/Precatório pelo extrator ----------
+  // Só passaram pelo PJE1 os processos que começam com "08" e os "00" de 2018 para trás (o PJe 2.x recebe "00" novos desde 2019).
+  function elegivelPJE1(numero) {
+    const d = soDigitos(numero);
+    if (d.length !== 20) return false;
+    return d.startsWith('08') || (d.startsWith('00') && Number(d.slice(9, 13)) <= 2018);
+  }
+  // Ordem do card: o que ainda pede atenção primeiro. As três últimas são definitivas (o extrator não as consulta de novo).
+  const SITUACOES_PJE1 = [['Em andamento', 'Em andamento'], ['Arquivada sem pagamento', 'Arquivadas sem pagamento'], ['Paga', 'Pagas'], ['Cancelada', 'Canceladas']];
+  const CAB_PJE1 = ['Nº do processo', 'Nº do requisitório', 'Nº no TRF5', 'Tipo', 'Situação', 'Data da situação', 'Consulta', 'Consultado em'];
+
+  // Planilha do extrator (1ª aba, colunas CAB_PJE1) -> { itens: { <20 dígitos>: { r: [{ num, trf, tp, sit, em }], cons } }, ... }.
+  // Linha sem requisitório = processo consultado sem nada no PJE1 (r vazio). "não consultado" = o extrator manteve o que já estava gravado.
+  function resumirPJE1(linhas) {
+    const cab = (linhas[0] || []).map(c => String(c == null ? '' : c).trim());
+    if (CAB_PJE1.some((c, i) => cab[i] !== c)) throw new Error('Esta não é a planilha do PJE1. Ela deve ter, na primeira aba, as colunas ' + CAB_PJE1.join(', ') + '.');
+    const itens = {}, porSit = {}, naoConsultados = [], foraDoPadrao = [], vistas = new Set();
+    let requisicoes = 0, prc = 0, novos = 0, reaproveitados = 0;
+    const txt = v => String(v == null ? '' : v).trim();
+    for (const c of linhas.slice(1)) {
+      const chave = soDigitos(c && c[0]);
+      if (chave.length !== 20) continue;
+      const it = itens[chave] || (itens[chave] = { r: [], cons: txt(c[7]) });
+      const consulta = txt(c[6]);
+      if (consulta === 'não consultado' && !naoConsultados.includes(txt(c[0]))) naoConsultados.push(txt(c[0]));
+      const num = txt(c[1]), trf = txt(c[2]);
+      if (!num && !trf) continue;
+      const id = num || trf;
+      if (vistas.has(id)) continue;
+      vistas.add(id);
+      const reg = { num, trf, tp: txt(c[3]).toUpperCase() || 'RPV', sit: txt(c[4]), em: txt(c[5]) };
+      it.r.push(reg); requisicoes++;
+      porSit[reg.sit] = (porSit[reg.sit] || 0) + 1;
+      if (reg.tp === 'PRC') prc++;
+      if (soDigitos(num).length !== 17) foraDoPadrao.push(num || trf);
+      if (consulta === 'nova') novos++; else if (consulta === 'reaproveitada') reaproveitados++;
+    }
+    return { itens, processos: Object.keys(itens).length, requisicoes, prc, porSit, novos, reaproveitados, naoConsultados, foraDoPadrao };
+  }
+
+  function contarSit(rs) { const s = {}; for (const x of rs) s[x.sit] = (s[x.sit] || 0) + 1; return s; }
+  function partesPJE1(item) {
+    const s = contarSit((item && item.r) || []), partes = [], usadas = new Set();
+    for (const [sing, plural] of SITUACOES_PJE1) if (s[sing]) { partes.push({ n: s[sing], rotulo: s[sing] > 1 ? plural : sing }); usadas.add(sing); }
+    for (const [sit, n] of Object.entries(s)) if (!usadas.has(sit)) partes.push({ n, rotulo: sit });
+    return partes;
+  }
+  function balaoPJE1(item) {
+    const rs = (item && item.r) || [];
+    if (!rs.length) return '';
+    const linhas = [`${rs.length} ${rs.length === 1 ? 'requisição' : 'requisições'} no PJE1`];
+    for (const t of ['PRC', 'RPV']) {
+      const partes = partesPJE1({ r: rs.filter(x => x.tp === t) }).map(p => `${p.n} ${p.rotulo}`);
+      if (partes.length) linhas.push(`PJE1 · ${t}: ${partes.join('; ')}`);
+    }
+    return linhas.join('\n');
+  }
+  const prcPJE1 = item => ((item && item.r) || []).filter(x => x.tp === 'PRC').length;
+
+  // Filtro "JD" com as duas origens. itJD: item do JD (ou undefined); itP: item do PJE1 (undefined = não consultado);
+  // elegivel: o processo pode ter PJE1 (senão itP é ignorado). Assinada e rejeitada só existem no JD.
+  function casaJD(chave, itJD, itP, elegivel) {
+    if (!chave) return true;
+    const rs = elegivel && itP ? (itP.r || []) : [];
+    const doTipoJD = (tipo, sit) => (itJD && itJD.tp && itJD.tp[tipo] && itJD.tp[tipo][sit]) || 0;
+    const temP = (tipo, sit) => rs.some(x => x.tp === tipo && (!sit || x.sit === sit));
+    if (chave === 'sem') return !itJD && !rs.length;
+    if (chave === 'pje1') return rs.length > 0;
+    if (chave === 'pje1-andamento') return rs.some(x => x.sit === 'Em andamento');
+    if (chave === 'prc') return !!(itJD && itJD.prc > 0) || temP('PRC');
+    if (chave === 'prc-pago') return doTipoJD('PRC', 'Paga') > 0 || temP('PRC', 'Paga');
+    if (chave === 'rpv-paga') {
+      if (itJD && !itJD.tp) return false;   // envio do JD anterior à contagem por tipo
+      const prcJD = Object.entries((itJD && itJD.tp && itJD.tp.PRC) || {}).reduce((s, [sit, n]) => s + (sit === 'Cancelada' ? 0 : n), 0);
+      const prcP = rs.filter(x => x.tp === 'PRC' && x.sit !== 'Cancelada').length;
+      return (doTipoJD('RPV', 'Paga') > 0 || temP('RPV', 'Paga')) && prcJD === 0 && prcP === 0;
+    }
+    if (!itJD) return false;
+    if (chave === 'prc-assinado') return doTipoJD('PRC', 'Assinada') > 0;
+    if (chave === 'rpv-assinada') return doTipoJD('RPV', 'Assinada') > 0;
+    if (chave === 'rejeitada') return !!(itJD.s && itJD.s['Rejeitada pelo TRF'] > 0);
+    return false;
+  }
+
   // 7º algarismo da esquerda para a direita, contando só os dígitos do número.
   function digito(numero) {
     const d = soDigitos(numero);
@@ -828,7 +912,7 @@
 
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, regrasDoSetor, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
-    atribuir, setorPorExcecao, causaExcecao, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, estadoAnotacoes, conclusaoReaberta, marcasVigentes, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, comparar, chaveItem,
+    atribuir, setorPorExcecao, causaExcecao, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, estadoAnotacoes, conclusaoReaberta, marcasVigentes, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, elegivelPJE1, SITUACOES_PJE1, CAB_PJE1, resumirPJE1, partesPJE1, balaoPJE1, prcPJE1, casaJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido, pedidoDespacho,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
