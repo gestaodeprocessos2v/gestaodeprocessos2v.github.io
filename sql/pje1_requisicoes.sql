@@ -4,7 +4,7 @@
 --          "tp": "RPV"|"PRC", "sit": "Paga"|"Cancelada"|"Arquivada sem pagamento"|"Em andamento", "em": "AAAA-MM-DD" } ],
 --          "cons": "AAAA-MM-DD" (data da consulta) } }
 -- r vazio = processo consultado sem nenhum requisitório no PJE1. Sem nome, CPF, banco, conta ou valor.
--- Mesmas regras de acesso de jd_requisicoes: leem gestor, servidor, magistrado e diretor; só o gestor grava.
+-- Mesmas regras de acesso de jd_requisicoes: leem gestor, servidor, magistrado, diretor e servidor eventual; só o gestor grava.
 create table if not exists public.pje1_requisicoes (
   id integer primary key check (id = 1),
   itens jsonb not null default '{}'::jsonb,
@@ -17,7 +17,7 @@ alter table public.pje1_requisicoes enable row level security;
 grant select, insert, update on public.pje1_requisicoes to authenticated;
 
 create policy pje1_requisicoes_le on public.pje1_requisicoes for select to authenticated
-  using ((select app.perfil_atual()) = any (array['gestor','servidor','magistrado','diretor']::perfil_acesso[]));
+  using ((select app.perfil_atual()) = any (array['gestor','servidor','magistrado','diretor','eventual']::perfil_acesso[]));
 create policy pje1_requisicoes_ins on public.pje1_requisicoes for insert to authenticated
   with check ((select app.perfil_atual()) = 'gestor'::perfil_acesso);
 create policy pje1_requisicoes_upd on public.pje1_requisicoes for update to authenticated
