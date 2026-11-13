@@ -242,6 +242,19 @@
       st.jd = r.data ? { itens: r.data.itens || {}, em: ms(r.data.importado_em) } : null;
     } catch (e) { console.warn('JD indisponível', e); st.jd = null; }
   }
+  // Requisitórios do PJE1 (pje1_requisicoes, uma linha): mesmo jeito do JD, mas independente dele.
+  async function carregarPJE1() {
+    try {
+      const d = await st.sb.from('pje1_requisicoes').select('importado_em').eq('id', 1).maybeSingle();
+      if (d.error) throw d.error;
+      if (!d.data) { st.pje1 = null; return; }
+      const em = ms(d.data.importado_em);
+      if (st.pje1 && st.pje1.em === em) return;
+      const r = await st.sb.from('pje1_requisicoes').select('itens,importado_em').eq('id', 1).maybeSingle();
+      if (r.error) throw r.error;
+      st.pje1 = r.data ? { itens: r.data.itens || {}, em: ms(r.data.importado_em) } : null;
+    } catch (e) { console.warn('PJE1 indisponível', e); st.pje1 = null; }
+  }
 
   const COL_ANOT = 'id,pessoa,numero,autor_email,autor_pessoa,autor_nome,texto,em,editada_em,reabre';
   const anotDe = r => ({ id: r.id, pessoa: r.pessoa, numero: r.numero, autorEmail: r.autor_email, autorPessoa: r.autor_pessoa, autorNome: r.autor_nome, texto: r.texto, em: ms(r.em), editadaEm: ms(r.editada_em), reabre: r.reabre });
@@ -305,6 +318,7 @@
     st.acessos = acessos;
     st.negados = (negados.data || []).map(r => ({ email: r.email, em: ms(r.em) }));
     await carregarJD();
+    await carregarPJE1();
     if (PERFIS_PRODUTIVIDADE.includes(st.perfil) && window.PAINEL.carregarProd) await window.PAINEL.carregarProd();
     if (PERFIS_EMAILS.includes(st.perfil) && window.PAINEL.carregarEmails) await window.PAINEL.carregarEmails();
     if (window.PAINEL.carregarMinutas) await window.PAINEL.carregarMinutas();
@@ -623,36 +637,40 @@
   // Jurisdição Delegada: só para processos de tarefas de Pagamentos. Item do JD do processo (ou undefined).
   const ehPagamentos = l => l.s === 'pagamentos';
   const itemJD = l => (st.jd && st.jd.itens ? st.jd.itens[R.soDigitos(l.n)] : undefined);
-  // Filtro "JD": prc (tem precatório), prc-assinado (pelo menos 1 PRC assinado), prc-pago (pelo menos 1 PRC pago),
-  // rpv-assinada (pelo menos 1 RPV assinada), rpv-paga (pelo menos 1 RPV paga e nenhum PRC, sem contar PRC cancelado),
-  // rejeitada (tem rejeitada pelo TRF), sem (processo de Pagamentos sem RPV/PRC no JD).
-  // Os filtros por tipo usam a contagem por tipo (`tp`); um envio do JD anterior a ela não entra neles.
-  const OPCOES_JD = [['prc', 'Com precatório (PRC)'], ['prc-assinado', 'Com precatório (PRC) assinado'], ['prc-pago', 'Com precatório pago'], ['rpv-assinada', 'Com RPV assinada'], ['rpv-paga', 'Com RPV paga, sem precatório'], ['rejeitada', 'Com rejeitada pelo TRF'], ['sem', 'Sem RPV/PRC no JD']];
-  const doTipo = (it, tipo, sit) => (it.tp && it.tp[tipo] && it.tp[tipo][sit]) || 0;
-  const pagasDoTipo = (it, tipo) => doTipo(it, tipo, 'Paga');
-  const prcNaoCancelados = it => Object.entries((it.tp && it.tp.PRC) || {}).reduce((s, [sit, n]) => s + (sit === 'Cancelada' ? 0 : n), 0);
+  // Requisitórios do PJE1: só para processos "08" e "00" até 2018 (R.elegivelPJE1). undefined = ainda não consultado.
+  const itemPJE1 = l => (st.pje1 && st.pje1.itens && R.elegivelPJE1(l.n) ? st.pje1.itens[R.soDigitos(l.n)] : undefined);
+  // Filtro "JD" (regras em R.casaJD, com JD e PJE1): prc (tem precatório), prc-assinado (pelo menos 1 PRC assinado), prc-pago
+  // (pelo menos 1 PRC pago), rpv-assinada, rpv-paga (pelo menos 1 RPV paga e nenhum PRC, sem contar PRC cancelado), rejeitada,
+  // pje1 (tem requisitório do PJE1), pje1-andamento (algum do PJE1 em andamento), sem (nada no JD nem no PJE1).
+  // Assinada e rejeitada só existem no JD. Os filtros por tipo usam a contagem por tipo (`tp`); um envio do JD anterior a ela não entra neles.
+  const OPCOES_JD = [['prc', 'Com precatório (PRC)'], ['prc-assinado', 'Com precatório (PRC) assinado'], ['prc-pago', 'Com precatório pago'], ['rpv-assinada', 'Com RPV assinada'], ['rpv-paga', 'Com RPV paga, sem precatório'], ['rejeitada', 'Com rejeitada pelo TRF'], ['pje1', 'Com requisitório do PJE1'], ['pje1-andamento', 'PJE1 em andamento'], ['sem', 'Sem RPV/PRC (JD e PJE1)']];
   function casaJD(l, chave) {
     if (!chave) return true;
-    if (!st.jd || !ehPagamentos(l)) return false;
-    const it = itemJD(l);
-    if (chave === 'sem') return !it;
-    if (!it) return false;
-    if (chave === 'prc') return it.prc > 0;
-    if (chave === 'prc-assinado') return doTipo(it, 'PRC', 'Assinada') > 0;
-    if (chave === 'rpv-assinada') return doTipo(it, 'RPV', 'Assinada') > 0;
-    if (chave === 'prc-pago') return pagasDoTipo(it, 'PRC') > 0;
-    if (chave === 'rpv-paga') return !!it.tp && pagasDoTipo(it, 'RPV') > 0 && prcNaoCancelados(it) === 0;
-    return !!(it.s && it.s['Rejeitada pelo TRF'] > 0);
+    if (!(st.jd || st.pje1) || !ehPagamentos(l)) return false;
+    return R.casaJD(chave, itemJD(l), itemPJE1(l), R.elegivelPJE1(l.n));
   }
   function cardJD(l) {
-    if (!st.jd || !ehPagamentos(l)) return '';
-    const it = itemJD(l);
-    if (!it) return '<div class="jd-card jd-sem"><span class="jd-rot">JD</span><span>Sem RPV/PRC no JD</span></div>';
-    const txt = R.partesJD(it).map(p => p.alerta ? `<b>${p.n} ${esc(p.rotulo)}</b>` : `${p.n} ${esc(p.rotulo)}`).join('; ');
-    const prc = it.prc > 0 ? `<span class="selo prc">${it.prc > 1 ? it.prc + ' ' : ''}PRC</span>` : '';
-    // Balão por tipo de requisitório (PRC primeiro): total de requisições e a situação de cada tipo.
-    const balao = R.balaoJD(it);
-    return `<div class="jd-card${it.prc > 0 ? ' com-prc' : ''}" tabindex="0" role="note" aria-label="${esc('JD. ' + balao.replace(/\n/g, '. '))}" data-balao="${esc(balao)}"><span class="jd-rot">JD</span><span>${txt}</span>${prc}</div>`;
+    if (!(st.jd || st.pje1) || !ehPagamentos(l)) return '';
+    const it = itemJD(l), itP = itemPJE1(l), temP = !!(itP && itP.r && itP.r.length);
+    if (!it && !temP) {
+      if (!st.jd) return '';   // sem os dados do JD não dá para dizer que não há RPV/PRC
+      const txt = itP ? 'Sem RPV/PRC (JD e PJE1)' : 'Sem RPV/PRC no JD';
+      return `<div class="jd-card jd-sem"><span class="jd-rot">JD</span><span>${txt}</span></div>`;
+    }
+    const segs = [], baloes = [];
+    if (it) {
+      segs.push(`<span class="jd-rot">JD</span><span>${R.partesJD(it).map(p => p.alerta ? `<b>${p.n} ${esc(p.rotulo)}</b>` : `${p.n} ${esc(p.rotulo)}`).join('; ')}</span>`);
+      baloes.push(R.balaoJD(it));
+    }
+    if (temP) {
+      segs.push(`<span class="jd-rot">PJE1</span><span>${R.partesPJE1(itP).map(p => `${p.n} ${esc(p.rotulo)}`).join('; ')}</span>`);
+      baloes.push(R.balaoPJE1(itP));
+    }
+    const nPrc = (it ? it.prc : 0) + R.prcPJE1(itP);
+    const prc = nPrc > 0 ? `<span class="selo prc">${nPrc > 1 ? nPrc + ' ' : ''}PRC</span>` : '';
+    // Balão por origem e tipo de requisitório (PRC primeiro): total de requisições e a situação de cada tipo.
+    const balao = baloes.join('\n');
+    return `<div class="jd-card${nPrc > 0 ? ' com-prc' : ''}" tabindex="0" role="note" aria-label="${esc('Requisitórios. ' + balao.replace(/\n/g, '. '))}" data-balao="${esc(balao)}">${segs.join('<span aria-hidden="true">·</span>')}${prc}</div>`;
   }
 
   const ICONE_EDITAR = '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 2.5l2.5 2.5L5.5 13H3v-2.5z"/></svg>';
@@ -861,7 +879,7 @@
     const opEtiquetas = etiquetas.map(x => ({ x, n: paraEtiqueta.filter(l => (l[campoEt] || []).includes(x)).length })).filter(o => o.n > 0 || o.x === f.etiqueta);
     // Filtro do JD: só aparece se há dados do JD e processos de Pagamentos na lista; mesma regra dos outros filtros (só opções com processos, com a quantidade).
     const paraJD = todas.filter(l => casa(l, 'jd'));
-    const opJD = st.jd && todas.some(ehPagamentos)
+    const opJD = (st.jd || st.pje1) && todas.some(ehPagamentos)
       ? OPCOES_JD.map(([x, rot]) => ({ x, rot, n: paraJD.filter(l => casaJD(l, x)).length })).filter(o => o.n > 0 || o.x === f.jd) : [];
     // Botões de magistrado: contados com os outros filtros aplicados, para o botão não sumir nem mudar ao ser desligado.
     const paraMag = todas.filter(l => casa(l, 'mag'));
@@ -880,7 +898,7 @@
       <button type="button" class="tile" data-acao="ir" data-tipo="normal" data-balao="Ir para esta lista" aria-description="Ir para esta lista"><span>Na fila</span><b>${conta('normal')}</b></button>
       <div class="tile concluido"><span>Concluídos</span><b>${concluidos}</b></div>
     </div>
-    <p class="atualizacao">Lista do PJe: ${ultimaLista ? dataHoraBR(ultimaLista) : 'ainda não enviada'}${st.jd && st.jd.em ? ` · JD: ${dataHoraBR(st.jd.em)}` : ''} · Clique no número para copiar.</p>
+    <p class="atualizacao">Lista do PJe: ${ultimaLista ? dataHoraBR(ultimaLista) : 'ainda não enviada'}${st.jd && st.jd.em ? ` · JD: ${dataHoraBR(st.jd.em)}` : ''}${st.pje1 && st.pje1.em ? ` · PJE1: ${dataHoraBR(st.pje1.em)}` : ''} · Clique no número para copiar.</p>
     ${faixaMag}
     <div class="filtros">
       <input type="search" id="busca" placeholder="Buscar por número, classe, tarefa ou anotação" value="${esc(f.busca)}" aria-label="Buscar">
@@ -1415,7 +1433,7 @@
     st.sb.auth.onAuthStateChange((evento) => {
       if (evento === 'SIGNED_OUT' && st.estado === 'ok') setTimeout(() => { reiniciarEstado(); st.estado = 'login'; render(); }, 0);
     });
-    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, atualizar, baixar, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS, PERFIS_PRODUTIVIDADE, PERFIS_EMAILS, PERFIS_PARADOS, prazosRetorno, anotadosDe, marcasVigentesTodas, numeroHTML, MAGISTRADOS, magDoCargo, magPadrao, magOffDe, noPadraoMag, magPassa, alternarMag, letraMagHTML, faixaMagHTML });
+    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, carregarPJE1, atualizar, baixar, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS, PERFIS_PRODUTIVIDADE, PERFIS_EMAILS, PERFIS_PARADOS, prazosRetorno, anotadosDe, marcasVigentesTodas, numeroHTML, MAGISTRADOS, magDoCargo, magPadrao, magOffDe, noPadraoMag, magPassa, alternarMag, letraMagHTML, faixaMagHTML });
     iniciarSessao();
   }
   iniciar();
