@@ -155,6 +155,7 @@
         ${sem}
         ${semCad}
         ${especiaisPrevia(imp)}
+        ${P.previaAnalises ? P.previaAnalises(imp) : ''}
         ${confirmar ? `<div class="aviso erro"><b>${sc.length} ${sc.length === 1 ? 'tarefa e' : 'tarefas e'} ${nSc} ${nSc === 1 ? 'processo continuam' : 'processos continuam'} sem cadastro</b> e não entrarão em nenhuma fila. Gravar mesmo assim?</div>` : ''}
         <div class="linha-botoes">
           <button class="btn ${confirmar ? 'perigo' : 'primario'}" data-acao="gravar-importacao" ${st.gravando || (!Object.keys(r.porPessoa).length && !temEspeciais(imp)) ? 'disabled' : ''}>${st.gravando ? 'Gravando…' : confirmar ? 'Gravar mesmo assim' : 'Gravar e substituir a lista'}</button>
@@ -204,6 +205,7 @@
         resultado: R.prepararLista(lido.itens, st.mapaTarefas, st.config, pessoaFixa || null, st.etiquetasPrioridade),
         especiais: pessoaFixa ? null : R.prepararEspeciais(lido.itens, st.config),
       });
+      if (P.prepararAnalises) await P.prepararAnalises(st.importacao);   // análises da IA dos processos da lista (pasta do Gestor)
     } catch (e) {
       st.importacao.erro = e.message || 'Não consegui ler o arquivo.';
     }
@@ -292,6 +294,7 @@
       toast('Lista gravada.');
       st.importacao = { pessoaFixa: imp.pessoaFixa };
       await P.carregar();
+      if (P.gravarAnalises) await P.gravarAnalises(imp);   // depois da lista: grava as dos processos nas filas e tira as dos que saíram
     } catch (e) { falha(e); }
     st.gravando = false; render();
   }

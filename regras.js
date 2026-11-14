@@ -911,6 +911,70 @@
     return !!t && PADROES_DESPACHO.some(re => re.test(t));
   };
 
+  // ---------- Análises da IA (<número>_Analise.md) ----------
+  // Formato (skill acesso-pje2x): título "# Análise do processo <número>", cabeçalho com "- **Tarefa no PJe:** …" e
+  // "- **Analisado em:** dd/mm/aaaa, …", e a seção "## Caminho sugerido", cujo primeiro parágrafo começa com o caminho em negrito.
+  const LIMITE_ANALISE = 40000;
+  function lerAnalise(texto, nomeArquivo) {
+    const t = String(texto == null ? '' : texto).replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+    const numero = (soDigitos(nomeArquivo).match(/^\d{20}/) || [''])[0];
+    const r = { numero, arquivo: nomeArquivo || '', texto: t, caminho: '', motivo: '', tarefa: '', analisadoEm: '', erro: '' };
+    if (!numero) { r.erro = 'nome sem o número do processo'; return r; }
+    if (!t.trim()) { r.erro = 'arquivo vazio'; return r; }
+    if (t.length > LIMITE_ANALISE) { r.erro = 'texto com mais de 40.000 caracteres'; return r; }
+    const tit = t.match(/^#\s+An[áa]lise do processo\s+(.+)$/m);
+    if (!tit || soDigitos(tit[1]).slice(0, 20) !== numero) { r.erro = 'o título não traz o mesmo número do nome do arquivo'; return r; }
+    const tar = t.match(/^\s*[-*]\s*\*\*Tarefa no PJe:\*\*\s*(.+)$/mi);
+    if (tar) r.tarefa = tar[1].trim();
+    const dt = t.match(/^\s*[-*]\s*\*\*Analisado em:\*\*\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/mi);
+    if (dt) r.analisadoEm = `${dt[3]}-${dt[2].padStart(2, '0')}-${dt[1].padStart(2, '0')}`;
+    const sec = t.match(/^##\s+Caminho sugerido\s*\n([\s\S]*?)(?=^##\s|(?![\s\S]))/m);
+    const par = sec ? (sec[1].split(/\n\s*\n/).map(x => x.trim()).find(Boolean) || '') : '';
+    const cam = par.match(/^\*\*(.+?)\*\*\s*([\s\S]*)$/);
+    if (!cam) { r.erro = 'a seção “Caminho sugerido” não começa com o caminho em negrito'; return r; }
+    r.caminho = cam[1].trim().replace(/[.:;,]$/, '').slice(0, 300);
+    r.motivo = cam[2].replace(/\*\*/g, '').replace(/\s+/g, ' ').replace(/^[.,:;]\s*/, '').trim().slice(0, 1000);
+    return r;
+  }
+
+  // A análise vale para a tarefa em que o processo estava. Fica desatualizada se ele chegou à tarefa atual depois do dia
+  // da análise ou se a tarefa mudou. Devolve o motivo (texto) ou '' quando está em dia.
+  function analiseDesatualizada(a, item) {
+    if (!a || !item) return '';
+    const norm = s => normTexto(s || '');
+    if (a.tarefa && item.t && norm(a.tarefa) !== norm(item.t)) return 'O processo mudou de tarefa depois da análise.';
+    const m = String(a.analisadoEm || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m && item.ch != null) {
+      const fimDoDia = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + 1).getTime();
+      if (Number(item.ch) >= fimDoDia) return 'O processo chegou à tarefa atual depois da análise.';
+    }
+    return '';
+  }
+
+  // Markdown mínimo e seguro: escapa tudo e só depois aplica títulos, listas, citação, negrito e parágrafos.
+  function mdParaHtml(texto) {
+    const e = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    const inl = s => e(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    const out = []; let lista = null, par = [];
+    const fecharPar = () => { if (par.length) { out.push(`<p>${par.map(inl).join(' ')}</p>`); par = []; } };
+    const fecharLista = () => { if (lista) { out.push(`</${lista}>`); lista = null; } };
+    for (const bruta of String(texto == null ? '' : texto).replace(/\r\n?/g, '\n').split('\n')) {
+      const l = bruta.trim();
+      let m;
+      if (!l) { fecharPar(); fecharLista(); continue; }
+      if ((m = l.match(/^(#{1,4})\s+(.*)$/))) { fecharPar(); fecharLista(); const n = Math.min(m[1].length + 2, 6); out.push(`<h${n}>${inl(m[2])}</h${n}>`); continue; }
+      if ((m = l.match(/^[-*]\s+(.*)$/)) || (m = l.match(/^\d+[.)]\s+(.*)$/))) {
+        const tipo = /^\d/.test(l) ? 'ol' : 'ul';
+        fecharPar(); if (lista !== tipo) { fecharLista(); out.push(`<${tipo}>`); lista = tipo; }
+        out.push(`<li>${inl(m[1])}</li>`); continue;
+      }
+      if ((m = l.match(/^>\s?(.*)$/))) { fecharPar(); fecharLista(); out.push(`<blockquote>${inl(m[1])}</blockquote>`); continue; }
+      fecharLista(); par.push(l);
+    }
+    fecharPar(); fecharLista();
+    return out.join('');
+  }
+
   function slug(s) {
     return semAcento(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'pessoa';
   }
@@ -919,5 +983,6 @@
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, regrasDoSetor, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
     atribuir, setorPorExcecao, causaExcecao, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, estadoAnotacoes, conclusaoReaberta, marcasVigentes, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, elegivelPJE1, SITUACOES_PJE1, CAB_PJE1, resumirPJE1, partesPJE1, balaoPJE1, prcPJE1, casaJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido, pedidoDespacho,
+    lerAnalise, analiseDesatualizada, mdParaHtml, LIMITE_ANALISE,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

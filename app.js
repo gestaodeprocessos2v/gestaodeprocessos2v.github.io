@@ -322,6 +322,7 @@
     if (PERFIS_PRODUTIVIDADE.includes(st.perfil) && window.PAINEL.carregarProd) await window.PAINEL.carregarProd();
     if (PERFIS_EMAILS.includes(st.perfil) && window.PAINEL.carregarEmails) await window.PAINEL.carregarEmails();
     if (window.PAINEL.carregarMinutas) await window.PAINEL.carregarMinutas();
+    if (window.PAINEL.carregarAnalises) await window.PAINEL.carregarAnalises();
     if (!st.rascOutros) st.rascOutros = null;
     st.ver++;
   }
@@ -791,6 +792,7 @@
         ${selos.length ? `<div class="selos">${selos.join('')}</div>` : ''}
         ${criteriosH}
         ${cardJD(l)}
+        ${window.PAINEL.etiquetaAnalise ? window.PAINEL.etiquetaAnalise(l) : ''}
         ${nota}${resp}${etqHTML}
       </div>
       <div class="c-classe"><span class="rot-m">Classe</span>${esc(l.c || '—')}</div>

@@ -613,3 +613,21 @@ a.btn { display: inline-block; text-decoration: none; }
 .par-tabela .par-dias { font-weight: 700; }
 .par-tabela tr.par-abaixo .par-dias { font-weight: 400; color: var(--muted); }
 @media (max-width: 720px) { .contagens.par-contagens { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Análises da IA: etiqueta com o caminho sugerido na linha do processo e janela com a análise (analises-ui.js). */
+.ia-linha { margin-top: 6px; }
+.ia-etq { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 2px 6px; max-width: 100%; text-align: left; font: inherit; font-size: 12.5px; line-height: 1.35; padding: 3px 8px; border-radius: 6px; cursor: pointer; background: var(--novo-bg); color: var(--ink); border: 1px solid transparent; border-left: 3px solid var(--novo); }
+.ia-etq:hover { border-color: var(--novo); }
+.ia-etq:focus-visible { outline: 2px solid var(--novo); outline-offset: 1px; }
+.ia-rot { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--novo); }
+.ia-cam { font-weight: 600; }
+.ia-etq.velha { background: var(--sunken); border: 1px dashed var(--muted); border-left: 3px solid var(--muted); }
+.ia-etq.velha .ia-rot { color: var(--muted); }
+.ia-velha { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.ia-texto { max-height: 60vh; overflow: auto; overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.5; padding: 4px 14px 10px; border-radius: 6px; background: var(--sunken); }
+.ia-texto h3 { font-size: 1rem; margin: 12px 0 6px; }
+.ia-texto h4 { font-size: .9rem; margin: 14px 0 4px; color: var(--accent); }
+.ia-texto p, .ia-texto ul, .ia-texto ol { margin: 4px 0 8px; }
+.ia-texto ul, .ia-texto ol { padding-left: 22px; }
+.ia-texto li { margin: 2px 0; }
+.ia-texto blockquote { margin: 6px 0; padding: 4px 10px; border-left: 3px solid var(--pri); background: var(--pri-bg); }
