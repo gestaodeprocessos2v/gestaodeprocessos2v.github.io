@@ -94,7 +94,8 @@
     if (!SUPORTE) return 'sem-suporte';
     if (!a.pasta) a.pasta = await bdLer('pasta-analises');
     if (!a.pasta) return 'sem-pasta';
-    try { return await a.pasta.queryPermission({ mode: 'read' }); } catch (e) { return 'sem-pasta'; }
+    try { return await a.pasta.queryPermission({ mode: 'read' }); }
+    catch (e) { console.error(e); a.erroPasta = `${e.name || 'Erro'}: ${e.message || e}`; return 'sem-pasta'; }
   }
 
   async function atualizarSituacao() { A().situacao = await situacaoPasta(); }
@@ -102,13 +103,17 @@
   // Linha fixa no painel "Enviar relatório do PJe+R" (antes de escolher o arquivo): mostra se a pasta está liberada.
   P.linhaPastaAnalises = function () {
     if (st.perfil !== 'gestor') return '';
+    const erro = A().erroPasta ? `<div class="aviso erro">Não consegui usar a pasta das análises: ${esc(A().erroPasta)}</div>` : '';
+    return linhaPasta() + erro;
+  };
+  function linhaPasta() {
     const sit = A().situacao, b = (acao, txt) => `<button class="btn" type="button" data-iaacao="${acao}">${txt}</button>`;
     if (sit === 'granted') return `<div class="small muted ia-pasta">Análises da IA: pasta “${esc(A().pasta.name)}” liberada. As análises dos processos da lista entram ao gravar. ${b('escolher', 'Trocar pasta')}</div>`;
     if (sit === 'sem-pasta') return `<div class="small ia-pasta">Análises da IA: escolha a pasta <b>Análise</b> (em “_Processos (Download)”) para o painel incluir as análises nos processos da lista. ${b('escolher', 'Escolher a pasta das análises')}</div>`;
     if (sit === 'prompt' || sit === 'denied') return `<div class="small ia-pasta">Análises da IA: a pasta “${esc(A().pasta.name)}” precisa ser liberada de novo neste navegador. ${b('liberar', 'Liberar a pasta')} ${b('escolher', 'Escolher outra pasta')}</div>`;
     if (sit === 'sem-suporte') return '<div class="small muted ia-pasta">Análises da IA: este navegador não lê pastas do computador (use o Edge ou o Chrome).</div>';
     return '';
-  };
+  }
 
   async function sha256(texto) {
     const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto));
@@ -209,8 +214,12 @@
 
   async function escolherPasta() {
     const a = A();
+    a.erroPasta = '';
     try { a.pasta = await window.showDirectoryPicker({ id: 'painel-analises', mode: 'read' }); }
-    catch (e) { return; }   // o Gestor cancelou
+    catch (e) {
+      if (e && e.name === 'AbortError') return;   // o Gestor cancelou
+      console.error(e); a.erroPasta = `${e.name || 'Erro'}: ${e.message || e}`; render(); return;
+    }
     await bdGravar('pasta-analises', a.pasta);
     await atualizarSituacao();
     await P.prepararAnalises(st.importacao); render();
@@ -218,7 +227,9 @@
   async function liberarPasta() {
     const a = A();
     if (!a.pasta) return escolherPasta();
-    try { await a.pasta.requestPermission({ mode: 'read' }); } catch (e) { /* recusou */ }
+    a.erroPasta = '';
+    try { await a.pasta.requestPermission({ mode: 'read' }); }
+    catch (e) { console.error(e); a.erroPasta = `${e.name || 'Erro'}: ${e.message || e}`; }
     await atualizarSituacao();
     await P.prepararAnalises(st.importacao); render();
   }
