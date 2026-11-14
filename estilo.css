@@ -631,3 +631,4 @@ a.btn { display: inline-block; text-decoration: none; }
 .ia-texto ul, .ia-texto ol { padding-left: 22px; }
 .ia-texto li { margin: 2px 0; }
 .ia-texto blockquote { margin: 6px 0; padding: 4px 10px; border-left: 3px solid var(--pri); background: var(--pri-bg); }
+.ia-pasta { margin-top: 8px; }

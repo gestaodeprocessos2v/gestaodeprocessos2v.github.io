@@ -171,6 +171,7 @@
       ${semTabela}
       <label class="campo"><span>Distribuir</span><select id="imp-destino">${destinoOpc}</select></label>
       <label class="campo"><span>Arquivo CSV</span><input type="file" id="imp-arquivo" accept=".csv,text/csv,text/plain"></label>
+      ${!imp.resultado && P.linhaPastaAnalises ? P.linhaPastaAnalises() : ''}
       ${previa}
     </section>`;
   }

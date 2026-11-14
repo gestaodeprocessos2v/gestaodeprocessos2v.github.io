@@ -97,6 +97,19 @@
     try { return await a.pasta.queryPermission({ mode: 'read' }); } catch (e) { return 'sem-pasta'; }
   }
 
+  async function atualizarSituacao() { A().situacao = await situacaoPasta(); }
+
+  // Linha fixa no painel "Enviar relatório do PJe+R" (antes de escolher o arquivo): mostra se a pasta está liberada.
+  P.linhaPastaAnalises = function () {
+    if (st.perfil !== 'gestor') return '';
+    const sit = A().situacao, b = (acao, txt) => `<button class="btn" type="button" data-iaacao="${acao}">${txt}</button>`;
+    if (sit === 'granted') return `<div class="small muted ia-pasta">Análises da IA: pasta “${esc(A().pasta.name)}” liberada. As análises dos processos da lista entram ao gravar. ${b('escolher', 'Trocar pasta')}</div>`;
+    if (sit === 'sem-pasta') return `<div class="small ia-pasta">Análises da IA: escolha a pasta <b>Análise</b> (em “_Processos (Download)”) para o painel incluir as análises nos processos da lista. ${b('escolher', 'Escolher a pasta das análises')}</div>`;
+    if (sit === 'prompt' || sit === 'denied') return `<div class="small ia-pasta">Análises da IA: a pasta “${esc(A().pasta.name)}” precisa ser liberada de novo neste navegador. ${b('liberar', 'Liberar a pasta')} ${b('escolher', 'Escolher outra pasta')}</div>`;
+    if (sit === 'sem-suporte') return '<div class="small muted ia-pasta">Análises da IA: este navegador não lê pastas do computador (use o Edge ou o Chrome).</div>';
+    return '';
+  };
+
   async function sha256(texto) {
     const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto));
     return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
@@ -120,7 +133,7 @@
   // Prévia: lê a pasta e cruza com a lista nova. Erros aqui nunca impedem a importação.
   P.prepararAnalises = async function (imp) {
     if (st.perfil !== 'gestor' || !imp || !imp.resultado) return;
-    const sit = await situacaoPasta();
+    const sit = await situacaoPasta(); A().situacao = sit;
     if (sit !== 'granted') { imp.analises = { estado: sit }; return; }
     try {
       const naLista = numerosDaImportacao(imp), atuais = A().lista;
@@ -154,7 +167,7 @@
   P.previaAnalises = function (imp) {
     const x = imp && imp.analises;
     if (st.perfil !== 'gestor' || !x) return '';
-    const b = (acao, txt) => `<button class="btn discreto" type="button" data-iaacao="${acao}">${txt}</button>`;
+    const b = (acao, txt) => `<button class="btn" type="button" data-iaacao="${acao}">${txt}</button>`;
     if (x.estado === 'sem-suporte') return '<div class="small muted">Análises da IA: este navegador não lê pastas do computador (use o Edge ou o Chrome).</div>';
     if (x.estado === 'sem-pasta') return `<div class="small">Análises da IA: escolha a pasta <b>Análise</b> (em “_Processos (Download)”) para o painel incluir as análises nos processos da lista. ${b('escolher', 'Escolher a pasta das análises')}</div>`;
     if (x.estado === 'prompt' || x.estado === 'denied') return `<div class="small">Análises da IA: a pasta das análises precisa ser liberada de novo neste navegador. ${b('liberar', 'Liberar a pasta')} ${b('escolher', 'Escolher outra pasta')}</div>`;
@@ -199,12 +212,14 @@
     try { a.pasta = await window.showDirectoryPicker({ id: 'painel-analises', mode: 'read' }); }
     catch (e) { return; }   // o Gestor cancelou
     await bdGravar('pasta-analises', a.pasta);
+    await atualizarSituacao();
     await P.prepararAnalises(st.importacao); render();
   }
   async function liberarPasta() {
     const a = A();
     if (!a.pasta) return escolherPasta();
     try { await a.pasta.requestPermission({ mode: 'read' }); } catch (e) { /* recusou */ }
+    await atualizarSituacao();
     await P.prepararAnalises(st.importacao); render();
   }
 
@@ -223,4 +238,5 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && st.analises && st.analises.modal) { st.analises.modal = null; renderModal(); } });
 
   if (st.estado === 'ok') P.carregarAnalises().then(render);
+  atualizarSituacao().then(() => { if (st.perfil === 'gestor') render(); });
 })();
