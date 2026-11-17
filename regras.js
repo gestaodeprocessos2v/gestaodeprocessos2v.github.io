@@ -425,6 +425,7 @@
     // Motivo da exceção por classe ou etiqueta: vale em qualquer seção da lista.
     if (l.xe && l.xe.length) out.push({ r: 'Nesta fila pela etiqueta', e: l.xe });
     if (l.xc && l.xc.length) out.push({ r: 'Nesta fila pela classe', e: l.xc });
+    if (l.ap) out.push({ r: 'Nesta fila por estar na tarefa há mais de ' + l.ap + (l.ap === 1 ? ' dia' : ' dias') });
     return out;
   }
 
@@ -498,14 +499,24 @@
     return null;
   }
 
+  // "Só após (dias)" da tabela de tarefas (aposDias): o processo só entra no setor da tarefa quando está nela há MAIS de X dias,
+  // contados da data de chegada (ch). Antes disso (ou sem data) é tratado como tarefa sem setor no painel (só Metas CNJ,
+  // salvo exceção "Todos os setores"). Ex.: controle de prazo esquecido vai para a Secretaria (decisão do Alberto, 17/11/2026).
+  function antesDoPrazo(linha, ch, agora) {
+    const x = Number(linha && linha.aposDias) || 0;
+    if (x <= 0) return false;
+    if (ch == null || !isFinite(ch)) return true;
+    return Math.floor(((agora == null ? Date.now() : agora) - ch) / 86400000) <= x;
+  }
+
   // Tarefa -> setor (tabela) -> pessoa (regras). pessoaFixa: lista inteira para um estagiário ou residente;
   // "resp" guarda o servidor que as regras indicariam, para a devolução.
   // etPrioridade: etiquetas com caráter de urgência ou prioridade, [{ e, t: 'urgente' | 'prioritaria' }] (Gestão).
-  function prepararLista(itens, tabela, config, pessoaFixa, etPrioridade) {
+  function prepararLista(itens, tabela, config, pessoaFixa, etPrioridade, agora) {
     const mapa = mapaTarefas(tabela);
     const porPessoa = {}, semResponsavel = [], porSetor = {};
     const porEtiqueta = { urgente: 0, prioritaria: 0 };
-    const ignorados = { foraDaVara: 0, semEtiqueta: 0 };
+    const ignorados = { foraDaVara: 0, semEtiqueta: 0, antesDoPrazo: 0 };
     // Processos que não entram em fila de servidor (tarefas de outros setores da vara): guardados só para as Metas CNJ.
     const outros = new Map();
     // "m" = letra do magistrado (T ou S), para o filtro da aba Pendentes das Metas CNJ.
@@ -528,13 +539,14 @@
       const linha = mapa.get(normTexto(it.t));
       if (!linha) contarSemCadastro(it);
       let s, r, regraSetor = null;
-      if (!linha || !linha.painel) {
+      const esperaPrazo = !!(linha && linha.painel) && antesDoPrazo(linha, it.ch, agora);
+      if (!linha || !linha.painel || esperaPrazo) {
         // Tarefa sem setor no painel (ex.: Assessoria) ou sem cadastro na tabela: continua só nas Metas CNJ, salvo exceção
         // por classe ou etiqueta válida em todos os setores (ex.: minutas do residente, cartas precatórias); aí entra
         // também na fila de quem a regra indica.
         guardarOutro(it);
         const ex = !pessoaFixa ? excecaoSemSetor(it, config) : null;
-        if (!ex) { ignorados.foraDaVara++; continue; }
+        if (!ex) { if (esperaPrazo) ignorados.antesDoPrazo++; else ignorados.foraDaVara++; continue; }
         s = SETOR_SEM_PAINEL; r = ex;
       } else {
         if (linha.etiqueta && !temEtiqueta(it.e, linha.etiqueta)) { ignorados.semEtiqueta++; guardarOutro(it); continue; }
@@ -545,6 +557,8 @@
       const item = { n: it.n, s };
       for (const k of ['c', 't', 'cg', 'ch', 'sg']) if (it[k] != null) item[k] = it[k];
       if (r.pessoa && s !== SETOR_SEM_PAINEL) item.resp = r.pessoa;
+      // "ap": entrou no setor por estar na tarefa há mais de X dias ("Só após (dias)").
+      if (s !== SETOR_SEM_PAINEL && linha && Number(linha.aposDias) > 0) item.ap = Number(linha.aposDias);
       // "xe" e "xc": a etiqueta ou a classe que trouxe o processo para esta fila por exceção (mudança de setor, pessoa ou as duas).
       // Com pessoaFixa a lista inteira vai para a pessoa, e a exceção não decide nada.
       if (!pessoaFixa) {
@@ -887,7 +901,7 @@
   }
 
   function tarefasParaCsv(itens) {
-    const cols = [['Tarefa', t => t.tarefa], ['Setor responsável', t => t.setor], ['Setor no painel', t => t.painel], ['Etiqueta exigida', t => t.etiqueta],
+    const cols = [['Tarefa', t => t.tarefa], ['Setor responsável', t => t.setor], ['Setor no painel', t => t.painel], ['Só após (dias)', t => t.aposDias || ''], ['Etiqueta exigida', t => t.etiqueta],
       ['Urgente?', t => (t.urgente ? 'Sim' : 'Não')], ['Urgente se etiqueta', t => t.etiquetaUrgente], ['Zerar?', t => (t.zerar ? 'Sim' : 'Não')], ['Fluxo Paralelo?', t => (t.paralelo ? 'Fluxo Paralelo' : '')]];
     const q = v => { const s = String(v == null ? '' : v); return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
     return '﻿' + [cols.map(c => q(c[0])).join(';'), ...itens.map(t => cols.map(c => q(c[1](t))).join(';'))].join('\r\n');
@@ -994,7 +1008,7 @@
 
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, regrasDoSetor, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
-    atribuir, setorPorExcecao, causaExcecao, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, estadoAnotacoes, conclusaoReaberta, marcasVigentes, concluidoAposAnotacao, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, elegivelPJE1, SITUACOES_PJE1, CAB_PJE1, resumirPJE1, partesPJE1, balaoPJE1, prcPJE1, casaJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, comparar, chaveItem,
+    atribuir, setorPorExcecao, causaExcecao, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, antesDoPrazo, estadoAnotacoes, conclusaoReaberta, marcasVigentes, concluidoAposAnotacao, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, elegivelPJE1, SITUACOES_PJE1, CAB_PJE1, resumirPJE1, partesPJE1, balaoPJE1, prcPJE1, casaJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido, pedidoDespacho,
     lerAnalise, analiseDesatualizada, mdParaHtml, LIMITE_ANALISE,
   };

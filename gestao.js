@@ -150,7 +150,7 @@
         <div class="small">Por setor: ${setores || '—'}</div>
         ${(r.porEtiqueta && (r.porEtiqueta.urgente || r.porEtiqueta.prioritaria)) ? `<div class="small">Por classe ou etiqueta com prioridade ou urgência: <b class="mono">${r.porEtiqueta.urgente}</b> ${r.porEtiqueta.urgente === 1 ? 'urgente' : 'urgentes'} e <b class="mono">${r.porEtiqueta.prioritaria}</b> ${r.porEtiqueta.prioritaria === 1 ? 'prioritário' : 'prioritários'}.</div>` : ''}
         ${!imp.pessoaFixa ? `<div class="small">Outros setores da vara (sem fila de servidor): <b class="mono">${(r.outros || []).length}</b> processos, guardados só para as Metas CNJ.</div>` : ''}
-        <div class="small muted">Ignorados: ${r.ignorados.foraDaVara} em tarefas de outros setores${r.ignorados.semEtiqueta ? ` e ${r.ignorados.semEtiqueta} sem a etiqueta exigida pela tarefa` : ''}.${imp.semData ? ` ${imp.semData} sem data de chegada vão para o fim da fila.` : ''}</div>
+        <div class="small muted">Ignorados: ${r.ignorados.foraDaVara} em tarefas de outros setores${r.ignorados.semEtiqueta ? ` e ${r.ignorados.semEtiqueta} sem a etiqueta exigida pela tarefa` : ''}${r.ignorados.antesDoPrazo ? `; ${r.ignorados.antesDoPrazo} ainda não passaram dos dias de “Só após (dias)” da tarefa` : ''}.${imp.semData ? ` ${imp.semData} sem data de chegada vão para o fim da fila.` : ''}</div>
         <div class="tabela-wrap"><table><thead><tr><th>Pessoa</th><th>Processos</th><th>Urgentes</th><th>Prioritários</th></tr></thead><tbody>${linhas || '<tr><td colspan="4">Nenhum processo para gravar.</td></tr>'}</tbody></table></div>
         ${sem}
         ${semCad}
@@ -213,7 +213,7 @@
     render();
   }
 
-  const itemMin = it => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u', 'p', 'eu', 'ep', 'ecu', 'ecp', 'xe', 'xc', 'et']) if (it[k] != null) o[k] = it[k]; return o; };
+  const itemMin = it => { const o = {}; for (const k of ['n', 'c', 't', 'cg', 'ch', 's', 'sg', 'u', 'p', 'eu', 'ep', 'ecu', 'ecp', 'xe', 'xc', 'ap', 'et']) if (it[k] != null) o[k] = it[k]; return o; };
 
   // As urgentes da lista seguem a lista: saem quando o processo sai do relatório novo. Só ficam até o servidor concluir
   // as urgências incluídas à mão (gestor) e as enviadas para outra pessoa. Aqui some o que antigas versões gravaram como "da lista".
@@ -434,6 +434,7 @@
       <td><input type="text" id="tf-tarefa-${i}" data-i="${i}" data-campo="tarefa" value="${esc(t.tarefa)}" aria-label="Tarefa"></td>
       <td><input type="text" id="tf-setor-${i}" data-i="${i}" data-campo="setor" value="${esc(t.setor)}" aria-label="Setor responsável"></td>
       <td><select id="tf-painel-${i}" data-i="${i}" data-campo="painel" aria-label="Setor no painel">${opcPainel(t.painel)}</select></td>
+      <td><input type="number" min="1" step="1" inputmode="numeric" id="tf-aposDias-${i}" data-i="${i}" data-campo="aposDias" value="${esc(t.aposDias || '')}" placeholder="—" aria-label="Só após (dias)"></td>
       <td><input type="text" id="tf-etiqueta-${i}" data-i="${i}" data-campo="etiqueta" value="${esc(t.etiqueta || '')}" placeholder="—" aria-label="Etiqueta exigida"></td>
       <td class="ck">${ck('urgente', i, t.urgente, 'Urgente')}</td>
       <td><input type="text" id="tf-etiquetaUrgente-${i}" data-i="${i}" data-campo="etiquetaUrgente" value="${esc(t.etiquetaUrgente || '')}" placeholder="—" aria-label="Urgente se tiver a etiqueta"></td>
@@ -449,7 +450,7 @@
     return `<section class="painel largo" id="painel-tarefas">
       <h2>Tarefas do PJe</h2>
       ${lembrete}
-      <p>${lista.length} tarefas, ${naVara} nos seis setores da vara${st.tarefasEm ? ` · atualizada em ${dataHoraBR(st.tarefasEm)}` : ''}. “Setor no painel” decide onde o processo entra; “Etiqueta exigida” faz a tarefa só valer para processos com aquela etiqueta. Urgente vai para o topo (também quando o processo tem a etiqueta de “Urgente se etiqueta”); Zerar entra como prioritária.</p>
+      <p>${lista.length} tarefas, ${naVara} nos seis setores da vara${st.tarefasEm ? ` · atualizada em ${dataHoraBR(st.tarefasEm)}` : ''}. “Setor no painel” decide onde o processo entra; “Só após (dias)” faz o processo só entrar quando está na tarefa há mais daquele número de dias (ex.: controle de prazo esquecido); “Etiqueta exigida” faz a tarefa só valer para processos com aquela etiqueta. Urgente vai para o topo (também quando o processo tem a etiqueta de “Urgente se etiqueta”); Zerar entra como prioritária.</p>
       <div class="filtros dentro">
         <input type="search" id="tf-busca" placeholder="Buscar tarefa, setor ou etiqueta" value="${esc(f.busca)}" aria-label="Buscar na tabela de tarefas">
         <select id="tf-filtro-painel" aria-label="Filtrar por setor no painel"><option value="">Todos os setores</option><option value="-"${f.painel === '-' ? ' selected' : ''}>Só ignoradas</option>${SETORES.map(([id, n]) => `<option value="${id}"${f.painel === id ? ' selected' : ''}>${n}</option>`).join('')}</select>
@@ -460,8 +461,8 @@
         </div>
       </div>
       <div class="tabela-wrap tabela-tarefas"><table>
-        <thead><tr><th>Tarefa</th><th>Setor responsável</th><th>Setor no painel</th><th>Etiqueta exigida</th><th>Urgente</th><th>Urgente se etiqueta</th><th>Zerar</th><th>Fluxo paralelo</th><th></th></tr></thead>
-        <tbody>${linhas || '<tr><td colspan="9" class="muted">Nenhuma tarefa com esse filtro.</td></tr>'}</tbody>
+        <thead><tr><th>Tarefa</th><th>Setor responsável</th><th>Setor no painel</th><th><span tabindex="0" data-balao="Opcional. Com um número X, o processo só entra no setor do painel quando está na tarefa há mais de X dias (contados da chegada, no envio da lista). Antes disso fica como tarefa ignorada: só nas Metas CNJ." aria-description="Opcional. Com um número X, o processo só entra no setor do painel quando está na tarefa há mais de X dias (contados da chegada, no envio da lista). Antes disso fica como tarefa ignorada: só nas Metas CNJ.">Só após (dias)</span></th><th>Etiqueta exigida</th><th>Urgente</th><th>Urgente se etiqueta</th><th>Zerar</th><th>Fluxo paralelo</th><th></th></tr></thead>
+        <tbody>${linhas || '<tr><td colspan="10" class="muted">Nenhuma tarefa com esse filtro.</td></tr>'}</tbody>
       </table></div>
       <div class="linha-botoes">
         <button class="btn primario" type="button" data-acao="tf-salvar" ${st.tarefasAlteradas ? '' : 'disabled'}>Salvar tabela</button>
@@ -515,6 +516,9 @@
     toast(`${novas.length === 1 ? 'Tarefa incluída' : novas.length + ' tarefas incluídas'} no fim da tabela, sem setor. Escolha o setor no painel e clique em Salvar tabela.`);
   }
 
+  // "Só após (dias)": inteiro positivo; vazio, zero ou inválido não grava o campo (a tarefa vale desde a chegada).
+  const aposDiasDe = t => { const x = Math.floor(Number(t.aposDias)); return x > 0 ? { aposDias: x } : {}; };
+
   async function acaoTarefas(acao, alvo) {
     const lista = st.rascTarefas || (st.rascTarefas = []);
     if (acao === 'tf-cadastrar' || acao === 'tf-cadastrar-todas') {
@@ -533,8 +537,8 @@
       st.rascTarefas = clonar(st.tarefas); st.tarefasAlteradas = false; render();
       toast('Alterações na tabela descartadas.');
     } else if (acao === 'tf-salvar') {
-      const itens = lista.map(t => ({ tarefa: String(t.tarefa || '').trim(), setor: String(t.setor || '').trim(), painel: t.painel || '',
-        etiqueta: String(t.etiqueta || '').trim(), etiquetaUrgente: String(t.etiquetaUrgente || '').trim(), urgente: !!t.urgente, zerar: !!t.zerar, paralelo: !!t.paralelo })).filter(t => t.tarefa);
+      const itens = lista.map(t => Object.assign({ tarefa: String(t.tarefa || '').trim(), setor: String(t.setor || '').trim(), painel: t.painel || '',
+        etiqueta: String(t.etiqueta || '').trim(), etiquetaUrgente: String(t.etiquetaUrgente || '').trim(), urgente: !!t.urgente, zerar: !!t.zerar, paralelo: !!t.paralelo }, aposDiasDe(t))).filter(t => t.tarefa);
       const vistos = new Set(), repetidas = [];
       for (const t of itens) { const k = R.normTexto(t.tarefa); if (vistos.has(k)) repetidas.push(t.tarefa); vistos.add(k); }
       if (repetidas.length) { toast('Tarefa repetida na tabela: ' + repetidas.slice(0, 3).join('; ') + '. Exclua uma das linhas antes de salvar.'); return; }
@@ -977,6 +981,6 @@
     if (e.target.id === 'urg-numero') sugerirResponsavel();
     else if (e.target.id === 'tf-busca') { clearTimeout(tfBuscaTimer); tfBuscaTimer = setTimeout(() => { st.filtroTabela.busca = e.target.value; render(); }, 200); }
     else if (e.target.dataset.epcampo && e.target.type === 'text') editarEtiquetaPrioridade(e.target);
-    else if (e.target.dataset.campo && e.target.type === 'text') editarTarefa(e.target);
+    else if (e.target.dataset.campo && (e.target.type === 'text' || e.target.type === 'number')) editarTarefa(e.target);
   });
 })();

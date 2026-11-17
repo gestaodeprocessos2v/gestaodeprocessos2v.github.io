@@ -273,13 +273,15 @@ ol.linhas { list-style: none; margin: 0; padding: 0; }
 .tabela-tarefas { max-height: 32rem; overflow: auto; border: 1px solid var(--line); border-radius: var(--r); }
 .tabela-tarefas thead th { position: sticky; top: 0; z-index: 1; }
 .tabela-tarefas td { padding: 4px 6px; }
-.tabela-tarefas input[type="text"], .tabela-tarefas select { width: 100%; padding: 4px 6px; font-size: 13px; }
+.tabela-tarefas input[type="text"], .tabela-tarefas input[type="number"], .tabela-tarefas select { width: 100%; padding: 4px 6px; font-size: 13px; }
+.tabela-tarefas input[type="number"] { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); min-width: 0; }
 /* Larguras mínimas pensadas para caber sem rolagem horizontal no PC (painel com cerca de 1.200 px). */
 .tabela-tarefas td:nth-child(1) { min-width: 13rem; width: 30%; }
 .tabela-tarefas td:nth-child(2) { min-width: 8.5rem; }
 .tabela-tarefas td:nth-child(3) { min-width: 8rem; }
-.tabela-tarefas td:nth-child(4) { min-width: 8.5rem; }
-.tabela-tarefas td:nth-child(6) { min-width: 8.5rem; }
+.tabela-tarefas td:nth-child(4) { min-width: 4.5rem; width: 4.5rem; }
+.tabela-tarefas td:nth-child(5) { min-width: 8.5rem; }
+.tabela-tarefas td:nth-child(7) { min-width: 8.5rem; }
 .tabela-tarefas th { white-space: normal; }
 .tabela-tarefas td .btn { padding: 4px 8px; }
 .tabela-tarefas td.ck { text-align: center; }
