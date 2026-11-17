@@ -735,6 +735,17 @@
     return out;
   }
 
+  // Processo que saiu da lista: a anotação deixa de segurá-lo se ele já foi concluído (com qualquer data de chegada)
+  // depois da última anotação, criada ou editada (decisão do Alberto, 17/11/2026). Ex.: concluído na tarefa de minuta,
+  // voltou com chegada nova por causa da etiqueta e depois saiu da lista. Anotação posterior à conclusão continua segurando.
+  // marcas: { "dígitos|chegada": { em, desfeito } } da pessoa; num: só dígitos.
+  function concluidoAposAnotacao(marcas, num, anotacoes) {
+    const ult = (anotacoes || []).reduce((mx, a) => Math.max(mx, a.em || 0, a.editadaEm || 0), 0);
+    if (!ult) return false;
+    const pre = num + '|';
+    return Object.entries(marcas || {}).some(([chave, m]) => chave.startsWith(pre) && m && !m.desfeito && m.em >= ult);
+  }
+
   // Selo "Nova anotação": de outra pessoa, criada ou editada desde a última visita e ainda valendo.
   function temAnotacaoNova(pessoa, anotacoes, dispensaEm, desde) {
     return (anotacoes || []).some(a => {
@@ -983,7 +994,7 @@
 
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, regrasDoSetor, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
-    atribuir, setorPorExcecao, causaExcecao, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, estadoAnotacoes, conclusaoReaberta, marcasVigentes, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, elegivelPJE1, SITUACOES_PJE1, CAB_PJE1, resumirPJE1, partesPJE1, balaoPJE1, prcPJE1, casaJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, comparar, chaveItem,
+    atribuir, setorPorExcecao, causaExcecao, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, estadoAnotacoes, conclusaoReaberta, marcasVigentes, concluidoAposAnotacao, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, elegivelPJE1, SITUACOES_PJE1, CAB_PJE1, resumirPJE1, partesPJE1, balaoPJE1, prcPJE1, casaJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido, pedidoDespacho,
     lerAnalise, analiseDesatualizada, mdParaHtml, LIMITE_ANALISE,
   };

@@ -352,7 +352,9 @@
     const cfgG = st.config || {};
     const etGestor = p === GESTOR_ID ? (cfgG.etiquetaGestor == null ? R.ETIQUETA_GESTOR_PADRAO : cfgG.etiquetaGestor).trim() : '';
     const umaEt = etGestor && !etGestor.includes('|') ? etGestor : '';
-    for (const r of st.filas) if (r.pessoa === p) for (const it of r.itens || []) if (!it.fora || estadoDe(R.soDigitos(it.n)).segura) itens.push(umaEt && !it.ed ? Object.assign({}, it, { ed: [umaEt] }) : it);
+    // Já concluído depois da última anotação (em outra data de chegada): a anotação não o segura mais.
+    const seguraFora = num => estadoDe(num).segura && !R.concluidoAposAnotacao(st.marcas[p], num, anotP[num]);
+    for (const r of st.filas) if (r.pessoa === p) for (const it of r.itens || []) if (!it.fora || seguraFora(R.soDigitos(it.n))) itens.push(umaEt && !it.ed ? Object.assign({}, it, { ed: [umaEt] }) : it);
     // Conclusão reaberta por anotação, com o processo na lista atual, conta como desfeita.
     const marcasV = R.marcasVigentes(p, st.marcas[p], itens, anotP, dispP);
     const umMes = Date.now() - 30 * DIA;
@@ -1114,7 +1116,7 @@
   // Para a importação (gestao.js): o que segura cada processo do painel e as conclusões que continuam valendo.
   function anotadosDe(p, itensAtuais) {
     const anotP = st.anotacoes[p] || {}, dispP = st.dispensas[p] || {}, notas = {};
-    for (const num of Object.keys(anotP)) if (R.estadoAnotacoes(p, anotP[num], dispP[num]).segura) notas[num] = { texto: 'anotado' };
+    for (const num of Object.keys(anotP)) if (R.estadoAnotacoes(p, anotP[num], dispP[num]).segura && !R.concluidoAposAnotacao(st.marcas[p], num, anotP[num])) notas[num] = { texto: 'anotado' };
     return { notas, marcas: R.marcasVigentes(p, st.marcas[p], itensAtuais, anotP, dispP) };
   }
 
