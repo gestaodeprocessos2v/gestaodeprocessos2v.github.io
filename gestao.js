@@ -136,12 +136,12 @@
       const conta = (its, tipo) => its.filter(i => R.tipoItem(i, st.mapaTarefas) === tipo).length;
       const linhas = Object.entries(r.porPessoa).sort((a, b) => b[1].length - a[1].length)
         .map(([p, its]) => `<tr><td>${esc(nomeDe(p))}</td><td class="n">${its.length}</td><td class="n">${conta(its, 'urgente')}</td><td class="n">${conta(its, 'prioritaria')}</td></tr>`).join('');
-      const setores = SETORES.concat([[R.SETOR_SEM_PAINEL, 'Assessoria (por exceção de etiqueta)']]).filter(([id]) => r.porSetor[id]).map(([id, n]) => `${n}: <b class="mono">${r.porSetor[id]}</b>`).join(' · ');
+      const setores = SETORES.concat([[R.SETOR_SEM_PAINEL, 'Fora dos setores do painel (por exceção)']]).filter(([id]) => r.porSetor[id]).map(([id, n]) => `${n}: <b class="mono">${r.porSetor[id]}</b>`).join(' · ');
       const sem = r.semResponsavel.length ? `<div class="aviso erro"><b>${r.semResponsavel.length} sem responsável</b> e não serão gravados: ${r.semResponsavel.slice(0, 6).map(i => `${esc(i.n)} (${esc(i.motivo)})`).join('; ')}${r.semResponsavel.length > 6 ? '…' : ''}. Ajuste a configuração e leia o arquivo de novo.</div>` : '';
       // Tarefas que não existem na tabela: os processos delas não entram na fila de ninguém. ("Ignorar" é decisão do gestor e não entra aqui.)
       const sc = r.semCadastro || [], nSc = r.semCadastroProcessos || 0;
       const cadastraveis = sc.filter(x => x.t !== SEM_TAREFA);
-      const semCad = sc.length ? `<div class="aviso novo"><b>${sc.length} ${sc.length === 1 ? 'tarefa do PJe sem cadastro' : 'tarefas do PJe sem cadastro'}</b> na tabela de tarefas, com ${nSc} ${nSc === 1 ? 'processo' : 'processos'}. Esses processos não entram na fila de ninguém até as tarefas serem cadastradas.
+      const semCad = sc.length ? `<div class="aviso novo"><b>${sc.length} ${sc.length === 1 ? 'tarefa do PJe sem cadastro' : 'tarefas do PJe sem cadastro'}</b> na tabela de tarefas, com ${nSc} ${nSc === 1 ? 'processo' : 'processos'}. Esses processos não entram na fila de ninguém até as tarefas serem cadastradas, salvo os que casarem com uma exceção por classe ou etiqueta válida em todos os setores.
         <div class="tabela-wrap"><table><thead><tr><th>Tarefa</th><th>Processos</th><th></th></tr></thead><tbody>${sc.slice(0, 15).map(x => `<tr><td>${esc(x.t)}</td><td class="n">${x.n}</td><td>${x.t === SEM_TAREFA ? '<span class="muted small">sem nome de tarefa no arquivo</span>' : `<button class="btn discreto" type="button" data-acao="tf-cadastrar" data-origem="previa" data-t="${esc(x.t)}">Cadastrar</button>`}</td></tr>`).join('')}${sc.length > 15 ? `<tr><td colspan="3" class="muted small">… e mais ${sc.length - 15}.</td></tr>` : ''}</tbody></table></div>
         ${cadastraveis.length ? `<div class="linha-botoes"><button class="btn" type="button" data-acao="tf-cadastrar-todas" data-origem="previa">Cadastrar todas</button></div>` : ''}</div>` : '';
       const confirmar = imp.confirmando && sc.length;
@@ -755,7 +755,7 @@
       </div>
       <div class="cfg-sub" data-sub="excecoes">
         <h3>Exceções por classe ou etiqueta <span class="muted mono">${(c.regrasClasse || []).length}</span></h3>
-        <p class="small muted">Valem antes da divisão do setor, na ordem da lista (a primeira que casar decide). Classe: use a sigla do PJe+R (ex.: ACPCiv|ACIA); etiqueta: o texto completo (ex.: $ Ação civil pública). O destino pode ser uma pessoa ou um setor; no setor, o processo segue a divisão daquele setor. “Só nas tarefas” é opcional: em branco, a exceção vale para todas as tarefas. Depois de mudar uma exceção, envie a lista do PJe+R de novo para ela passar a valer.</p>
+        <p class="small muted">Valem antes da divisão do setor, na ordem da lista (a primeira que casar decide). Classe: use a sigla do PJe+R (ex.: ACPCiv|ACIA); etiqueta: o texto completo (ex.: $ Ação civil pública). O destino pode ser uma pessoa ou um setor; no setor, o processo segue a divisão daquele setor. “Só nas tarefas” é opcional: em branco, a exceção vale para todas as tarefas. Com destino a uma pessoa e “Todos os setores”, a exceção também traz processos de tarefas fora dos setores do painel (sem setor ou sem cadastro na tabela).Depois de mudar uma exceção, envie a lista do PJe+R de novo para ela passar a valer.</p>
         ${regrasH}
         <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-regra">Adicionar exceção</button></div>
       </div>

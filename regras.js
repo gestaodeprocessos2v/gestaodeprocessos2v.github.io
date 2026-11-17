@@ -487,12 +487,13 @@
     return [...ids].sort((a, b) => (ordem.indexOf(a) + 1 || 999) - (ordem.indexOf(b) + 1 || 999));
   }
 
-  // Processos de tarefas sem setor no painel que entram numa fila por exceção de etiqueta ("Vale para: Todos os setores").
+  // Processos de tarefas sem setor no painel (cadastradas sem setor ou sem cadastro na tabela) que entram numa fila
+  // por exceção de classe ou etiqueta com destino a uma pessoa e "Vale para: Todos os setores".
   const SETOR_SEM_PAINEL = 'assessoria';
   function excecaoSemSetor(item, config) {
     for (const r of (config && config.regrasClasse) || []) {
-      if (!r || r.campo !== 'etiqueta' || !r.padrao || !r.responsavel || (r.setores && r.setores.length)) continue;
-      if (casaExcecao(r, item, null)) return { pessoa: r.responsavel, motivo: 'etiqueta: ' + r.padrao, regra: r };
+      if (!r || !r.padrao || !r.responsavel || (r.setores && r.setores.length)) continue;
+      if (casaExcecao(r, item, null)) return { pessoa: r.responsavel, motivo: (r.campo === 'etiqueta' ? 'etiqueta' : 'classe') + ': ' + r.padrao, regra: r };
     }
     return null;
   }
@@ -528,10 +529,11 @@
       if (!linha) contarSemCadastro(it);
       let s, r, regraSetor = null;
       if (!linha || !linha.painel) {
-        // Tarefa cadastrada sem setor no painel (ex.: Assessoria): continua só nas Metas CNJ, salvo exceção por etiqueta
-        // válida em todos os setores (ex.: minutas do residente); aí entra também na fila de quem a regra indica.
+        // Tarefa sem setor no painel (ex.: Assessoria) ou sem cadastro na tabela: continua só nas Metas CNJ, salvo exceção
+        // por classe ou etiqueta válida em todos os setores (ex.: minutas do residente, cartas precatórias); aí entra
+        // também na fila de quem a regra indica.
         guardarOutro(it);
-        const ex = linha && !pessoaFixa ? excecaoSemSetor(it, config) : null;
+        const ex = !pessoaFixa ? excecaoSemSetor(it, config) : null;
         if (!ex) { ignorados.foraDaVara++; continue; }
         s = SETOR_SEM_PAINEL; r = ex;
       } else {
@@ -552,7 +554,7 @@
         if (xc.length) item.xc = xc;
       }
       // "eu" e "ep": as etiquetas do processo que causaram a urgência e a prioridade (as do CSV não ficam guardadas; estas sim).
-      const cu = linha.etiquetaUrgente ? etiquetasQueCasam(it.e, linha.etiquetaUrgente) : [];
+      const cu = linha && linha.etiquetaUrgente ?etiquetasQueCasam(it.e, linha.etiquetaUrgente) : [];
       if (cu.length) { item.u = true; item.eu = cu; }
       // Etiqueta com prioridade ou urgência (qualquer tarefa que entra no painel). Urgente vence; prioritária só se nada o torna urgente.
       // porEtiqueta conta só os processos que mudaram de caráter por causa da etiqueta (não os que a tarefa já tornava urgentes/prioritários).
