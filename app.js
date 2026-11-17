@@ -147,7 +147,9 @@
       anotando: null, confirmaNota: null, devolvendo: null, modal: null, importacao: null,
       area: 'fila', menuAreas: false, abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, metasImp: null,
       abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null },
+      quadro: null, recadoQuadro: '',
     });
+    const mq = document.getElementById('modal-quadro'); if (mq) mq.innerHTML = '';
     // o padrão dos botões de magistrado depende de quem entra: quem entrar depois não herda o filtro do usuário anterior
     for (const k of Object.keys(st.vis)) st.vis[k].magOff = null;
     st.ver++;
@@ -179,6 +181,7 @@
       st.aba = abas.includes(salva) ? salva : abas[0];
       st.area = 'fila'; st.menuAreas = false; // o painel sempre abre na Fila de Trabalho
       st.estado = 'ok'; render();
+      if (window.PAINEL.abrirQuadro) window.PAINEL.abrirQuadro(true); // quadro de avisos "Regras da fila" (quadro-ui.js)
     } catch (e) {
       console.error(e);
       st.estado = 'erro'; st.erro = 'Não foi possível carregar o painel agora.'; render();
@@ -302,6 +305,8 @@
     st.mapaTarefas = R.mapaTarefas(st.tarefas);
     if (!st.tarefasAlteradas) st.rascTarefas = JSON.parse(JSON.stringify(st.tarefas));
     st.resumo = porChave.resumo ? porChave.resumo.valor : null;
+    // Recado do Gestor no quadro de avisos (vazio = o quadro não mostra recado).
+    st.recadoQuadro = porChave.recado && porChave.recado.valor ? String(porChave.recado.valor.texto || '') : '';
     st.filas = filas;
     st.urgencias = urg.map(r => ({
       id: r.id, numero: r.numero, responsavel: r.responsavel, via: r.origem, remetente: r.remetente, de: r.remetente, motivo: r.motivo || '',
@@ -902,7 +907,7 @@
       <button type="button" class="tile" data-acao="ir" data-tipo="normal" data-balao="Ir para esta lista" aria-description="Ir para esta lista"><span>Na fila</span><b>${conta('normal')}</b></button>
       <div class="tile concluido"><span>Concluídos</span><b>${concluidos}</b></div>
     </div>
-    <p class="atualizacao">Lista do PJe: ${ultimaLista ? dataHoraBR(ultimaLista) : 'ainda não enviada'}${st.jd && st.jd.em ? ` · JD: ${dataHoraBR(st.jd.em)}` : ''}${st.pje1 && st.pje1.em ? ` · PJE1: ${dataHoraBR(st.pje1.em)}` : ''} · Clique no número para copiar.</p>
+    <p class="atualizacao">Lista do PJe: ${ultimaLista ? dataHoraBR(ultimaLista) : 'ainda não enviada'}${st.jd && st.jd.em ? ` · JD: ${dataHoraBR(st.jd.em)}` : ''}${st.pje1 && st.pje1.em ? ` · PJE1: ${dataHoraBR(st.pje1.em)}` : ''} · Clique no número para copiar.${window.PAINEL.botaoQuadro ? ' ' + window.PAINEL.botaoQuadro() : ''}</p>
     ${faixaMag}
     <div class="filtros">
       <input type="search" id="busca" placeholder="Buscar por número, classe, tarefa ou anotação" value="${esc(f.busca)}" aria-label="Buscar">

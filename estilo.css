@@ -634,3 +634,46 @@ a.btn { display: inline-block; text-decoration: none; }
 .ia-texto li { margin: 2px 0; }
 .ia-texto blockquote { margin: 6px 0; padding: 4px 10px; border-left: 3px solid var(--pri); background: var(--pri-bg); }
 .ia-pasta { margin-top: 8px; }
+
+/* Quadro de avisos "Regras da fila" (quadro-ui.js). Só variáveis do tema: vale no claro e no escuro. */
+.qd-botao { font-size: 12.5px; padding: 0 6px; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.qd-botao:hover { color: var(--accent); }
+.qd-num { display: inline-block; min-width: 18px; margin-left: 2px; padding: 0 5px; border-radius: 999px; background: var(--novo); color: var(--surface); font-size: 11px; line-height: 17px; text-align: center; text-decoration: none; }
+.modal.qd-modal { width: min(100%, 640px); display: flex; flex-direction: column; max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); }
+.qd-modal h2 { display: flex; align-items: center; gap: 8px; }
+.qd-x { margin-left: auto; border: 0; background: none; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px; border-radius: var(--r); }
+.qd-x:hover { color: var(--ink); background: var(--hover); }
+.modal .qd-corpo { overflow-y: auto; gap: 10px; }
+.qd-cartao { border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; background: var(--surface); }
+.qd-cartao h3 { font-size: .95rem; margin: 0 0 4px; }
+.qd-cartao p, .qd-cartao ul { margin: 0; }
+.qd-cartao p + p, .qd-cartao p + ul, .qd-cartao ul + p { margin-top: 6px; }
+.qd-lista { padding-left: 18px; }
+.qd-lista li + li { margin-top: 3px; }
+.qd-grupo { line-height: 1.9; }
+.qd-rot { color: var(--muted); font-size: 12.5px; }
+.qd-chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 0 8px; border-radius: 999px; line-height: 20px; }
+.qd-chip.urgente { background: var(--urg-bg); color: var(--urg); }
+.qd-chip.prioritaria { background: var(--pri-bg); color: var(--pri); }
+.qd-chip.qd-mudou { outline: 2px solid var(--novo); outline-offset: 1px; }
+.qd-nota { color: var(--muted); font-size: 12.5px; }
+.qd-urgente h3 { color: var(--urg); }
+.qd-prioritaria h3 { color: var(--pri); }
+.qd-recado { white-space: pre-line; }
+.qd-cartao.qd-recado { background: var(--sunken); }
+.qd-cartao.qd-destaque { border: 2px solid var(--novo); }
+.qd-antes { display: block; color: var(--muted); font-size: 12.5px; text-decoration: line-through; }
+.qd-cartao .selo.novo { vertical-align: 1px; margin-left: 4px; }
+.qd-removidas { background: var(--sunken); }
+.qd-removidas s { color: var(--muted); }
+.qd-demais summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 4px 0; }
+.qd-demais[open] summary { margin-bottom: 8px; }
+.qd-demais .qd-cartao + .qd-cartao { margin-top: 10px; }
+.qd-rodape { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--sunken); }
+.qd-rodape-dir { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-left: auto; }
+.qd-ocultar { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+@media (max-width: 560px) {
+  .modal-fundo:has(.qd-modal) { padding: 0; }
+  .modal.qd-modal { width: 100%; max-height: 100dvh; height: 100dvh; border-radius: 0; }
+  .qd-rodape-dir { width: 100%; justify-content: space-between; }
+}

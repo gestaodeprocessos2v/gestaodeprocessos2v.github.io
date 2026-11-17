@@ -114,6 +114,7 @@
       ${painelManutencao()}
       ${painelTarefas()}
       ${painelEtiquetasPrioridade()}
+      ${P.painelQuadroGestao ? P.painelQuadroGestao() : ''}
       ${painelConfig()}
     </div>`;
     ligarRecolher(v);
