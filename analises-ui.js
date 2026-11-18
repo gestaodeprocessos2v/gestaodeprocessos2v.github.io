@@ -25,7 +25,7 @@
     const a = A();
     try {
       const linhas = await todas((x, y) => st.sb.from('analises_ia').select('numero,caminho,motivo,tarefa,analisado_em,hash,gravado_em').order('numero').range(x, y));
-      a.lista = Object.fromEntries(linhas.map(r => [r.numero, { caminho: r.caminho, motivo: r.motivo || '', tarefa: r.tarefa || '', analisadoEm: r.analisado_em || '', hash: r.hash }]));
+      a.lista = Object.fromEntries(linhas.map(r => [r.numero, { caminho: r.caminho, motivo: r.motivo || '', tarefa: r.tarefa || '', analisadoEm: r.analisado_em || '', hash: r.hash, gravadoEm: Date.parse(r.gravado_em) || null }]));
       a.ultimaGravacao = linhas.reduce((m, r) => Math.max(m, Date.parse(r.gravado_em) || 0), 0) || null;
       a.carregada = true;
     } catch (e) { console.error(e); }
@@ -332,6 +332,36 @@
     });
   }
 
+  // Conclusão no painel depois da gravação da análise: a marca mais recente (não desfeita) do processo, em qualquer fila,
+  // com data posterior à gravação. Devolve { em, pessoa } ou null.
+  function concluidoDepois(n, desde) {
+    if (!desde || !P.marcasVigentesTodas) return null;
+    let achou = null;
+    for (const [pessoa, marcas] of Object.entries(P.marcasVigentesTodas())) {
+      for (const [chave, m] of Object.entries(marcas || {})) {
+        if (chave.split('|')[0] !== n || !m || m.desfeito || !m.em || m.em <= desde) continue;
+        if (!achou || m.em > achou.em) achou = { em: m.em, pessoa };
+      }
+    }
+    return achou;
+  }
+
+  function planilhaGravadas() {
+    const ls = gravadas().sort((p, q) => p.n.localeCompare(q.n));
+    const mudou = g => (!g.item ? 'Saiu das filas' : g.an.tarefa && g.item.t && R.normTexto(g.an.tarefa) !== R.normTexto(g.item.t) ? 'Sim' : 'Não');
+    P.baixarPlanilha({
+      arquivo: 'analises-gravadas', titulo: 'Análises da IA gravadas no painel', aba: 'Análises', fonte: 'Análises gravadas no painel e filas atuais',
+      colunas: [{ t: 'Número do processo', largura: 27 }, { t: 'Caminho sugerido', largura: 50 }, { t: 'Analisado em', largura: 14 }, { t: 'Gravada no painel em', largura: 18 },
+        { t: 'Tarefa da análise', largura: 40 }, { t: 'Tarefa atual', largura: 40 }, { t: 'Mudou de tarefa', largura: 16 },
+        { t: 'Concluído no painel depois da gravação', largura: 20 }, { t: 'Concluído em', largura: 18 }, { t: 'Fila em que foi concluído', largura: 28 }, { t: 'Etiqueta na fila', largura: 50 }],
+      linhas: ls.map(g => {
+        const c = concluidoDepois(g.n, g.an.gravadoEm);
+        return [fmtCNJ(g.n), g.an.caminho, dataAnalise(g.an.analisadoEm), g.an.gravadoEm ? dataHoraBR(g.an.gravadoEm) : '', g.an.tarefa || '', (g.item && g.item.t) || '', mudou(g),
+          c ? 'Sim' : 'Não', c ? dataHoraBR(c.em) : '', c ? P.nomeDe(c.pessoa) : '', !g.item ? 'Não aparece (fora das filas)' : g.velha ? 'Desatualizada: ' + g.velha : 'Em dia'];
+      }),
+    });
+  }
+
   function planilhaTriagem() {
     const ls = semAnaliseNaTriagem();
     P.baixarPlanilha({
@@ -354,13 +384,13 @@
     const trVelha = g => `<tr><td class="mono">${numeroHTML(fmtCNJ(g.n))}</td><td>${esc(g.an.caminho)}<div class="small muted">${esc(g.velha)}</div></td><td>${botaoRetirar(g.n)}</td></tr>`;
     const resumo = !a.carregada ? '<p class="small muted">Carregando…</p>' : `
       <p class="small"><b class="mono">${gs.length}</b> ${gs.length === 1 ? 'análise gravada' : 'análises gravadas'}${gs.length ? ` · <b class="mono">${velhas.length}</b> ${velhas.length === 1 ? 'desatualizada' : 'desatualizadas'}` : ''}${foraFilas ? ` · <b class="mono">${foraFilas}</b> de processos que saíram das filas (saem no próximo envio do PJe+R)` : ''}${a.ultimaGravacao ? ` · última gravação em ${esc(dataHoraBR(a.ultimaGravacao))}` : ''}.</p>
+      ${gs.length ? `<div class="linha-botoes"><button class="btn" type="button" data-iaacao="planilha-gravadas" data-balao="Baixa em .xlsx todas as análises gravadas, dizendo se o processo mudou de tarefa ou foi concluído no painel depois da gravação" aria-description="Baixa em .xlsx todas as análises gravadas, dizendo se o processo mudou de tarefa ou foi concluído no painel depois da gravação">Baixar planilha das análises gravadas</button></div>` : ''}
       ${velhas.length ? `<div class="tabela-wrap"><table><thead><tr><th>Processo</th><th>Caminho sugerido</th><th></th></tr></thead><tbody>${velhas.slice(0, MAX).map(trVelha).join('')}${velhas.length > MAX ? `<tr><td colspan="3" class="muted small">… e mais ${velhas.length - MAX} na planilha.</td></tr>` : ''}</tbody></table></div>
-      <div class="linha-botoes"><button class="btn" type="button" data-iaacao="planilha-velhas" data-balao="Baixa em .xlsx as análises desatualizadas" aria-description="Baixa em .xlsx as análises desatualizadas">Baixar planilha</button></div>` : ''}`;
+      <div class="linha-botoes"><button class="btn" type="button" data-iaacao="planilha-velhas" data-balao="Baixa em .xlsx as análises desatualizadas" aria-description="Baixa em .xlsx as análises desatualizadas">Baixar planilha das desatualizadas</button></div>` : ''}`;
 
     const tri = semAnaliseNaTriagem();
-    const triagem = `<p class="small"><b class="mono">${tri.length}</b> ${tri.length === 1 ? 'processo da Triagem inicial está' : 'processos da Triagem inicial estão'} sem análise${tri.length ? '. Os mais antigos na tarefa:' : '.'}</p>
-      ${tri.length ? `<div class="tabela-wrap"><table><thead><tr><th>Processo</th><th>Tarefa</th><th>Dias</th></tr></thead><tbody>${tri.slice(0, MAX).map(({ i }) => `<tr><td class="mono">${numeroHTML(i.n)}</td><td>${esc(i.t || '')}</td><td class="n">${diasDesde(i.ch) == null ? '—' : diasDesde(i.ch)}</td></tr>`).join('')}${tri.length > MAX ? `<tr><td colspan="3" class="muted small">… e mais ${tri.length - MAX} na planilha.</td></tr>` : ''}</tbody></table></div>
-      <div class="linha-botoes"><button class="btn" type="button" data-iaacao="planilha-triagem" data-balao="Baixa em .xlsx os processos da Triagem inicial sem análise" aria-description="Baixa em .xlsx os processos da Triagem inicial sem análise">Baixar planilha</button></div>` : ''}`;
+    const triagem = `<p class="small"><b class="mono">${tri.length}</b> ${tri.length === 1 ? 'processo da Triagem inicial está' : 'processos da Triagem inicial estão'} sem análise.</p>
+      ${tri.length ? `<div class="linha-botoes"><button class="btn" type="button" data-iaacao="planilha-triagem" data-balao="Baixa em .xlsx os processos da Triagem inicial sem análise, do mais antigo na tarefa ao mais novo" aria-description="Baixa em .xlsx os processos da Triagem inicial sem análise, do mais antigo na tarefa ao mais novo">Baixar planilha</button></div>` : ''}`;
 
     const nDig = digitos(a.retirarNum), achada = nDig.length === 20 && a.lista[nDig];
     const retirar = `<label class="campo"><span>Número do processo</span><input id="ia-retirar-num" type="text" inputmode="numeric" autocomplete="off" value="${esc(a.retirarNum || '')}" placeholder="0000000-00.0000.4.05.8200"></label>
@@ -431,6 +461,7 @@
       else if (acao === 'retirar-ok') await retirarAnalise(el.dataset.n);
       else if (acao === 'planilha-velhas') planilhaVelhas();
       else if (acao === 'planilha-triagem') planilhaTriagem();
+      else if (acao === 'planilha-gravadas') planilhaGravadas();
     } catch (err) { falha(err); }
   });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && st.analises && st.analises.modal) { st.analises.modal = null; renderModal(); } });
