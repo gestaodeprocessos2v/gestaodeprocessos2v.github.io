@@ -922,26 +922,33 @@
     return normTexto(s) === 'magistrado' ? 'Magistrado(a)' : s;
   }
 
-  function paraCsv(linhas, nomes, comResp) {
+  // Planilha da Fila (Fila, Geral e Eventual): colunas ({ t, tipo, largura }, como em Metas.gerarXlsx) e linhas, na ordem recebida.
+  // comResp: com a coluna do servidor dono (Geral e Eventual). Data de chegada como data; dias na tarefa como número.
+  function paraPlanilha(linhas, nomes, comResp, agora) {
+    const hoje = agora == null ? Date.now() : agora;
     const cols = [
-      ['Número do Processo', l => l.n],
-      ...(comResp ? [['Responsável', l => (nomes && nomes[l.dono]) || l.dono || '']] : []),
-      ['Situação', l => ({ urgente: 'Urgente', devolvido: 'Devolvido', prioritaria: 'Prioritária', normal: '' })[l.tipo] + (l.concluido ? ' (concluído)' : l.retornou ? ` (voltou: concluído em ${new Date(l.retornou).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })})` : '')],
-      ['Critério', l => (l.criterios || []).map(c => c.r + (c.e && c.e.length ? ': ' + c.e.join('; ') : '')).join(' | ')],
-      ['Classe', l => l.c], ['Tarefa', l => l.t], ['Magistrado(a)', l => ({ T: 'Titular', S: 'Substituta' })[magistradoDeCargo(l.cg)] || ''],
-      ['Data de Chegada', l => l.ch ? new Date(l.ch).toLocaleDateString('pt-BR') : ''],
-      ['Anotação', l => l.anot],
-      ['Observação', l => l.motivo ? (l.origem === 'devolucao' ? 'Devolvido por ' + ((nomes && nomes[l.de]) || l.de || '') + ': ' : '') + l.motivo : ''],
+      [{ t: 'Número do processo', largura: 27 }, l => l.n],
+      ...(comResp ? [[{ t: 'Responsável', largura: 26 }, l => (nomes && nomes[l.dono]) || l.dono || '']] : []),
+      [{ t: 'Situação', largura: 18 }, l => ((({ urgente: 'Urgente', devolvido: 'Devolvido', prioritaria: 'Prioritária' })[l.tipo] || '') +(l.concluido ? ' (concluído)' : l.retornou ? ` (voltou: concluído em ${new Date(l.retornou).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })})` : '')).trim()],
+      [{ t: 'Critério', largura: 30 }, l => (l.criterios || []).map(c => c.r + (c.e && c.e.length ? ': ' + c.e.join('; ') : '')).join(' | ')],
+      [{ t: 'Classe', largura: 14 }, l => l.c], [{ t: 'Tarefa', largura: 44 }, l => l.t],
+      [{ t: 'Magistrado(a)', largura: 13 }, l => ({ T: 'Titular', S: 'Substituta' })[magistradoDeCargo(l.cg)] || ''],
+      [{ t: 'Data de chegada', tipo: 'data', largura: 15 }, l => l.ch || null],
+      [{ t: 'Dias na tarefa', tipo: 'numero', largura: 13 }, l => (l.ch ? Math.max(0, Math.floor((hoje - l.ch) / 86400000)) : null)],
+      [{ t: 'Anotação', largura: 36 }, l => l.anot],
+      [{ t: 'Observação', largura: 36 }, l => l.motivo ? (l.origem === 'devolucao' ? 'Devolvido por ' + ((nomes && nomes[l.de]) || l.de || '') + ': ' : '') + l.motivo : ''],
     ];
-    const q = v => { const s = String(v == null ? '' : v); return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    return '﻿' + [cols.map(c => q(c[0])).join(';'), ...linhas.map(l => cols.map(c => q(c[1](l))).join(';'))].join('\r\n');
+    return { colunas: cols.map(c => c[0]), linhas: linhas.map(l => cols.map(c => c[1](l))) };
   }
 
-  function tarefasParaCsv(itens) {
-    const cols = [['Tarefa', t => t.tarefa], ['Setor responsável', t => t.setor], ['Setor no painel', t => t.painel], ['Só após (dias)', t => t.aposDias || ''], ['Etiqueta exigida', t => t.etiqueta],
-      ['Urgente?', t => (t.urgente ? 'Sim' : 'Não')], ['Urgente se etiqueta', t => t.etiquetaUrgente], ['Zerar?', t => (t.zerar ? 'Sim' : 'Não')], ['Fluxo Paralelo?', t => (t.paralelo ? 'Fluxo Paralelo' : '')], ['Nos Parados?', t => (t.semParados ? 'Não' : 'Sim')]];
-    const q = v => { const s = String(v == null ? '' : v); return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    return '﻿' + [cols.map(c => q(c[0])).join(';'), ...itens.map(t => cols.map(c => q(c[1](t))).join(';'))].join('\r\n');
+  // Planilha da tabela de tarefas (Gestão). nomeSetor: id do setor no painel -> nome (vazio = "Ignorar").
+  function tarefasParaPlanilha(itens, nomeSetor) {
+    const nome = id => (id ? (nomeSetor && nomeSetor(id)) || id : 'Ignorar');
+    const cols = [[{ t: 'Tarefa', largura: 48 }, t => t.tarefa], [{ t: 'Setor responsável', largura: 26 }, t => t.setor], [{ t: 'Setor no painel', largura: 16 }, t => nome(t.painel)],
+      [{ t: 'Só após (dias)', tipo: 'numero', largura: 13 }, t => t.aposDias || null], [{ t: 'Etiqueta exigida', largura: 26 }, t => t.etiqueta],
+      [{ t: 'Urgente?', largura: 10 }, t => (t.urgente ? 'Sim' : 'Não')], [{ t: 'Urgente se etiqueta', largura: 26 }, t => t.etiquetaUrgente], [{ t: 'Zerar?', largura: 9 }, t => (t.zerar ? 'Sim' : 'Não')],
+      [{ t: 'Fluxo paralelo?', largura: 14 }, t => (t.paralelo ? 'Sim' : 'Não')], [{ t: 'Nos Parados?', largura: 13 }, t => (t.semParados ? 'Não' : 'Sim')]];
+    return { colunas: cols.map(c => c[0]), linhas: itens.map(t => cols.map(c => c[1](t))) };
   }
 
   // ---------- e-mails: conclusão compartilhada ----------
@@ -1046,7 +1053,7 @@
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, regrasDoSetor, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
     atribuir, setorPorExcecao, causaExcecao, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, antesDoPrazo, estadoAnotacoes, conclusaoReaberta, marcasVigentes, concluidoAposAnotacao, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, elegivelPJE1, SITUACOES_PJE1, CAB_PJE1, resumirPJE1, partesPJE1, balaoPJE1, prcPJE1, casaJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, setorDosParados, SETOR_SEM_CADASTRO, comparar, chaveItem,
-    paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido, pedidoDespacho,
+    paraPlanilha, tarefasParaPlanilha, slug, normTexto, soDigitos, chaveEmail, emailConcluido, pedidoDespacho,
     lerAnalise, analiseDesatualizada, mdParaHtml, LIMITE_ANALISE,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

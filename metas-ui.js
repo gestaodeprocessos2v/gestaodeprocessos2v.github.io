@@ -4,7 +4,7 @@
   'use strict';
   const P = window.PAINEL, M = window.Metas;
   if (!P || !P.render || !M) return;
-  const { st, esc, toast, falha, iso, dataBR, dataHoraBR, baixar } = P;
+  const { st, esc, toast, falha, iso, dataBR, dataHoraBR } = P;
   const $ = sel => document.querySelector(sel);
   const render = () => P.render();
   const LIMITE_PASSO = 300;
@@ -171,7 +171,7 @@
     const f = st.fMetas, lista = pendentesFiltrados(), mostrar = lista.slice(0, f.limite);
     const info = st.metas.pendInfo;
     const doEnvio = info && info.envio ? st.metas.envios.find(x => x.id === info.envio) : null;
-    const quando = doEnvio ? dataHoraBR(Date.parse(doEnvio.carga_bi)) : info ? dataHoraBR(Date.parse(info.em)) : '—';
+    const quando = quandoPendentes();
     // só metas com processos (com os demais filtros aplicados), cada uma com a quantidade; a meta escolhida fica na lista mesmo sem processos
     const base = pendentesFiltrados(true), qtdMeta = id => base.filter(it => (it.m || []).includes(id)).length;
     // Botões de magistrado: contados com os outros filtros aplicados, para o botão não sumir nem mudar ao ser desligado.
@@ -199,17 +199,36 @@
         <select id="metas-filtro-meta" aria-label="Filtrar por meta"><option value="">Todas as metas</option>${opMetas}</select>
         <select id="metas-filtro-inst" aria-label="Filtrar por instância"><option value="">1º Grau e JEF</option>${opInst}</select>
         <select id="metas-filtro-serv" class="sel-linhas" aria-label="Filtrar por servidor">${opServ}</select>
-        <span class="direita"><span class="small muted mono">${lista.length.toLocaleString('pt-BR')} ${lista.length === 1 ? 'processo' : 'processos'}</span><button class="btn" type="button" data-acao="metas-csv">Baixar CSV</button></span>
+        <span class="direita"><span class="small muted mono">${lista.length.toLocaleString('pt-BR')} ${lista.length === 1 ? 'processo' : 'processos'}</span><button class="btn" type="button" data-acao="metas-xlsx"${lista.length && !nenhumMag ? '' : ' disabled'} data-balao="${P.BALAO_PLANILHA('os processos')}" data-balao-dir="dir" aria-description="${P.BALAO_PLANILHA('os processos')}">Baixar planilha</button></span>
       </div>
       ${aviso || nenhumMag || `<section class="painel largo"><div class="tabela-wrap tabela-prioritaria"><table><thead><tr><th>Número do processo</th><th>Servidor ou setor</th><th>Tarefa atual</th><th>Entrada na tarefa</th><th>Instância</th><th>Classe</th><th>1ª distribuição</th><th>Metas pendentes</th></tr></thead><tbody>${linhas || '<tr><td colspan="8">Nenhum processo com esse filtro.</td></tr>'}</tbody></table></div>
       ${lista.length > mostrar.length ? `<div class="linha-botoes"><button class="btn" type="button" data-acao="metas-mais">Mostrar mais ${Math.min(LIMITE_PASSO, lista.length - mostrar.length)}</button><span class="small muted">Mostrando ${mostrar.length} de ${lista.length}</span></div>` : ''}</section>`}`;
   }
 
-  function csvPendentes() {
-    const q = v => { const s = String(v == null ? '' : v); return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    const cab = ['Número do Processo', 'Magistrado(a)', 'Servidor ou setor', 'Tarefa atual', 'Entrada na tarefa', 'Instância', 'Classe', '1ª Distribuição', 'Metas pendentes'];
-    const lin = pendentesFiltrados().map(it => [it.n, (P.MAGISTRADOS.find(x => x[0] === magDe(it)) || [])[1] || '', it.lista ? nomeLista(it) : 'Não localizado', it.lista ? it.lista.tarefa : '', it.lista && it.lista.chegada ? dataBR(it.lista.chegada) : '', it.i, M.formatarClasse(it.c), it.d ? dataBR(Date.parse(it.d + 'T12:00:00')) : '', (it.m || []).map(nomeCurto).join(', ')].map(q).join(';'));
-    return '﻿' + [cab.map(q).join(';'), ...lin].join('\r\n');
+  // Planilha (.xlsx) no padrão do painel: os pendentes com os filtros da tela, na mesma ordem, sem o corte do "Mostrar mais".
+  const COLUNAS_PEND = [
+    { t: 'Número do processo', largura: 27 }, { t: 'Magistrado(a)', largura: 13 }, { t: 'Servidor ou setor', largura: 26 }, { t: 'Tarefa atual', largura: 44 },
+    { t: 'Entrada na tarefa', tipo: 'data', largura: 15 }, { t: 'Instância', largura: 10 }, { t: 'Classe', largura: 34 }, { t: '1ª distribuição', tipo: 'data', largura: 15 },
+    { t: 'Metas pendentes', largura: 34 },
+  ];
+  function baixarPendentes() {
+    const f = st.fMetas, lista = P.magOffDe(f).length >= P.MAGISTRADOS.length ? [] : pendentesFiltrados();
+    const linhas = lista.map(it => [it.n, (P.MAGISTRADOS.find(x => x[0] === magDe(it)) || [])[1] || '', it.lista ? nomeLista(it) : 'Não localizado', it.lista ? it.lista.tarefa : '',
+      it.lista && it.lista.chegada ? it.lista.chegada : null, it.i, M.formatarClasse(it.c), it.d ? Date.parse(it.d + 'T12:00:00') : null, (it.m || []).map(nomeCurto).join(', ')]);
+    const serv = f.serv || '', rotServ = !serv ? '' : serv === SEM_LISTA ? 'Não localizados' : serv === OUTROS ? 'Outros setores da vara'
+      : serv.startsWith('__set:') ? ((FILTROS_SETOR.find(x => x[0] === serv) || [])[1] || serv) : P.nomeDe(serv);
+    const busca = f.busca.trim();
+    P.baixarPlanilha({
+      arquivo: 'pendentes-metas', titulo: 'Metas CNJ · Pendentes', aba: 'Pendentes', colunas: COLUNAS_PEND, linhas,
+      fonte: 'Carga do Portal BI: ' + quandoPendentes(),
+      filtros: [P.textoMagistrados(f), busca && `Busca: “${busca}”`, f.meta && 'Meta: ' + ((metaPorId(f.meta) || {}).nome || f.meta), f.inst && 'Instância: ' + f.inst, rotServ && 'Servidor ou setor: ' + rotServ],
+      total: `${lista.length.toLocaleString('pt-BR')} ${lista.length === 1 ? 'processo' : 'processos'}`,
+    });
+  }
+  // Data da carga do BI da lista de pendentes (a mesma do texto da tela).
+  function quandoPendentes() {
+    const info = st.metas.pendInfo, doEnvio = info && info.envio ? st.metas.envios.find(x => x.id === info.envio) : null;
+    return doEnvio ? dataHoraBR(Date.parse(doEnvio.carga_bi)) : info ? dataHoraBR(Date.parse(info.em)) : '—';
   }
 
   P.renderMetas = function () {
@@ -245,7 +264,7 @@
       const b = document.querySelector(`#v-metas [data-acao="metas-mag"][data-v="${v}"]`); if (b) b.focus();
     } else if (a.dataset.acao === 'metas-mag-padrao') { st.fMetas.magOff = magPadrao(st.fMetas); st.fMetas.limite = LIMITE_PASSO; render(); }
     else if (a.dataset.acao === 'metas-mais') { st.fMetas.limite += LIMITE_PASSO; render(); }
-    else if (a.dataset.acao === 'metas-csv') baixar('pendentes-metas-' + new Date().toISOString().slice(0, 10) + '.csv', csvPendentes());
+    else if (a.dataset.acao === 'metas-xlsx') baixarPendentes();
   });
 
   // ---------- aba Gestão: envio das planilhas ----------

@@ -3,7 +3,7 @@
   'use strict';
   const P = window.PAINEL;
   if (!P || !P.render) return;
-  const { st, R, SETORES, NOME_SETOR, TIPOS, ROTULO_TIPO, PERFIS, DIA, esc, dataBR, dataHoraBR, toast, falha, todas, iso, ms, pessoas, nomeDe, opcoesPessoas, opcoesTipo, baixar, guardar, ler } = P;
+  const { st, R, SETORES, NOME_SETOR, TIPOS, ROTULO_TIPO, PERFIS, DIA, esc, dataBR, dataHoraBR, toast, falha, todas, iso, ms, pessoas, nomeDe, opcoesPessoas, opcoesTipo, guardar, ler } = P;
   const $ = sel => document.querySelector(sel);
   const render = () => P.render();
   const PERFIS_OUTROS = ['gestor', 'magistrado', 'visitante'];
@@ -423,14 +423,28 @@
 
   // ---------- tarefas do PJe ----------
   const BALAO_NOS_PARADOS = 'Marcado: os processos desta tarefa entram na área Processos Parados, mesmo quando a tarefa não tem fila no painel. Desmarque para deixar a tarefa de fora. Vale assim que a tabela for salva.';
-  function painelTarefas() {
-    const lista = st.rascTarefas || [];
-    const f = st.filtroTabela;
-    const busca = R.normTexto(f.busca);
-    const visiveis = lista.map((t, i) => [t, i]).filter(([t]) => {
+  // Linhas da tabela de tarefas com a busca e o filtro "Setor no painel" ([tarefa, índice no rascunho]); a planilha usa as mesmas.
+  function tarefasVisiveis() {
+    const f = st.filtroTabela, busca = R.normTexto(f.busca);
+    return (st.rascTarefas || []).map((t, i) => [t, i]).filter(([t]) => {
       if (f.painel === '-' ? t.painel : f.painel && t.painel !== f.painel) return false;
       return !busca || R.normTexto(t.tarefa + ' ' + t.setor + ' ' + (t.etiqueta || '')).includes(busca);
     });
+  }
+  function baixarTarefas() {
+    const f = st.filtroTabela, ts = tarefasVisiveis().map(([t]) => t), busca = String(f.busca || '').trim();
+    const { colunas, linhas } = R.tarefasParaPlanilha(ts, id => NOME_SETOR[id]);
+    P.baixarPlanilha({
+      arquivo: 'tarefas-pje', titulo: 'Tabela de tarefas do PJe', aba: 'Tarefas', colunas, linhas,
+      fonte: (st.tarefasEm ? 'Tabela atualizada em ' + dataHoraBR(st.tarefasEm) : 'Tabela ainda não salva') + (st.tarefasAlteradas ? ' · com alterações ainda não salvas' : ''),
+      filtros: [busca && `Busca: “${busca}”`, f.painel && 'Setor no painel: ' + (f.painel === '-' ? 'só ignoradas' : NOME_SETOR[f.painel] || f.painel)],
+      total: `${ts.length} ${ts.length === 1 ? 'tarefa' : 'tarefas'}`,
+    });
+  }
+  function painelTarefas() {
+    const lista = st.rascTarefas || [];
+    const f = st.filtroTabela;
+    const visiveis = tarefasVisiveis();
     const opcPainel = sel => `<option value=""${!sel ? ' selected' : ''}>Ignorar</option>` + SETORES.map(([id, n]) => `<option value="${id}"${sel === id ? ' selected' : ''}>${n}</option>`).join('');
     const ck = (campo, i, v, rot) => `<input type="checkbox" id="tf-${campo}-${i}" data-i="${i}" data-campo="${campo}"${v ? ' checked' : ''} aria-label="${rot}">`;
     const linhas = visiveis.map(([t, i]) => `<tr>
@@ -461,7 +475,7 @@
         <div class="direita">
           <span id="tf-estado" class="small ${st.tarefasAlteradas ? 'alterado' : 'muted'}">${st.tarefasAlteradas ? 'Alterações não salvas' : 'Tudo salvo'}</span>
           <button class="btn" type="button" data-acao="tf-incluir">Incluir tarefa</button>
-          <button class="btn" type="button" data-acao="tf-baixar">Baixar CSV</button>
+          <button class="btn" type="button" data-acao="tf-baixar"${visiveis.length ? '' : ' disabled'} data-balao="${P.BALAO_PLANILHA('as tarefas')}" data-balao-dir="dir" aria-description="${P.BALAO_PLANILHA('as tarefas')}">Baixar planilha</button>
         </div>
       </div>
       <div class="tabela-wrap tabela-tarefas"><table>
@@ -558,7 +572,7 @@
       render();
       toast('Tabela de tarefas salva.');
     } else if (acao === 'tf-baixar') {
-      baixar('tarefas-pje-' + new Date().toISOString().slice(0, 10) + '.csv', R.tarefasParaCsv(lista));
+      baixarTarefas();
     }
   }
 

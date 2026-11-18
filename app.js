@@ -59,6 +59,8 @@
   function ler(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 
   let toastTimer = null;
+  // Linhas e filtros da última Fila/Geral/Eventual desenhada, para o botão "Baixar planilha" levar exatamente o que está na tela.
+  let planilhaFila = null;
   function toast(msg) {
     const t = $('#toast'); t.textContent = msg; t.hidden = false;
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3800);
@@ -96,13 +98,30 @@
     return h;
   }
 
-  // tipo: opcional; sem ele, CSV (o padrão dos botões que já existem).
   function baixar(nome, conteudo, tipo) {
-    const url = URL.createObjectURL(new Blob([conteudo], { type: tipo || 'text/csv;charset=utf-8' }));
+    const url = URL.createObjectURL(new Blob([conteudo], { type: tipo }));
     const a = document.createElement('a'); a.href = url; a.download = nome;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
+
+  // Planilha (.xlsx) no padrão do painel (decisões do Alberto, 18/11/2026): a lista que está na tela, com os filtros escolhidos,
+  // em tabela do Excel ("Estilo de Tabela Média 16", padrão de Metas.gerarXlsx) e, acima dela, título, fonte dos dados, só os
+  // filtros escolhidos ("nenhum" sem filtro) e o total, com fundo branco. colunas/linhas: como em Metas.gerarXlsx.
+  const TIPO_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  const diaHoje = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  function baixarPlanilha({ arquivo, titulo, fonte, filtros, total, colunas, linhas, aba }) {
+    if (!linhas || !linhas.length) { toast('Nada na tela para baixar.'); return; }
+    const fs = (filtros || []).filter(Boolean);
+    const topo = [titulo + ' · 2ª Vara Federal', ...[].concat(fonte || []).filter(Boolean), 'Filtros: ' + (fs.length ? fs.join(' · ') : 'nenhum'),
+      `${total || (linhas.length === 1 ? '1 linha' : linhas.length.toLocaleString('pt-BR') + ' linhas')} · planilha baixada em ${dataHoraBR(Date.now())}`];
+    const dados = window.Metas.gerarXlsx({ aba: aba || 'Lista', topo, colunas, linhas, tabela: { nome: 'Lista' } });
+    baixar(`${R.slug(arquivo)}-${diaHoje()}.xlsx`, dados, TIPO_XLSX);
+    toast(`Planilha com ${linhas.length === 1 ? '1 linha' : linhas.length.toLocaleString('pt-BR') + ' linhas'} baixada.`);
+  }
+  // Texto do filtro de magistrado(a) para o topo da planilha: sempre aparece.
+  const textoMagistrados = f => { const ligados = MAGISTRADOS.filter(m => !magOffDe(f).includes(m[0])); return ligados.length === 1 ? ligados[0][2] : 'Titular e Substituta'; };
+  const BALAO_PLANILHA = o => `Baixa em .xlsx ${o} que estão na tela, com os filtros aplicados`;
 
   function falha(e) {
     console.error(e);
@@ -897,6 +916,18 @@
     const nenhumMag = magOffDe(f).length >= MAGISTRADOS.length;
     const concluidos = doMag.length - abertasMag.length;
     const ultimaLista = st.filas.reduce((m, r) => Math.max(m, ms(r.importado_em) || 0), 0);
+    // Planilha: as linhas que passam nos filtros da tela (inclusive busca e tarefa), na ordem das seções (htmlGrupos), sem o corte
+    // do "Mostrar mais"; o topo lista só os filtros escolhidos.
+    const ordemTela = nenhumMag ? [] : ['urgente', 'devolvido', 'prioritaria', 'normal'].flatMap(t => { const ls = visiveis.filter(l => l.tipo === t); return [...ls.filter(l => l.concluido), ...ls.filter(l => !l.concluido)]; });
+    const nomeVisao = f.visao ? (visoesDe(pessoaDaVisao(modo)).find(x => idVisao(x) === f.visao) || {}).nome : '';
+    const buscaTxt = String(f.busca || '').trim();
+    planilhaFila = {
+      modo, linhas: ordemTela,
+      fonte: `Lista do PJe: ${ultimaLista ? dataHoraBR(ultimaLista) : 'ainda não enviada'}${st.jd && st.jd.em ? ` · JD: ${dataHoraBR(st.jd.em)}` : ''}${st.pje1 && st.pje1.em ? ` · PJE1: ${dataHoraBR(st.pje1.em)}` : ''}`,
+      filtros: [textoMagistrados(f), buscaTxt && `Busca: “${buscaTxt}”`, geral && f.pessoa && 'Servidor: ' + nomeDe(f.pessoa), nomeVisao && 'Mostrar: ' + nomeVisao,
+        eventual && f.setor && 'Setor: ' + (NOME_SETOR[f.setor] || f.setor), f.tarefa && 'Tarefa: ' + f.tarefa, f.etiqueta && 'Etiqueta: ' + f.etiqueta,
+        f.jd && 'JD: ' + ((OPCOES_JD.find(o => o[0] === f.jd) || [])[1] || f.jd), f.concl && 'Com os concluídos'],
+    };
 
     let h = '';
     if (novos) h += `<div class="aviso novo"><b>${novos} ${novos === 1 ? 'processo novo' : 'processos novos'}</b> em urgências ou tarefas prioritárias desde a sua última visita (${dataHoraBR(st.ultimaVisita)}).</div>`;
@@ -919,7 +950,7 @@
       ${etiquetas.length ? `<select id="filtro-etiqueta" aria-label="Filtrar por etiqueta"><option value="">Todas as etiquetas</option>${opEtiquetas.map(o => `<option value="${esc(o.x)}"${o.x === f.etiqueta ? ' selected' : ''}>${esc(o.x)} (${o.n})</option>`).join('')}</select>` : ''}
       ${opJD.length ? `<select id="filtro-jd" aria-label="Filtrar pela situação no JD"><option value="">Todos (JD)</option>${opJD.map(o => `<option value="${o.x}"${o.x === f.jd ? ' selected' : ''}>${esc(o.rot)} (${o.n})</option>`).join('')}</select>` : ''}
       <label class="small"><input type="checkbox" id="mostrar-concluidos"${f.concl ? ' checked' : ''}> Mostrar concluídos</label>
-      <div class="direita"><button class="btn" data-acao="baixar">Baixar CSV</button></div>
+      <div class="direita"><button class="btn" type="button" data-acao="baixar"${ordemTela.length ? '' : ' disabled'} data-balao="${BALAO_PLANILHA('os processos')}" data-balao-dir="dir" aria-description="${BALAO_PLANILHA('os processos')}">Baixar planilha</button></div>
     </div>`;
 
     if (!todas.length) {
@@ -1283,11 +1314,13 @@
       } else if (acao === 'mais') {
         f.limite += LIMITE_NORMAL; render();
       } else if (acao === 'baixar') {
-        const base = aplicarVisao(modo, modo === 'geral' ? linhasGeral(f.pessoa) : modo === 'eventual' ? linhasEventual() : filaDe(pessoaAtiva())).filter(l => (!f.setor || l.s === f.setor) && (!f.etiqueta || (l[etConfig(modo).campo] || []).includes(f.etiqueta)) && casaJD(l, f.jd) && magPassa(f, magDoCargo(l.cg)));
-        const linhas = base.filter(l => f.concl || !l.concluido);
-        const hoje = new Date().toISOString().slice(0, 10);
+        const pf = planilhaFila;
+        if (!pf || pf.modo !== modo) return;
         const porDono = modo === 'geral' || modo === 'eventual';
-        baixar(`fila-${porDono ? modo : pessoaAtiva()}-${hoje}.csv`, R.paraCsv(linhas, nomes(), porDono));
+        const { colunas, linhas } = R.paraPlanilha(pf.linhas, nomes(), porDono);
+        const quem = porDono ? (modo === 'geral' ? 'Geral' : 'Eventual') : nomeDe(pessoaAtiva());
+        baixarPlanilha({ arquivo: `fila-${quem}`, titulo: `Fila de Trabalho · ${quem}`, fonte: pf.fonte, filtros: pf.filtros,
+          total: `${pf.linhas.length.toLocaleString('pt-BR')} ${pf.linhas.length === 1 ? 'processo' : 'processos'}`, colunas, linhas, aba: 'Fila' });
       }
     } catch (e) { falha(e); }
   }
@@ -1443,7 +1476,7 @@
     st.sb.auth.onAuthStateChange((evento) => {
       if (evento === 'SIGNED_OUT' && st.estado === 'ok') setTimeout(() => { reiniciarEstado(); st.estado = 'login'; render(); }, 0);
     });
-    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, carregarPJE1, atualizar, baixar, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS, PERFIS_PRODUTIVIDADE, PERFIS_EMAILS, PERFIS_PARADOS, prazosRetorno, anotadosDe, marcasVigentesTodas, numeroHTML, MAGISTRADOS, magDoCargo, magPadrao, magOffDe, noPadraoMag, magPassa, alternarMag, letraMagHTML, faixaMagHTML });
+    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, carregarPJE1, atualizar, baixarPlanilha, textoMagistrados, BALAO_PLANILHA, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS, PERFIS_PRODUTIVIDADE, PERFIS_EMAILS, PERFIS_PARADOS, prazosRetorno, anotadosDe, marcasVigentesTodas, numeroHTML, MAGISTRADOS, magDoCargo, magPadrao, magOffDe, noPadraoMag, magPassa, alternarMag, letraMagHTML, faixaMagHTML });
     iniciarSessao();
   }
   iniciar();

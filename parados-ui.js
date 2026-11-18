@@ -43,8 +43,8 @@
   const ordemExtra = (a, b) => (FIM.indexOf(a) - FIM.indexOf(b)) || rotuloSetor(a).localeCompare(rotuloSetor(b), 'pt-BR');
   const BALAO_SEM_SERVIDOR = 'Tarefa sem fila de servidor no painel';
 
-  // Planilha (.xlsx) com o que está na tela: a lista da última tela desenhada (mesmos filtros e mesma ordem).
-  const BALAO_XLSX = 'Baixa em .xlsx os processos que estão na tela, com os filtros aplicados';
+  // Planilha (.xlsx) no padrão do painel (P.baixarPlanilha): a lista da última tela desenhada (mesmos filtros e mesma ordem).
+  const BALAO_XLSX = P.BALAO_PLANILHA('os processos');
   let listaAtual = [];
   const COLUNAS_XLSX = [
     { t: 'Número do processo', largura: 27 }, { t: 'Magistrado(a)', largura: 13 }, { t: 'Situação', largura: 22 }, { t: 'Classe', largura: 14 },
@@ -54,31 +54,17 @@
   // Data e hora da lista do PJe em uso: o envio mais recente gravado nas filas.
   const dataLista = () => st.filas.reduce((m, r) => Math.max(m, ms(r.importado_em) || 0), 0);
   const situacaoTexto = l => [l.tipo === 'urgente' && 'Urgente', l.tipo === 'prioritaria' && 'Prioritária', l.sg && 'Sigiloso', l.concluido && 'Concluído pelo servidor'].filter(Boolean).join('; ');
-  const semAcento = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
   function baixarPlanilha() {
-    const f = st.fParados, ls = listaAtual;
-    if (!ls.length) { toast('Nenhum processo na tela para baixar.'); return; }
+    const f = st.fParados, ls = listaAtual, lista = dataLista();
     const linhas = ls.map(l => [l.n, ({ T: 'Titular', S: 'Substituta' })[l.mag] || '', situacaoTexto(l), l.c || '', l.t || '', rotuloSetor(l.s), l.ch, l.dias, l.resp ? nomeDe(l.resp) : '']);
-    // Informações acima da tabela: data da lista do PJe, filtros escolhidos e total (o mesmo texto da tela).
-    const ligados = MAGISTRADOS.filter(m => !magOffDe(f).includes(m[0]));
-    const filtros = [
-      ligados.length === 1 ? ligados[0][2] : 'Titular e Substituta',
-      'Setor: ' + (rotuloSetor(f.setor) || 'todos'),
-      'Servidor: ' + (f.servidor ? nomeDe(f.servidor) : 'todos'),
-      f.todos ? 'Todos os processos (Mostrar todos)' : `Parados há mais de ${nBR(f.limite)} dias`,
-    ];
-    const lista = dataLista();
-    const topo = [
-      'Processos Parados · 2ª Vara Federal',
-      'Lista do PJe: ' + (lista ? dataHoraBR(lista) : 'ainda não enviada'),
-      'Filtros: ' + filtros.join(' · '),
-      `${totalLista(ls)} · planilha baixada em ${dataHoraBR(Date.now())}`,
-    ];
-    const dados = window.Metas.gerarXlsx({ aba: f.todos ? 'Todos' : 'Parados', topo, colunas: COLUNAS_XLSX, linhas, tabela: { nome: 'Parados', estilo: 'TableStyleMedium16' } });
-    const setor = semAcento(rotuloSetor(f.setor) || 'todos').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const hoje = new Date(), dia = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
-    P.baixar(`processos-parados-${setor}-${dia}.xlsx`, dados, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    toast(`Planilha com ${ls.length === 1 ? '1 linha' : nBR(ls.length) + ' linhas'} baixada.`);
+    // Só os filtros escolhidos (padrão do painel); o limite de dias, ou "Mostrar todos", sempre aparece, porque define a lista.
+    P.baixarPlanilha({
+      arquivo: 'processos-parados-' + (rotuloSetor(f.setor) || 'todos'), titulo: 'Processos Parados', aba: f.todos ? 'Todos' : 'Parados', colunas: COLUNAS_XLSX, linhas,
+      fonte: 'Lista do PJe: ' + (lista ? dataHoraBR(lista) : 'ainda não enviada'),
+      filtros: [P.textoMagistrados(f), f.setor && 'Setor: ' + rotuloSetor(f.setor), f.servidor && 'Servidor: ' + nomeDe(f.servidor),
+        f.todos ? 'Todos os processos (Mostrar todos)' : `Parados há mais de ${nBR(f.limite)} dias`],
+      total: totalLista(ls),
+    });
   }
 
   // Mesma ordem e mesmos nomes da Fila de Trabalho; Setor depois de Tarefa; Dias na tarefa e Servidor responsável em seguida.

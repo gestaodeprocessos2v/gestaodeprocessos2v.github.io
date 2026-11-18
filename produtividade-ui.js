@@ -4,7 +4,7 @@
   'use strict';
   const P = window.PAINEL, M = window.Metas, X = window.Produtividade;
   if (!P || !P.render || !M || !X) return;
-  const { st, R, esc, toast, falha, dataBR, dataHoraBR, todas, baixar } = P;
+  const { st, R, esc, toast, falha, dataBR, dataHoraBR, todas } = P;
   const $ = sel => document.querySelector(sel);
   const render = () => P.render();
   const nBR = n => Number(n || 0).toLocaleString('pt-BR');
@@ -127,7 +127,7 @@
     if (aba === 'resumo') extra.push(sel('gran', 'Agrupar por', GRANS.map(([v, r]) => ({ v, r: `Por ${r.toLowerCase()}` })), f.gran, null));
     extra.push(`<div class="seg-tema prod-alterna" role="group" aria-label="Medida">${[['atividades', 'Atividades'], ['processos', 'Processos']].map(([v, r]) => `<button type="button" role="menuitemradio" aria-checked="${f.medida === v}" data-pacao="medida" data-v="${v}">${r}</button>`).join('')}</div>`);
     if (aba !== 'resumo') extra.push(`<input type="search" id="prod-busca" placeholder="Buscar pessoa" value="${esc(f.busca)}" aria-label="Buscar">`);
-    return chips + `<div class="filtros prod-filtros">${periodo}${extra.join('')}${aba === 'pessoas' ? '<div class="direita"><button class="btn" type="button" data-pacao="csv">Baixar CSV</button></div>' : ''}</div>`;
+    return chips + `<div class="filtros prod-filtros">${periodo}${extra.join('')}${aba === 'pessoas' ? `<div class="direita"><button class="btn" type="button" data-pacao="xlsx"${linhasPessoas(s, ctx).length ? '' : ' disabled'} data-balao="${P.BALAO_PLANILHA('as pessoas')}" data-balao-dir="dir" aria-description="${P.BALAO_PLANILHA('as pessoas')}">Baixar planilha</button></div>` : ''}</div>`;
   }
 
   // Variação sobre outro período (o imediatamente anterior ou o mesmo período do ano passado), só quando os envios cobrem esse período.
@@ -178,7 +178,6 @@
   }
 
   // ---------- por pessoa ----------
-  const CAB_CSV = ['Pessoa', 'Perfil', 'Grupo', 'Documentos', 'Retificações', 'Tarefas', 'Dias ativos', 'Atividades', 'Média de atividades por dia ativo', 'Processos', 'Média de processos por dia ativo'];
   const media = p => (p.diasAtivos ? p.total / p.diasAtivos : 0);
   const mediaProc = p => (p.diasAtivos ? p.processos / p.diasAtivos : 0);
   const um = n => Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });   // sempre uma casa decimal
@@ -216,12 +215,24 @@
         <div class="tabela-wrap"><table class="prod-tabela"><thead>${cab}</thead><tbody>${corpo || '<tr><td colspan="9" class="muted">Nenhuma pessoa com esse filtro.</td></tr>'}${ps.length ? rodape : ''}</tbody></table></div>
         <p class="small muted">Processos: soma, por pessoa, dos processos distintos de cada dia (o mesmo processo em dias diferentes conta mais de uma vez). Médias: total dividido pelos dias ativos (dias com ao menos uma atividade).</p></section>`;
   }
-  function csvPessoas(s, ctx) {
-    const q = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
-    const ps = linhasPessoas(s, ctx);
-    const dec = n => n.toFixed(1).replace('.', ',');
-    const linhas = [CAB_CSV.join(';')].concat(ps.map(p => [p.pessoa, rotPerfil(p.perfil), p.grupo, p[X.ATIV_DOC], p[X.ATIV_RETIF], p[X.ATIV_TAREFA], p.diasAtivos, p.total, dec(media(p)), p.processos, dec(mediaProc(p))].map(q).join(';')));
-    return '﻿' + linhas.join('\r\n');
+  // Planilha (.xlsx) no padrão do painel: as pessoas da tabela "Detalhe por pessoa", com os filtros e a ordem da tela.
+  const COLUNAS_PESSOAS = [
+    { t: 'Pessoa', largura: 30 }, { t: 'Perfil', largura: 14 }, { t: 'Grupo', largura: 20 }, { t: 'Documentos', tipo: 'numero', largura: 12 }, { t: 'Retificações', tipo: 'numero', largura: 12 },
+    { t: 'Tarefas', tipo: 'numero', largura: 10 }, { t: 'Dias ativos', tipo: 'numero', largura: 11 }, { t: 'Atividades', tipo: 'numero', largura: 11 },
+    { t: 'Média de atividades por dia ativo', tipo: 'decimal', largura: 17 }, { t: 'Processos', tipo: 'numero', largura: 11 }, { t: 'Média de processos por dia ativo', tipo: 'decimal', largura: 17 },
+  ];
+  function baixarPessoas(s, ctx) {
+    const f = s.f, ps = linhasPessoas(s, ctx), per = ctx.periodo(f), ef = filtroEfetivo(s), busca = String(f.busca || '').trim();
+    const linhas = ps.map(p => [p.pessoa, rotPerfil(p.perfil), p.grupo, p[X.ATIV_DOC], p[X.ATIV_RETIF], p[X.ATIV_TAREFA], p.diasAtivos, p.total, Math.round(media(p) * 10) / 10, p.processos, Math.round(mediaProc(p) * 10) / 10]);
+    const rotPeriodo = (PERIODOS.find(x => x[0] === f.periodo) || [])[1] || f.periodo;
+    P.baixarPlanilha({
+      arquivo: 'produtividade-por-pessoa', titulo: 'Produtividade da Vara · Por pessoa', aba: 'Por pessoa', colunas: COLUNAS_PESSOAS, linhas,
+      fonte: `Relatório do Portal BI com dados até ${dBR(s.dataFim)}`,
+      // O período sempre aparece; perfis e grupos, só quando diferem do padrão (todos, menos estagiários).
+      filtros: [`Período: ${rotPeriodo}${per.ini ? ` (${dBR(per.ini)} a ${dBR(per.fim)})` : ''}`, !noPadrao(s) && 'Perfis: ' + ef.perfis.map(rotPerfil).join(', '),
+        !noPadrao(s) && 'Grupos: ' + (ef.grupos.join(', ') || 'nenhum'), busca && `Busca: “${busca}”`],
+      total: `${ps.length} ${ps.length === 1 ? 'pessoa' : 'pessoas'}`,
+    });
   }
 
   // ---------- contexto de cálculo da área ----------
@@ -299,7 +310,7 @@
       const c = a.dataset.campo, texto = ['pessoa', 'perfil', 'grupo'].includes(c);
       if (f.ordem === c) f.dir = -f.dir; else { f.ordem = c; f.dir = texto ? 1 : -1; }
       render();
-    } else if (a.dataset.pacao === 'csv') baixar(`produtividade-por-pessoa-${new Date().toISOString().slice(0, 10)}.csv`, csvPessoas(s, contexto(s)));
+    } else if (a.dataset.pacao === 'xlsx') baixarPessoas(s, contexto(s));
   });
   vp.addEventListener('keydown', e => {
     if (e.key === 'Enter' && e.target.matches('.prod-col, .prod-rank-lin')) e.preventDefault();
