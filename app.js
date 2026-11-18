@@ -325,6 +325,8 @@
     st.mapaTarefas = R.mapaTarefas(st.tarefas);
     if (!st.tarefasAlteradas) st.rascTarefas = JSON.parse(JSON.stringify(st.tarefas));
     st.resumo = porChave.resumo ? porChave.resumo.valor : null;
+    // Prazos da "Situação dos dados" (Gestão), escolhidos pelo Gestor; sem escolha vale o padrão de gestao.js.
+    st.prazosDados = porChave.prazos_dados && porChave.prazos_dados.valor ? porChave.prazos_dados.valor : {};
     // Recado do Gestor no quadro de avisos (vazio = o quadro não mostra recado).
     st.recadoQuadro = porChave.recado && porChave.recado.valor ? String(porChave.recado.valor.texto || '') : '';
     st.filas = filas;

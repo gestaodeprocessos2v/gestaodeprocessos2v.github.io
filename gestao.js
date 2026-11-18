@@ -370,9 +370,26 @@
   }
 
   // ---------- situação dos dados ----------
-  // Último envio de cada fonte e a idade. Passando do limite (horas), a linha fica com o fundo dos urgentes.
-  // limite null = só informa. Mudar aqui os limites, se a rotina de envios mudar.
+  // Último envio de cada fonte e a idade. Passando do prazo (horas), a linha fica com o fundo dos urgentes.
+  // Prazo null = só informa. O Gestor escolhe o prazo de cada fonte na coluna "Prazo" (config, chave 'prazos_dados',
+  // valor { fonte: horas | null }); sem escolha, vale o padrão abaixo.
   const LIMITE_DADOS_H = { pjer: 24, jd: 7 * 24, pje1: 7 * 24, metas: 7 * 24, prod: 7 * 24, analises: null };
+  const OPCOES_PRAZO_H = [24, 48, 72, 96, 120, 144, 168];
+  const textoPrazo = h => (h == null ? 'Sem prazo' : h === 24 ? '24 horas' : `${h / 24} dias`);
+  function prazoDados(id) {
+    const p = st.prazosDados || {};
+    if (Object.prototype.hasOwnProperty.call(p, id) && (p[id] === null || OPCOES_PRAZO_H.includes(p[id]))) return p[id];
+    return LIMITE_DADOS_H[id];
+  }
+  async function gravarPrazoDados(id, valor) {
+    const h = valor === '' ? null : Number(valor);
+    const novo = Object.assign({}, st.prazosDados || {}, { [id]: h });
+    const { error } = await st.sb.from('config').upsert({ chave: 'prazos_dados', valor: novo, atualizado_em: iso(Date.now()), atualizado_por: st.email }, { onConflict: 'chave' });
+    if (error) { falha(error); render(); return; }
+    st.prazosDados = novo;
+    toast(`Prazo salvo: ${textoPrazo(h).toLowerCase()}.`);
+    render();
+  }
   const emMs = v => (v == null || v === '' ? null : typeof v === 'number' ? v : Date.parse(v) || null);
   function idade(t) {
     const h = Math.floor((Date.now() - t) / 3600000);
@@ -392,13 +409,15 @@
       ['analises', 'Análises da IA (última gravação)', st.analises && st.analises.ultimaGravacao],
     ];
     const linhas = fontes.map(([id, nome, t]) => {
-      const lim = LIMITE_DADOS_H[id], velho = !!t && lim != null && Date.now() - t > lim * 3600000;
-      const balao = lim == null ? 'Só informa: não tem prazo.' : `Fica destacado com mais de ${lim < 48 ? lim + ' horas' : lim / 24 + ' dias'}.`;
-      return `<tr class="${velho ? 'dado-velho' : ''}"><td>${esc(nome)}</td><td class="mono">${t ? esc(dataHoraBR(t)) : '—'}</td><td><span data-balao="${esc(balao)}" aria-description="${esc(balao)}">${t ? esc(idade(t)) : 'ainda não enviado'}${velho ? ' · desatualizado' : ''}</span></td></tr>`;
+      const lim = prazoDados(id), velho = !!t && lim != null && Date.now() - t > lim * 3600000;
+      const opcoes = [null, ...OPCOES_PRAZO_H].map(h => `<option value="${h == null ? '' : h}"${h === lim ? ' selected' : ''}>${textoPrazo(h)}</option>`).join('');
+      const balaoPrazo = 'A linha fica destacada quando o último envio passa deste prazo. A escolha vale para todos os computadores.';
+      return `<tr class="${velho ? 'dado-velho' : ''}"><td>${esc(nome)}</td><td class="mono">${t ? esc(dataHoraBR(t)) : '—'}</td><td>${t ? esc(idade(t)) : 'ainda não enviado'}${velho ? ' · desatualizado' : ''}</td>
+        <td><select class="sel-prazo" data-prazo="${id}" aria-label="Prazo de ${esc(nome)}" data-balao="${esc(balaoPrazo)}" aria-description="${esc(balaoPrazo)}">${opcoes}</select></td></tr>`;
     }).join('');
     return `<section class="painel largo" id="painel-situacao-dados">
       <h2>Situação dos dados</h2>
-      <div class="tabela-wrap"><table><thead><tr><th>Fonte</th><th>Último envio</th><th>Há</th></tr></thead><tbody>${linhas}</tbody></table></div>
+      <div class="tabela-wrap"><table><thead><tr><th>Fonte</th><th>Último envio</th><th>Há</th><th>Prazo</th></tr></thead><tbody>${linhas}</tbody></table></div>
     </section>`;
   }
 
@@ -1015,6 +1034,7 @@
     const id = e.target.id;
     if (campoCfg(e.target)) marcarCfgAlterada();
     if (id === 'imp-arquivo' || id === 'imp-destino') prepararImportacao();
+    else if (e.target.dataset.prazo) gravarPrazoDados(e.target.dataset.prazo, e.target.value);
     else if (e.target.dataset.epcampo) editarEtiquetaPrioridade(e.target);
     else if (e.target.dataset.campo && e.target.dataset.i != null) editarTarefa(e.target);
     else if (id === 'tf-filtro-painel') { st.filtroTabela.painel = e.target.value; render(); }
