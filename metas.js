@@ -322,7 +322,9 @@
 
   // ---------- gravação de .xlsx (zip sem compressão + XML), sem biblioteca externa ----------
   // colunas: [{ t: título, tipo: 'texto' | 'numero' | 'data', largura }]; linhas: arrays de valores na ordem das colunas
-  // (data = milissegundos; vale o dia local). Cabeçalho em negrito, primeira linha congelada e filtro no cabeçalho.
+  // (data = milissegundos; vale o dia local). Cabeçalho em negrito, congelado e com filtro.
+  // topo (opcional): linhas de texto acima da lista (a primeira em negrito e maior), seguidas de uma linha em branco.
+  // tabela (opcional): { nome, estilo } formata a lista como tabela do Excel (ex.: estilo 'TableStyleMedium2', azul), com filtro próprio.
   const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
   const crc32 = b => { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
   function zipSemCompressao(arquivos) {
@@ -346,29 +348,42 @@
   const letraCol = i => { let s = ''; i++; while (i > 0) { const r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = Math.floor((i - 1) / 26); } return s; };
   const serialExcel = ms => { const d = new Date(ms); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000 + 25569; };
   function gerarXlsx(entrada) {
-    const { colunas = [], linhas = [] } = entrada || {};
+    const { colunas: colunasIn = [], linhas = [], topo = [], tabela = null } = entrada || {};
     const aba = (String((entrada && entrada.aba) || 'Planilha').replace(/[\\/?*[\]:]/g, ' ').trim() || 'Planilha').slice(0, 31);
-    const ultima = letraCol(Math.max(colunas.length, 1) - 1), nLin = linhas.length + 1;
+    // A tabela do Excel exige títulos de coluna únicos e não vazios.
+    const vistos = new Set();
+    const colunas = colunasIn.map((c, i) => { let t = String(c.t == null ? '' : c.t).trim() || 'Coluna ' + (i + 1), k = 2; const base = t; while (vistos.has(t.toLowerCase())) t = base + ' ' + k++; vistos.add(t.toLowerCase()); return Object.assign({}, c, { t }); });
+    const lTopo = topo.length ? topo.length + 1 : 0, h = lTopo + 1; // h: linha do cabeçalho
+    const ultima = letraCol(Math.max(colunas.length, 1) - 1), nLin = h + Math.max(linhas.length, tabela ? 1 : 0);
     const celula = (v, tipo, ref, estilo) => {
       if (v == null || v === '' || (tipo !== 'texto' && !isFinite(Number(v)))) return estilo ? `<c r="${ref}" s="${estilo}"/>` : '';
       if (tipo === 'numero') return `<c r="${ref}"><v>${Number(v)}</v></c>`;
       if (tipo === 'data') return `<c r="${ref}" s="2"><v>${serialExcel(Number(v))}</v></c>`;
       return `<c r="${ref}"${estilo ? ` s="${estilo}"` : ''} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
     };
-    const cabecalho = `<row r="1">${colunas.map((c, i) => celula(c.t, 'texto', letraCol(i) + 1, 1)).join('')}</row>`;
-    const corpo = linhas.map((l, j) => `<row r="${j + 2}">${colunas.map((c, i) => celula(l[i], c.tipo || 'texto', letraCol(i) + (j + 2))).join('')}</row>`).join('');
+    const linhasTopo = topo.map((t, i) => `<row r="${i + 1}">${celula(t, 'texto', 'A' + (i + 1), i === 0 ? 3 : 0)}</row>`).join('');
+    const cabecalho = `<row r="${h}">${colunas.map((c, i) => celula(c.t, 'texto', letraCol(i) + h, 1)).join('')}</row>`;
+    const corpo = linhas.map((l, j) => `<row r="${j + h + 1}">${colunas.map((c, i) => celula(l[i], c.tipo || 'texto', letraCol(i) + (j + h + 1))).join('')}</row>`).join('');
+    const area = `A${h}:${ultima}${nLin}`;
+    const nomeTabela = tabela ? (String(tabela.nome || 'Tabela1').replace(/[^A-Za-z0-9_]/g, '_').replace(/^([^A-Za-z_])/, '_$1') || 'Tabela1') : '';
     const cols = colunas.length ? `<cols>${colunas.map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${Number(c.largura) || 14}" customWidth="1"/>`).join('')}</cols>` : '';
     const ns = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main', nsR = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships', nsP = 'http://schemas.openxmlformats.org/package/2006/relationships';
     const dec = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
-    const filtro = colunas.length ? `$A$1:$${ultima}$${nLin}` : '';
-    return zipSemCompressao([
-      ['[Content_Types].xml', dec + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
+    // Sem tabela, o filtro fica na aba (com o nome oculto que o Excel usa); com tabela, o filtro é da própria tabela.
+    const filtro = colunas.length && !tabela ? `$A$${h}:$${ultima}$${nLin}` : '';
+    const arquivos = [
+      ['[Content_Types].xml', dec + `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${tabela ? '<Override PartName="/xl/tables/table1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/>' : ''}</Types>`],
       ['_rels/.rels', dec + `<Relationships xmlns="${nsP}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
       ['xl/workbook.xml', dec + `<workbook xmlns="${ns}" xmlns:r="${nsR}"><sheets><sheet name="${xmlEsc(aba)}" sheetId="1" r:id="rId1"/></sheets>${filtro ? `<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'${xmlEsc(aba.replace(/'/g, "''"))}'!${filtro}</definedName></definedNames>` : ''}</workbook>`],
       ['xl/_rels/workbook.xml.rels', dec + `<Relationships xmlns="${nsP}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
-      ['xl/styles.xml', dec + `<styleSheet xmlns="${ns}"><numFmts count="1"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`],
-      ['xl/worksheets/sheet1.xml', dec + `<worksheet xmlns="${ns}" xmlns:r="${nsR}"><dimension ref="A1:${ultima}${nLin}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>${cols}<sheetData>${cabecalho}${corpo}</sheetData>${colunas.length ? `<autoFilter ref="A1:${ultima}${nLin}"/>` : ''}</worksheet>`],
-    ]);
+      ['xl/styles.xml', dec + `<styleSheet xmlns="${ns}"><numFmts count="1"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/></numFmts><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="13"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`],
+      ['xl/worksheets/sheet1.xml', dec + `<worksheet xmlns="${ns}" xmlns:r="${nsR}"><dimension ref="A1:${ultima}${nLin}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="${h}" topLeftCell="A${h + 1}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A${h + 1}" sqref="A${h + 1}"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>${cols}<sheetData>${linhasTopo}${cabecalho}${corpo}</sheetData>${filtro ? `<autoFilter ref="${area}"/>` : ''}${tabela ? '<tableParts count="1"><tablePart r:id="rId1"/></tableParts>' : ''}</worksheet>`],
+    ];
+    if (tabela) {
+      arquivos.push(['xl/worksheets/_rels/sheet1.xml.rels', dec + `<Relationships xmlns="${nsP}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/></Relationships>`]);
+      arquivos.push(['xl/tables/table1.xml', dec + `<table xmlns="${ns}" id="1" name="${nomeTabela}" displayName="${nomeTabela}" ref="${area}" headerRowCount="1"><autoFilter ref="${area}"/><tableColumns count="${colunas.length}">${colunas.map((c, i) => `<tableColumn id="${i + 1}" name="${xmlEsc(c.t)}"/>`).join('')}</tableColumns><tableStyleInfo name="${xmlEsc(tabela.estilo || 'TableStyleMedium2')}" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>`]);
+    }
+    return zipSemCompressao(arquivos);
   }
 
   root.Metas = { VARA, INSTANCIAS, METAS, lerXlsx, gerarXlsx, lerResumo, lerPendentes, conferir, situacao, pct, serialParaData, LIMITE_ATENCAO, indexarListas, indexarOutros, cruzarPendentes, formatarClasse, estimativaMeta3, contagensValidas };
