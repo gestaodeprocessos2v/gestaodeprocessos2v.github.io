@@ -412,12 +412,11 @@
       const lim = prazoDados(id), velho = !!t && lim != null && Date.now() - t > lim * 3600000;
       const opcoes = [null, ...OPCOES_PRAZO_H].map(h => `<option value="${h == null ? '' : h}"${h === lim ? ' selected' : ''}>${textoPrazo(h)}</option>`).join('');
       const balaoPrazo = 'A linha fica destacada quando o último envio passa deste prazo. A escolha vale para todos os computadores.';
-      return `<tr class="${velho ? 'dado-velho' : ''}"><td>${esc(nome)}</td><td class="mono">${t ? esc(dataHoraBR(t)) : '—'}</td><td>${t ? esc(idade(t)) : 'ainda não enviado'}${velho ? ' · desatualizado' : ''}</td>
-        <td><select class="sel-prazo" data-prazo="${id}" aria-label="Prazo de ${esc(nome)}" data-balao="${esc(balaoPrazo)}" aria-description="${esc(balaoPrazo)}">${opcoes}</select></td></tr>`;
+      return `<tr class="${velho ? 'dado-velho' : ''}"><td>${esc(nome)}</td><td><select class="sel-prazo" data-prazo="${id}" aria-label="Prazo de ${esc(nome)}" data-balao="${esc(balaoPrazo)}" aria-description="${esc(balaoPrazo)}">${opcoes}</select></td><td class="mono">${t ? esc(dataHoraBR(t)) : '—'}</td><td>${t ? esc(idade(t)) : 'ainda não enviado'}${velho ? ' · desatualizado' : ''}</td></tr>`;
     }).join('');
     return `<section class="painel largo" id="painel-situacao-dados">
       <h2>Situação dos dados</h2>
-      <div class="tabela-wrap"><table><thead><tr><th>Fonte</th><th>Último envio</th><th>Há</th><th>Prazo</th></tr></thead><tbody>${linhas}</tbody></table></div>
+      <div class="tabela-wrap"><table><thead><tr><th>Fonte</th><th>Prazo</th><th>Último envio</th><th>Há</th></tr></thead><tbody>${linhas}</tbody></table></div>
     </section>`;
   }
 
