@@ -348,6 +348,9 @@
 
   function planilhaGravadas() {
     const ls = gravadas().sort((p, q) => p.n.localeCompare(q.n));
+    // O painel só lê as conclusões dos últimos 95 dias (carregar() em app.js): gravação mais antiga que isso pode ter
+    // conclusão que não foi lida, então sem conclusão achada a resposta é "Sem dado", não "Não".
+    const corteMarcas = Date.now() - 95 * 86400000;
     const mudou = g => (!g.item ? 'Saiu das filas' : g.an.tarefa && g.item.t && R.normTexto(g.an.tarefa) !== R.normTexto(g.item.t) ? 'Sim' : 'Não');
     P.baixarPlanilha({
       arquivo: 'analises-gravadas', titulo: 'Análises da IA gravadas no painel', aba: 'Análises', fonte: 'Análises gravadas no painel e filas atuais',
@@ -357,7 +360,7 @@
       linhas: ls.map(g => {
         const c = concluidoDepois(g.n, g.an.gravadoEm);
         return [fmtCNJ(g.n), g.an.caminho, dataAnalise(g.an.analisadoEm), g.an.gravadoEm ? dataHoraBR(g.an.gravadoEm) : '', g.an.tarefa || '', (g.item && g.item.t) || '', mudou(g),
-          c ? 'Sim' : 'Não', c ? dataHoraBR(c.em) : '', c ? P.nomeDe(c.pessoa) : '', !g.item ? 'Não aparece (fora das filas)' : g.velha ? 'Desatualizada: ' + g.velha : 'Em dia'];
+          c ? 'Sim' : g.an.gravadoEm && g.an.gravadoEm < corteMarcas ? 'Sem dado (mais de 95 dias)' : 'Não', c ? dataHoraBR(c.em) : '', c ? P.nomeDe(c.pessoa) : '', !g.item ? 'Não aparece (fora das filas)' : g.velha ? 'Desatualizada: ' + g.velha : 'Em dia'];
       }),
     });
   }
