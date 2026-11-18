@@ -99,8 +99,7 @@
     const gs = [...n].sort((a, b) => b[1] - a[1] || nomeDe(a[0]).localeCompare(nomeDe(b[0]), 'pt-BR'));
     if (!gs.length) return '';
     const max = gs[0][1] || 1;
-    const titulo = f.todos ? 'Processos por servidor' : `Parados há mais de ${nBR(f.limite)} dias, por servidor`;
-    return `<section class="painel largo"><h3>${esc(titulo)}</h3><div class="par-rank">${gs.map(([id, v]) =>
+    return `<section class="painel largo"><div class="par-rank">${gs.map(([id, v]) =>
       `<div class="par-rank-lin${id === f.servidor ? ' escolhido' : ''}"><span class="par-rank-nome">${esc(nomeDe(id))}</span><span class="prod-barra"><i style="width:${(v / max) * 100}%"></i></span><b class="mono">${nBR(v)}</b></div>`).join('')}</div></section>`;
   }
 
