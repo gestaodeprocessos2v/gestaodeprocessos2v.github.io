@@ -924,7 +924,7 @@
     planilhaFila = {
       modo, linhas: ordemTela,
       fonte: `Lista do PJe: ${ultimaLista ? dataHoraBR(ultimaLista) : 'ainda não enviada'}${st.jd && st.jd.em ? ` · JD: ${dataHoraBR(st.jd.em)}` : ''}${st.pje1 && st.pje1.em ? ` · PJE1: ${dataHoraBR(st.pje1.em)}` : ''}`,
-      filtros: [textoMagistrados(f), buscaTxt && `Busca: “${buscaTxt}”`, geral && f.pessoa && 'Servidor: ' + nomeDe(f.pessoa), nomeVisao && 'Mostrar: ' + nomeVisao,
+      filtros: [textoMagistrados(f), buscaTxt && `Busca: “${buscaTxt}”`, geral && f.pessoa && 'Servidor(a): ' + nomeDe(f.pessoa), nomeVisao && 'Mostrar: ' + nomeVisao,
         eventual && f.setor && 'Setor: ' + (NOME_SETOR[f.setor] || f.setor), f.tarefa && 'Tarefa: ' + f.tarefa, f.etiqueta && 'Etiqueta: ' + f.etiqueta,
         f.jd && 'JD: ' + ((OPCOES_JD.find(o => o[0] === f.jd) || [])[1] || f.jd), f.concl && 'Com os concluídos'],
     };

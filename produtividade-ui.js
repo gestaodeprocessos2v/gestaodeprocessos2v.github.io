@@ -223,13 +223,16 @@
   ];
   function baixarPessoas(s, ctx) {
     const f = s.f, ps = linhasPessoas(s, ctx), per = ctx.periodo(f), ef = filtroEfetivo(s), busca = String(f.busca || '').trim();
-    const linhas = ps.map(p => [p.pessoa, rotPerfil(p.perfil), p.grupo, p[X.ATIV_DOC], p[X.ATIV_RETIF], p[X.ATIV_TAREFA], p.diasAtivos, p.total, Math.round(media(p) * 10) / 10, p.processos, Math.round(mediaProc(p) * 10) / 10]);
+    // Nas planilhas, categoria no masculino ganha o feminino (pedido do Alberto, 18/11/2026): o perfil vai como está na equipe
+    // ("Estagiário(a)"), não como o rótulo da tela ("Estagiários").
+    const perfilPlanilha = v => (ehEstagiario(v) ? 'Estagiário(a)' : v || '');
+    const linhas = ps.map(p => [p.pessoa, perfilPlanilha(p.perfil), p.grupo, p[X.ATIV_DOC], p[X.ATIV_RETIF], p[X.ATIV_TAREFA], p.diasAtivos, p.total, Math.round(media(p) * 10) / 10, p.processos, Math.round(mediaProc(p) * 10) / 10]);
     const rotPeriodo = (PERIODOS.find(x => x[0] === f.periodo) || [])[1] || f.periodo;
     P.baixarPlanilha({
       arquivo: 'produtividade-por-pessoa', titulo: 'Produtividade da Vara · Por pessoa', aba: 'Por pessoa', colunas: COLUNAS_PESSOAS, linhas,
       fonte: `Relatório do Portal BI com dados até ${dBR(s.dataFim)}`,
       // O período sempre aparece; perfis e grupos, só quando diferem do padrão (todos, menos estagiários).
-      filtros: [`Período: ${rotPeriodo}${per.ini ? ` (${dBR(per.ini)} a ${dBR(per.fim)})` : ''}`, !noPadrao(s) && 'Perfis: ' + ef.perfis.map(rotPerfil).join(', '),
+      filtros: [`Período: ${rotPeriodo}${per.ini ? ` (${dBR(per.ini)} a ${dBR(per.fim)})` : ''}`, !noPadrao(s) && 'Perfis: ' + ef.perfis.map(v => (ehEstagiario(v) ? 'Estagiários(as)' : v)).join(', '),
         !noPadrao(s) && 'Grupos: ' + (ef.grupos.join(', ') || 'nenhum'), busca && `Busca: “${busca}”`],
       total: `${ps.length} ${ps.length === 1 ? 'pessoa' : 'pessoas'}`,
     });

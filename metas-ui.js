@@ -207,7 +207,7 @@
 
   // Planilha (.xlsx) no padrão do painel: os pendentes com os filtros da tela, na mesma ordem, sem o corte do "Mostrar mais".
   const COLUNAS_PEND = [
-    { t: 'Número do processo', largura: 27 }, { t: 'Magistrado(a)', largura: 13 }, { t: 'Servidor ou setor', largura: 26 }, { t: 'Tarefa atual', largura: 44 },
+    { t: 'Número do processo', largura: 27 }, { t: 'Magistrado(a)', largura: 13 }, { t: 'Servidor(a) ou setor', largura: 26 }, { t: 'Tarefa atual', largura: 44 },
     { t: 'Entrada na tarefa', tipo: 'data', largura: 15 }, { t: 'Instância', largura: 10 }, { t: 'Classe', largura: 34 }, { t: '1ª distribuição', tipo: 'data', largura: 15 },
     { t: 'Metas pendentes', largura: 34 },
   ];
@@ -221,7 +221,7 @@
     P.baixarPlanilha({
       arquivo: 'pendentes-metas', titulo: 'Metas CNJ · Pendentes', aba: 'Pendentes', colunas: COLUNAS_PEND, linhas,
       fonte: 'Carga do Portal BI: ' + quandoPendentes(),
-      filtros: [P.textoMagistrados(f), busca && `Busca: “${busca}”`, f.meta && 'Meta: ' + ((metaPorId(f.meta) || {}).nome || f.meta), f.inst && 'Instância: ' + f.inst, rotServ && 'Servidor ou setor: ' + rotServ],
+      filtros: [P.textoMagistrados(f), busca && `Busca: “${busca}”`, f.meta && 'Meta: ' + ((metaPorId(f.meta) || {}).nome || f.meta), f.inst && 'Instância: ' + f.inst, rotServ && 'Servidor(a) ou setor: ' + rotServ],
       total: `${lista.length.toLocaleString('pt-BR')} ${lista.length === 1 ? 'processo' : 'processos'}`,
     });
   }

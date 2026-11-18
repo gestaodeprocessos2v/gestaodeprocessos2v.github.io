@@ -49,11 +49,11 @@
   const COLUNAS_XLSX = [
     { t: 'Número do processo', largura: 27 }, { t: 'Magistrado(a)', largura: 13 }, { t: 'Situação', largura: 22 }, { t: 'Classe', largura: 14 },
     { t: 'Tarefa', largura: 48 }, { t: 'Setor', largura: 22 }, { t: 'Data de chegada', tipo: 'data', largura: 15 }, { t: 'Dias na tarefa', tipo: 'numero', largura: 14 },
-    { t: 'Servidor responsável', largura: 30 },
+    { t: 'Servidor(a) responsável', largura: 30 },
   ];
   // Data e hora da lista do PJe em uso: o envio mais recente gravado nas filas.
   const dataLista = () => st.filas.reduce((m, r) => Math.max(m, ms(r.importado_em) || 0), 0);
-  const situacaoTexto = l => [l.tipo === 'urgente' && 'Urgente', l.tipo === 'prioritaria' && 'Prioritária', l.sg && 'Sigiloso', l.concluido && 'Concluído pelo servidor'].filter(Boolean).join('; ');
+  const situacaoTexto = l => [l.tipo === 'urgente' && 'Urgente', l.tipo === 'prioritaria' && 'Prioritária', l.sg && 'Sigiloso', l.concluido && 'Concluído pelo(a) servidor(a)'].filter(Boolean).join('; ');
   function baixarPlanilha() {
     const f = st.fParados, ls = listaAtual, lista = dataLista();
     const linhas = ls.map(l => [l.n, ({ T: 'Titular', S: 'Substituta' })[l.mag] || '', situacaoTexto(l), l.c || '', l.t || '', rotuloSetor(l.s), l.ch, l.dias, l.resp ? nomeDe(l.resp) : '']);
@@ -61,7 +61,7 @@
     P.baixarPlanilha({
       arquivo: 'processos-parados-' + (rotuloSetor(f.setor) || 'todos'), titulo: 'Processos Parados', aba: f.todos ? 'Todos' : 'Parados', colunas: COLUNAS_XLSX, linhas,
       fonte: 'Lista do PJe: ' + (lista ? dataHoraBR(lista) : 'ainda não enviada'),
-      filtros: [P.textoMagistrados(f), f.setor && 'Setor: ' + rotuloSetor(f.setor), f.servidor && 'Servidor: ' + nomeDe(f.servidor),
+      filtros: [P.textoMagistrados(f), f.setor && 'Setor: ' + rotuloSetor(f.setor), f.servidor && 'Servidor(a): ' + nomeDe(f.servidor),
         f.todos ? 'Todos os processos (Mostrar todos)' : `Parados há mais de ${nBR(f.limite)} dias`],
       total: totalLista(ls),
     });
