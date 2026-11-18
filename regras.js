@@ -1022,6 +1022,19 @@
     return '';
   }
 
+  // Envio avulso das análises (Gestão → "Enviar análises da IA"): cruza as lidas da pasta com os processos das filas
+  // (Map número → item) e com as gravadas ({ número: { hash, analisadoEm } }). Situação: nova (processo sem análise no
+  // painel), substitui (hash diferente), igual, fora (processo fora das filas: não grava). maisAntiga: o arquivo tem data
+  // de análise anterior à gravada. velha: motivo de R.analiseDesatualizada com o item atual ('' = em dia).
+  function classificarAnalises(lidas, nasFilas, atuais) {
+    return (lidas || []).map(an => {
+      const item = nasFilas.get(an.numero), atual = atuais[an.numero];
+      const sit = !item ? 'fora' : !atual ? 'nova' : atual.hash === an.hash ? 'igual' : 'substitui';
+      const maisAntiga = sit === 'substitui' && !!an.analisadoEm && !!atual.analisadoEm && an.analisadoEm < String(atual.analisadoEm).slice(0, 10);
+      return { an, sit, maisAntiga, velha: item ? analiseDesatualizada(an, item) : '' };
+    });
+  }
+
   // Markdown mínimo e seguro: escapa tudo e só depois aplica títulos, listas, citação, negrito e parágrafos.
   function mdParaHtml(texto) {
     const e = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -1054,6 +1067,6 @@
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, regrasDoSetor, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
     atribuir, setorPorExcecao, causaExcecao, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, antesDoPrazo, estadoAnotacoes, conclusaoReaberta, marcasVigentes, concluidoAposAnotacao, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, elegivelPJE1, SITUACOES_PJE1, CAB_PJE1, resumirPJE1, partesPJE1, balaoPJE1, prcPJE1, casaJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, setorDosParados, SETOR_SEM_CADASTRO, comparar, chaveItem,
     paraPlanilha, tarefasParaPlanilha, slug, normTexto, soDigitos, chaveEmail, emailConcluido, pedidoDespacho,
-    lerAnalise, analiseDesatualizada, mdParaHtml, LIMITE_ANALISE,
+    lerAnalise, analiseDesatualizada, classificarAnalises, mdParaHtml, LIMITE_ANALISE,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

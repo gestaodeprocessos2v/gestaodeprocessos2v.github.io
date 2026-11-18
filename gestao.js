@@ -59,7 +59,7 @@
   // Painel com algo esperando gravação fica com o fundo vermelho suave dos urgentes: é o que tem o botão
   // de gravar ou salvar aceso (prévia de envio lida, tabela ou configuração alterada). Vale também oculto.
   const BOTOES_GRAVAR = ['gravar-importacao', 'jd-gravar', 'metas-gravar', 'pr-env-gravar', 'pr-eq-salvar', 'tf-salvar', 'ep-salvar', 'cfg-salvar']
-    .map(a => `[data-acao="${a}"]:not(:disabled)`).concat('[data-macao="gravar"]:not(:disabled)').join(', ');
+    .map(a => `[data-acao="${a}"]:not(:disabled)`).concat('[data-macao="gravar"]:not(:disabled)', '[data-iaacao="gravar"]:not(:disabled)').join(', ');
   function marcarPendentes() {
     document.querySelectorAll('#v-gestao .paineis > section.painel').forEach(s => s.classList.toggle('pendente', !!s.querySelector(BOTOES_GRAVAR)));
   }
@@ -100,8 +100,10 @@
       .map(([id, ativo]) => { const el = ativo && document.getElementById(id); return el && el.files && el.files.length ? el : null; }).filter(Boolean);
     v.innerHTML = `<div class="paineis">
       ${P.htmlGestorFila()}
+      ${painelSituacaoDados()}
       ${painelUrgencia()}
       ${painelImportar()}
+      ${P.painelAnalisesGestao ? P.painelAnalisesGestao() : ''}
       ${P.painelJDGestao ? P.painelJDGestao() : ''}
       ${P.painelPJE1Gestao ? P.painelPJE1Gestao() : ''}
       ${P.painelBIGestao ? P.painelBIGestao() : ''}
@@ -172,7 +174,6 @@
       ${semTabela}
       <label class="campo"><span>Distribuir</span><select id="imp-destino">${destinoOpc}</select></label>
       <label class="campo"><span>Arquivo CSV</span><input type="file" id="imp-arquivo" accept=".csv,text/csv,text/plain"></label>
-      ${!imp.resultado && P.linhaPastaAnalises ? P.linhaPastaAnalises() : ''}
       ${previa}
     </section>`;
   }
@@ -366,6 +367,39 @@
     }
     if ($('#urg-setor').dataset.desenhado !== setor) render();
     else $('#urg-resp').value = st.novaUrgencia.responsavel || '';
+  }
+
+  // ---------- situação dos dados ----------
+  // Último envio de cada fonte e a idade. Passando do limite (horas), a linha fica com o fundo dos urgentes.
+  // limite null = só informa. Mudar aqui os limites, se a rotina de envios mudar.
+  const LIMITE_DADOS_H = { pjer: 24, jd: 7 * 24, pje1: 7 * 24, metas: 7 * 24, prod: 7 * 24, analises: null };
+  const emMs = v => (v == null || v === '' ? null : typeof v === 'number' ? v : Date.parse(v) || null);
+  function idade(t) {
+    const h = Math.floor((Date.now() - t) / 3600000);
+    if (h < 1) return 'menos de 1 hora';
+    if (h < 48) return h === 1 ? '1 hora' : `${h} horas`;
+    const d = Math.floor(h / 24);
+    return `${d} dias`;
+  }
+  function painelSituacaoDados() {
+    const ultimoEnvio = l => (l && l.length ? emMs(l[0].enviado_em) : null);
+    const fontes = [
+      ['pjer', 'Relatório do PJe+R (filas)', emMs(st.resumo && st.resumo.semanal && st.resumo.semanal.em)],
+      ['jd', 'RPV/PRC do JD', st.jd && st.jd.em],
+      ['pje1', 'Requisitórios do PJE1', st.pje1 && st.pje1.em],
+      ['metas', 'Metas CNJ', ultimoEnvio(st.metas && st.metas.envios)],
+      ['prod', 'Produtividade', ultimoEnvio(st.prod && st.prod.envios)],
+      ['analises', 'Análises da IA (última gravação)', st.analises && st.analises.ultimaGravacao],
+    ];
+    const linhas = fontes.map(([id, nome, t]) => {
+      const lim = LIMITE_DADOS_H[id], velho = !!t && lim != null && Date.now() - t > lim * 3600000;
+      const balao = lim == null ? 'Só informa: não tem prazo.' : `Fica destacado com mais de ${lim < 48 ? lim + ' horas' : lim / 24 + ' dias'}.`;
+      return `<tr class="${velho ? 'dado-velho' : ''}"><td>${esc(nome)}</td><td class="mono">${t ? esc(dataHoraBR(t)) : '—'}</td><td><span data-balao="${esc(balao)}" aria-description="${esc(balao)}">${t ? esc(idade(t)) : 'ainda não enviado'}${velho ? ' · desatualizado' : ''}</span></td></tr>`;
+    }).join('');
+    return `<section class="painel largo" id="painel-situacao-dados">
+      <h2>Situação dos dados</h2>
+      <div class="tabela-wrap"><table><thead><tr><th>Fonte</th><th>Último envio</th><th>Há</th></tr></thead><tbody>${linhas}</tbody></table></div>
+    </section>`;
   }
 
   // ---------- resumo, acessos negados, limpeza ----------
