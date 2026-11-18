@@ -323,8 +323,8 @@
   // ---------- gravação de .xlsx (zip sem compressão + XML), sem biblioteca externa ----------
   // colunas: [{ t: título, tipo: 'texto' | 'numero' | 'data', largura }]; linhas: arrays de valores na ordem das colunas
   // (data = milissegundos; vale o dia local). Cabeçalho em negrito, congelado e com filtro.
-  // topo (opcional): linhas de texto acima da lista (a primeira em negrito e maior), seguidas de uma linha em branco; essas
-  // linhas inteiras ficam com preenchimento branco (padrão do painel, pedido do Alberto em 18/11/2026).
+  // topo (opcional): linhas de texto acima da lista (a primeira em negrito e maior), seguidas de uma linha em branco; as células
+  // dessas linhas nas colunas da lista ficam com preenchimento branco (padrão do painel, pedido do Alberto em 18/11/2026).
   // tabela (opcional): { nome, estilo } formata a lista como tabela do Excel (ex.: estilo 'TableStyleMedium16', azul), com filtro próprio.
   const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
   const crc32 = b => { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
@@ -362,9 +362,11 @@
       if (tipo === 'data') return `<c r="${ref}" s="2"><v>${serialExcel(Number(v))}</v></c>`;
       return `<c r="${ref}"${estilo ? ` s="${estilo}"` : ''} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
     };
-    // Linhas acima da lista (o topo e a linha em branco): preenchimento branco na linha inteira (estilo 4; título em 5).
-    const linhasTopo = topo.map((t, i) => `<row r="${i + 1}" s="4" customFormat="1">${celula(t, 'texto', 'A' + (i + 1), i === 0 ? 5 : 4)}</row>`).join('')
-      + (lTopo ? `<row r="${lTopo}" s="4" customFormat="1"/>` : '');
+    // Linhas acima da lista (o topo e a linha em branco): preenchimento branco só nas colunas da lista (estilo 4; título em 5).
+    // As células vazias com estilo não cortam o texto da coluna A, que continua aparecendo por cima delas.
+    const brancas = r => colunas.slice(1).map((c, i) => `<c r="${letraCol(i + 1)}${r}" s="4"/>`).join('');
+    const linhasTopo = topo.map((t, i) => `<row r="${i + 1}">${celula(t, 'texto', 'A' + (i + 1), i === 0 ? 5 : 4)}${brancas(i + 1)}</row>`).join('')
+      + (lTopo ? `<row r="${lTopo}"><c r="A${lTopo}" s="4"/>${brancas(lTopo)}</row>` : '');
     const cabecalho = `<row r="${h}">${colunas.map((c, i) => celula(c.t, 'texto', letraCol(i) + h, 1)).join('')}</row>`;
     const corpo = linhas.map((l, j) => `<row r="${j + h + 1}">${colunas.map((c, i) => celula(l[i], c.tipo || 'texto', letraCol(i) + (j + h + 1))).join('')}</row>`).join('');
     const area = `A${h}:${ultima}${nLin}`;
