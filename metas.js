@@ -324,7 +324,7 @@
   // colunas: [{ t: título, tipo: 'texto' | 'numero' | 'data', largura }]; linhas: arrays de valores na ordem das colunas
   // (data = milissegundos; vale o dia local). Cabeçalho em negrito, congelado e com filtro.
   // topo (opcional): linhas de texto acima da lista (a primeira em negrito e maior), seguidas de uma linha em branco.
-  // tabela (opcional): { nome, estilo } formata a lista como tabela do Excel (ex.: estilo 'TableStyleMedium2', azul), com filtro próprio.
+  // tabela (opcional): { nome, estilo } formata a lista como tabela do Excel (ex.: estilo 'TableStyleMedium16', azul), com filtro próprio.
   const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
   const crc32 = b => { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
   function zipSemCompressao(arquivos) {
@@ -381,7 +381,7 @@
     ];
     if (tabela) {
       arquivos.push(['xl/worksheets/_rels/sheet1.xml.rels', dec + `<Relationships xmlns="${nsP}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/></Relationships>`]);
-      arquivos.push(['xl/tables/table1.xml', dec + `<table xmlns="${ns}" id="1" name="${nomeTabela}" displayName="${nomeTabela}" ref="${area}" headerRowCount="1"><autoFilter ref="${area}"/><tableColumns count="${colunas.length}">${colunas.map((c, i) => `<tableColumn id="${i + 1}" name="${xmlEsc(c.t)}"/>`).join('')}</tableColumns><tableStyleInfo name="${xmlEsc(tabela.estilo || 'TableStyleMedium2')}" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>`]);
+      arquivos.push(['xl/tables/table1.xml', dec + `<table xmlns="${ns}" id="1" name="${nomeTabela}" displayName="${nomeTabela}" ref="${area}" headerRowCount="1"><autoFilter ref="${area}"/><tableColumns count="${colunas.length}">${colunas.map((c, i) => `<tableColumn id="${i + 1}" name="${xmlEsc(c.t)}"/>`).join('')}</tableColumns><tableStyleInfo name="${xmlEsc(tabela.estilo || 'TableStyleMedium16')}" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>`]);
     }
     return zipSemCompressao(arquivos);
   }

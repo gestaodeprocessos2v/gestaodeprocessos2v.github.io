@@ -74,7 +74,7 @@
       'Filtros: ' + filtros.join(' · '),
       `${totalLista(ls)} · planilha baixada em ${dataHoraBR(Date.now())}`,
     ];
-    const dados = window.Metas.gerarXlsx({ aba: f.todos ? 'Todos' : 'Parados', topo, colunas: COLUNAS_XLSX, linhas, tabela: { nome: 'Parados', estilo: 'TableStyleMedium2' } });
+    const dados = window.Metas.gerarXlsx({ aba: f.todos ? 'Todos' : 'Parados', topo, colunas: COLUNAS_XLSX, linhas, tabela: { nome: 'Parados', estilo: 'TableStyleMedium16' } });
     const setor = semAcento(rotuloSetor(f.setor) || 'todos').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const hoje = new Date(), dia = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
     P.baixar(`processos-parados-${setor}-${dia}.xlsx`, dados, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
