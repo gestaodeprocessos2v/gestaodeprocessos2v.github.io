@@ -96,8 +96,9 @@
     return h;
   }
 
-  function baixar(nome, texto) {
-    const url = URL.createObjectURL(new Blob([texto], { type: 'text/csv;charset=utf-8' }));
+  // tipo: opcional; sem ele, CSV (o padrão dos botões que já existem).
+  function baixar(nome, conteudo, tipo) {
+    const url = URL.createObjectURL(new Blob([conteudo], { type: tipo || 'text/csv;charset=utf-8' }));
     const a = document.createElement('a'); a.href = url; a.download = nome;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);

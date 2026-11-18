@@ -43,6 +43,27 @@
   const ordemExtra = (a, b) => (FIM.indexOf(a) - FIM.indexOf(b)) || rotuloSetor(a).localeCompare(rotuloSetor(b), 'pt-BR');
   const BALAO_SEM_SERVIDOR = 'Tarefa sem fila de servidor no painel';
 
+  // Planilha (.xlsx) com o que está na tela: a lista da última tela desenhada (mesmos filtros e mesma ordem).
+  const BALAO_XLSX = 'Baixa em .xlsx os processos que estão na tela, com os filtros aplicados';
+  let listaAtual = [];
+  const COLUNAS_XLSX = [
+    { t: 'Número do processo', largura: 27 }, { t: 'Magistrado(a)', largura: 13 }, { t: 'Situação', largura: 22 }, { t: 'Classe', largura: 14 },
+    { t: 'Tarefa', largura: 48 }, { t: 'Setor', largura: 22 }, { t: 'Data de chegada', tipo: 'data', largura: 15 }, { t: 'Dias na tarefa', tipo: 'numero', largura: 14 },
+    { t: 'Servidor responsável', largura: 30 },
+  ];
+  const situacaoTexto = l => [l.tipo === 'urgente' && 'Urgente', l.tipo === 'prioritaria' && 'Prioritária', l.sg && 'Sigiloso', l.concluido && 'Concluído pelo servidor'].filter(Boolean).join('; ');
+  const semAcento = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+  function baixarPlanilha() {
+    const f = st.fParados, ls = listaAtual;
+    if (!ls.length) { toast('Nenhum processo na tela para baixar.'); return; }
+    const linhas = ls.map(l => [l.n, ({ T: 'Titular', S: 'Substituta' })[l.mag] || '', situacaoTexto(l), l.c || '', l.t || '', rotuloSetor(l.s), l.ch, l.dias, l.resp ? nomeDe(l.resp) : '']);
+    const dados = window.Metas.gerarXlsx({ aba: f.todos ? 'Todos' : 'Parados', colunas: COLUNAS_XLSX, linhas });
+    const setor = semAcento(rotuloSetor(f.setor) || 'todos').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const hoje = new Date(), dia = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+    P.baixar(`processos-parados-${setor}-${dia}.xlsx`, dados, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    toast(`Planilha com ${ls.length === 1 ? '1 linha' : nBR(ls.length) + ' linhas'} baixada.`);
+  }
+
   // Mesma ordem e mesmos nomes da Fila de Trabalho; Setor depois de Tarefa; Dias na tarefa e Servidor responsável em seguida.
   const COLUNAS = [
     ['n', 'Número do processo'], ['c', 'Classe'], ['t', 'Tarefa'], ['s', 'Setor'], ['ch', 'Data de chegada'], ['dias', 'Dias na tarefa', 'n'], ['resp', 'Servidor responsável'],
@@ -129,6 +150,7 @@
     const todos = base.filter(l => passa(l));
     const parados = todos.filter(l => acima(l, f.limite));
     const lista = ordenar(f.todos ? todos : parados, f);
+    listaAtual = nenhumMag ? [] : lista;
     const nProc = processos(todos), nPar = processos(parados);
     const maior = todos.reduce((m, l) => Math.max(m, l.dias || 0), 0);
     const ultimaLista = st.filas.reduce((m, r) => Math.max(m, ms(r.importado_em) || 0), 0);
@@ -162,7 +184,7 @@
         <label class="campo"><span>Parado há mais de</span><input type="number" id="par-limite" min="0" step="1" value="${f.limite}"><span>dias</span></label>
         <button type="button" class="btn" data-acao="par-todos" aria-pressed="${f.todos}">${f.todos ? 'Mostrar só os parados' : 'Mostrar todos'}</button>
         ${f.limite !== LIMITE_PADRAO ? `<button type="button" class="btn discreto" data-acao="par-limite-padrao">Voltar a ${LIMITE_PADRAO} dias</button>` : ''}
-        <span class="direita"><span class="small muted mono">${totalLista(lista)}</span></span>
+        <span class="direita"><span class="small muted mono">${totalLista(lista)}</span><button type="button" class="btn" data-acao="par-xlsx"${lista.length && !nenhumMag ? '' : ' disabled'} data-balao="${BALAO_XLSX}" data-balao-dir="dir" aria-description="${BALAO_XLSX}">Baixar planilha</button></span>
       </div>
       ${!nenhumMag && SETORES_GRAFICO.includes(f.setor) ? graficoServidores(base.filter(l => passa(l, 'servidor') && naLista(l)), f) : ''}
       ${corpo}`;
@@ -193,6 +215,7 @@
       const b = v.querySelector(`[data-acao="par-mag"][data-v="${l}"]`); if (b) b.focus();
     } else if (acao === 'par-mag-padrao') { f.magOff = magPadrao(f); render(); }
     else if (acao === 'par-todos') { f.todos = !f.todos; render(); const b = v.querySelector('[data-acao="par-todos"]'); if (b) b.focus(); }
+    else if (acao === 'par-xlsx') baixarPlanilha();
     else if (acao === 'par-limite-padrao') { f.limite = LIMITE_PADRAO; render(); }
     else if (acao === 'par-ordem') {
       const c = a.dataset.campo;

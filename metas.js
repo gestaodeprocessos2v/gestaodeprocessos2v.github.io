@@ -320,5 +320,56 @@
     });
   }
 
-  root.Metas = { VARA, INSTANCIAS, METAS, lerXlsx, lerResumo, lerPendentes, conferir, situacao, pct, serialParaData, LIMITE_ATENCAO, indexarListas, indexarOutros, cruzarPendentes, formatarClasse, estimativaMeta3, contagensValidas };
+  // ---------- gravação de .xlsx (zip sem compressão + XML), sem biblioteca externa ----------
+  // colunas: [{ t: título, tipo: 'texto' | 'numero' | 'data', largura }]; linhas: arrays de valores na ordem das colunas
+  // (data = milissegundos; vale o dia local). Cabeçalho em negrito, primeira linha congelada e filtro no cabeçalho.
+  const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = b => { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  function zipSemCompressao(arquivos) {
+    const enc = new TextEncoder(), partes = [], central = [];
+    let ofs = 0;
+    const cab = (tam, campos) => { const b = new Uint8Array(tam), v = new DataView(b.buffer); for (const [o, n, x] of campos) (n === 2 ? v.setUint16(o, x, true) : v.setUint32(o, x, true)); return b; };
+    for (const [nome, conteudo] of arquivos) {
+      const n = enc.encode(nome), d = enc.encode(conteudo), crc = crc32(d);
+      const local = cab(30, [[0, 4, 0x04034b50], [4, 2, 20], [6, 2, 0x0800], [8, 2, 0], [10, 2, 0], [12, 2, 0x21], [14, 4, crc], [18, 4, d.length], [22, 4, d.length], [26, 2, n.length], [28, 2, 0]]);
+      central.push([cab(46, [[0, 4, 0x02014b50], [4, 2, 20], [6, 2, 20], [8, 2, 0x0800], [10, 2, 0], [12, 2, 0], [14, 2, 0x21], [16, 4, crc], [20, 4, d.length], [24, 4, d.length], [28, 2, n.length], [30, 2, 0], [32, 2, 0], [34, 2, 0], [36, 2, 0], [38, 4, 0], [42, 4, ofs]]), n]);
+      partes.push(local, n, d); ofs += 30 + n.length + d.length;
+    }
+    const iniCentral = ofs; let tamCentral = 0;
+    for (const [c, n] of central) { partes.push(c, n); tamCentral += c.length + n.length; }
+    partes.push(cab(22, [[0, 4, 0x06054b50], [4, 2, 0], [6, 2, 0], [8, 2, central.length], [10, 2, central.length], [12, 4, tamCentral], [16, 4, iniCentral], [20, 2, 0]]));
+    const total = partes.reduce((s, p) => s + p.length, 0), out = new Uint8Array(total);
+    let o = 0; for (const p of partes) { out.set(p, o); o += p.length; }
+    return out;
+  }
+  const xmlEsc = s => String(s == null ? '' : s).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const letraCol = i => { let s = ''; i++; while (i > 0) { const r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = Math.floor((i - 1) / 26); } return s; };
+  const serialExcel = ms => { const d = new Date(ms); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000 + 25569; };
+  function gerarXlsx(entrada) {
+    const { colunas = [], linhas = [] } = entrada || {};
+    const aba = (String((entrada && entrada.aba) || 'Planilha').replace(/[\\/?*[\]:]/g, ' ').trim() || 'Planilha').slice(0, 31);
+    const ultima = letraCol(Math.max(colunas.length, 1) - 1), nLin = linhas.length + 1;
+    const celula = (v, tipo, ref, estilo) => {
+      if (v == null || v === '' || (tipo !== 'texto' && !isFinite(Number(v)))) return estilo ? `<c r="${ref}" s="${estilo}"/>` : '';
+      if (tipo === 'numero') return `<c r="${ref}"><v>${Number(v)}</v></c>`;
+      if (tipo === 'data') return `<c r="${ref}" s="2"><v>${serialExcel(Number(v))}</v></c>`;
+      return `<c r="${ref}"${estilo ? ` s="${estilo}"` : ''} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
+    };
+    const cabecalho = `<row r="1">${colunas.map((c, i) => celula(c.t, 'texto', letraCol(i) + 1, 1)).join('')}</row>`;
+    const corpo = linhas.map((l, j) => `<row r="${j + 2}">${colunas.map((c, i) => celula(l[i], c.tipo || 'texto', letraCol(i) + (j + 2))).join('')}</row>`).join('');
+    const cols = colunas.length ? `<cols>${colunas.map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${Number(c.largura) || 14}" customWidth="1"/>`).join('')}</cols>` : '';
+    const ns = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main', nsR = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships', nsP = 'http://schemas.openxmlformats.org/package/2006/relationships';
+    const dec = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+    const filtro = colunas.length ? `$A$1:$${ultima}$${nLin}` : '';
+    return zipSemCompressao([
+      ['[Content_Types].xml', dec + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
+      ['_rels/.rels', dec + `<Relationships xmlns="${nsP}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+      ['xl/workbook.xml', dec + `<workbook xmlns="${ns}" xmlns:r="${nsR}"><sheets><sheet name="${xmlEsc(aba)}" sheetId="1" r:id="rId1"/></sheets>${filtro ? `<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'${xmlEsc(aba.replace(/'/g, "''"))}'!${filtro}</definedName></definedNames>` : ''}</workbook>`],
+      ['xl/_rels/workbook.xml.rels', dec + `<Relationships xmlns="${nsP}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+      ['xl/styles.xml', dec + `<styleSheet xmlns="${ns}"><numFmts count="1"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`],
+      ['xl/worksheets/sheet1.xml', dec + `<worksheet xmlns="${ns}" xmlns:r="${nsR}"><dimension ref="A1:${ultima}${nLin}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>${cols}<sheetData>${cabecalho}${corpo}</sheetData>${colunas.length ? `<autoFilter ref="A1:${ultima}${nLin}"/>` : ''}</worksheet>`],
+    ]);
+  }
+
+  root.Metas = { VARA, INSTANCIAS, METAS, lerXlsx, gerarXlsx, lerResumo, lerPendentes, conferir, situacao, pct, serialParaData, LIMITE_ATENCAO, indexarListas, indexarOutros, cruzarPendentes, formatarClasse, estimativaMeta3, contagensValidas };
 })(typeof window !== 'undefined' ? window : globalThis);
