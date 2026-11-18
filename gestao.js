@@ -150,7 +150,7 @@
         <div><b>${imp.lidos} linhas lidas</b> em “${esc(imp.arquivo)}”.</div>
         <div class="small">Por setor: ${setores || '—'}</div>
         ${(r.porEtiqueta && (r.porEtiqueta.urgente || r.porEtiqueta.prioritaria)) ? `<div class="small">Por classe ou etiqueta com prioridade ou urgência: <b class="mono">${r.porEtiqueta.urgente}</b> ${r.porEtiqueta.urgente === 1 ? 'urgente' : 'urgentes'} e <b class="mono">${r.porEtiqueta.prioritaria}</b> ${r.porEtiqueta.prioritaria === 1 ? 'prioritário' : 'prioritários'}.</div>` : ''}
-        ${!imp.pessoaFixa ? `<div class="small">Outros setores da vara (sem fila de servidor): <b class="mono">${(r.outros || []).length}</b> processos, guardados só para as Metas CNJ.</div>` : ''}
+        ${!imp.pessoaFixa ? `<div class="small">Outros setores da vara (sem fila de servidor): <b class="mono">${(r.outros || []).length}</b> processos, guardados para as Metas CNJ e para os Processos Parados.</div>` : ''}
         <div class="small muted">Ignorados: ${r.ignorados.foraDaVara} em tarefas de outros setores${r.ignorados.semEtiqueta ? ` e ${r.ignorados.semEtiqueta} sem a etiqueta exigida pela tarefa` : ''}${r.ignorados.antesDoPrazo ? `; ${r.ignorados.antesDoPrazo} ainda não passaram dos dias de “Só após (dias)” da tarefa` : ''}.${imp.semData ? ` ${imp.semData} sem data de chegada vão para o fim da fila.` : ''}</div>
         <div class="tabela-wrap"><table><thead><tr><th>Pessoa</th><th>Processos</th><th>Urgentes</th><th>Prioritários</th></tr></thead><tbody>${linhas || '<tr><td colspan="4">Nenhum processo para gravar.</td></tr>'}</tbody></table></div>
         ${sem}
@@ -277,11 +277,12 @@
           if (e2) throw e2;
         }
       }
-      // Lista completa para todos: guarda também os processos de tarefas sem fila de servidor, só para a aba Pendentes das Metas CNJ.
+      // Lista completa para todos: guarda também os processos de tarefas sem fila de servidor, para a aba Pendentes das Metas CNJ
+      // (itens, um por processo) e para os Processos Parados (parados, um por processo e tarefa).
       if (!fixa) {
-        const { error: eo } = await sb.from('fora_vara').upsert({ id: 1, itens: imp.resultado.outros || [], importado_em: I, atualizado_por: st.email }, { onConflict: 'id' });
-        if (eo) { console.error(eo); toast('A lista foi gravada, mas não consegui guardar os processos de outros setores (Metas CNJ).'); }
-        else st.metas.foraEm = 0;
+        const { error: eo } = await sb.from('fora_vara').upsert({ id: 1, itens: imp.resultado.outros || [], parados: imp.resultado.parados || [], importado_em: I, atualizado_por: st.email }, { onConflict: 'id' });
+        if (eo) { console.error(eo); toast('A lista foi gravada, mas não consegui guardar os processos de outros setores (Metas CNJ e Processos Parados).'); }
+        else { st.metas.foraEm = 0; if (P.paradosRecarregar) P.paradosRecarregar(); }
       }
       await limparUrgenciasDaLista();
       const total =gravar.reduce((s, [, x]) => s + x.length, 0);
@@ -421,6 +422,7 @@
   }
 
   // ---------- tarefas do PJe ----------
+  const BALAO_NOS_PARADOS = 'Marcado: os processos desta tarefa entram na área Processos Parados, mesmo quando a tarefa não tem fila no painel. Desmarque para deixar a tarefa de fora. Vale assim que a tabela for salva.';
   function painelTarefas() {
     const lista = st.rascTarefas || [];
     const f = st.filtroTabela;
@@ -441,6 +443,7 @@
       <td><input type="text" id="tf-etiquetaUrgente-${i}" data-i="${i}" data-campo="etiquetaUrgente" value="${esc(t.etiquetaUrgente || '')}" placeholder="—" aria-label="Urgente se tiver a etiqueta"></td>
       <td class="ck">${ck('zerar', i, t.zerar, 'Zerar (prioritária)')}</td>
       <td class="ck">${ck('paralelo', i, t.paralelo, 'Fluxo paralelo')}</td>
+      <td class="ck">${ck('nosParados', i, !t.semParados, 'Nos Processos Parados')}</td>
       <td><button class="btn discreto" type="button" data-acao="tf-excluir" data-i="${i}" data-balao="Excluir tarefa" data-balao-dir="dir" aria-description="Excluir tarefa">Excluir</button></td>
     </tr>`).join('');
     const naVara = lista.filter(t => t.painel).length;
@@ -462,8 +465,8 @@
         </div>
       </div>
       <div class="tabela-wrap tabela-tarefas"><table>
-        <thead><tr><th>Tarefa</th><th>Setor responsável</th><th>Setor no painel</th><th><span tabindex="0" data-balao="Opcional. Com um número X, o processo só entra no setor do painel quando está na tarefa há mais de X dias (contados da chegada, no envio da lista). Antes disso fica como tarefa ignorada: só nas Metas CNJ." aria-description="Opcional. Com um número X, o processo só entra no setor do painel quando está na tarefa há mais de X dias (contados da chegada, no envio da lista). Antes disso fica como tarefa ignorada: só nas Metas CNJ.">Só após (dias)</span></th><th>Etiqueta exigida</th><th>Urgente</th><th>Urgente se etiqueta</th><th>Zerar</th><th>Fluxo paralelo</th><th></th></tr></thead>
-        <tbody>${linhas || '<tr><td colspan="10" class="muted">Nenhuma tarefa com esse filtro.</td></tr>'}</tbody>
+        <thead><tr><th>Tarefa</th><th>Setor responsável</th><th>Setor no painel</th><th><span tabindex="0" data-balao="Opcional. Com um número X, o processo só entra no setor do painel quando está na tarefa há mais de X dias (contados da chegada, no envio da lista). Antes disso fica como tarefa ignorada: só nas Metas CNJ." aria-description="Opcional. Com um número X, o processo só entra no setor do painel quando está na tarefa há mais de X dias (contados da chegada, no envio da lista). Antes disso fica como tarefa ignorada: só nas Metas CNJ.">Só após (dias)</span></th><th>Etiqueta exigida</th><th>Urgente</th><th>Urgente se etiqueta</th><th>Zerar</th><th>Fluxo paralelo</th><th><span tabindex="0" data-balao="${BALAO_NOS_PARADOS}" aria-description="${BALAO_NOS_PARADOS}">Nos Parados</span></th><th></th></tr></thead>
+        <tbody>${linhas || '<tr><td colspan="11"class="muted">Nenhuma tarefa com esse filtro.</td></tr>'}</tbody>
       </table></div>
       <div class="linha-botoes">
         <button class="btn primario" type="button" data-acao="tf-salvar" ${st.tarefasAlteradas ? '' : 'disabled'}>Salvar tabela</button>
@@ -476,6 +479,8 @@
     const t = (st.rascTarefas || [])[Number(el.dataset.i)];
     if (!t) return;
     const campo = el.dataset.campo;
+    // "Nos Parados" vem marcado: grava só a exceção (semParados), e as tarefas já cadastradas continuam incluídas.
+    if (campo === 'nosParados') { t.semParados = !el.checked; marcarTarefasAlteradas(); return; }
     t[campo] = el.type === 'checkbox' ? el.checked : el.value;
     if (campo === 'setor' && !t.painelManual) t.painel = R.setorPainelDe(t.setor);
     if (campo === 'painel') t.painelManual = true;
@@ -539,7 +544,7 @@
       toast('Alterações na tabela descartadas.');
     } else if (acao === 'tf-salvar') {
       const itens = lista.map(t => Object.assign({ tarefa: String(t.tarefa || '').trim(), setor: String(t.setor || '').trim(), painel: t.painel || '',
-        etiqueta: String(t.etiqueta || '').trim(), etiquetaUrgente: String(t.etiquetaUrgente || '').trim(), urgente: !!t.urgente, zerar: !!t.zerar, paralelo: !!t.paralelo }, aposDiasDe(t))).filter(t => t.tarefa);
+        etiqueta: String(t.etiqueta || '').trim(), etiquetaUrgente: String(t.etiquetaUrgente || '').trim(), urgente: !!t.urgente, zerar: !!t.zerar, paralelo: !!t.paralelo }, aposDiasDe(t), t.semParados ? { semParados: true } : {})).filter(t => t.tarefa);
       const vistos = new Set(), repetidas = [];
       for (const t of itens) { const k = R.normTexto(t.tarefa); if (vistos.has(k)) repetidas.push(t.tarefa); vistos.add(k); }
       if (repetidas.length) { toast('Tarefa repetida na tabela: ' + repetidas.slice(0, 3).join('; ') + '. Exclua uma das linhas antes de salvar.'); return; }

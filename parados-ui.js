@@ -1,5 +1,6 @@
 /* Fila de Trabalho da Vara — área "Processos Parados" (só gestor, diretor e magistrado(a)): processos dos setores do painel
-   há mais dias que o limite. Os dados são os das filas gravadas no envio do PJe+R; a regra está em R.linhasPorSetor (regras.js). */
+   e das tarefas fora das filas há mais dias que o limite. Os dados são os das filas e os de fora_vara.parados, gravados no
+   envio do PJe+R; a regra está em R.linhasPorSetor (regras.js). */
 (function () {
   'use strict';
   const P = window.PAINEL;
@@ -14,11 +15,39 @@
   const processos = ls => new Set(ls.map(l => R.soDigitos(l.n))).size;
   const acima = (l, limite) => l.dias != null && l.dias > limite;
 
+  // Tarefas fora das filas (fora_vara.parados): lidas ao abrir a área e de novo quando chega uma lista nova do PJe+R.
+  const ext = { itens: [], em: null, lidoLista: -1, carregando: false, erro: false };
+  async function carregarExtras(ultimaLista) {
+    ext.carregando = true;
+    try {
+      const { data, error } = await st.sb.from('fora_vara').select('parados,importado_em').eq('id', 1).maybeSingle();
+      if (error) throw error;
+      ext.itens = (data && data.parados) || []; ext.em = data ? ms(data.importado_em) : null; ext.erro = false;
+    } catch (e) { console.error(e); ext.erro = true; }
+    ext.lidoLista = ultimaLista; ext.carregando = false;
+    if (st.area === 'parados') render();
+  }
+  P.paradosRecarregar = () => { ext.lidoLista = -1; };
+
+  // Nome do setor: os seis do painel pelo nome de sempre; os de fora das filas pelo "Setor responsável" da tarefa.
+  // Se um nome de fora repetir o de um setor do painel (ex.: tarefa de Secretaria sem a etiqueta exigida), ganha "(fora das filas)".
+  const NOMES_PAINEL = new Set(SETORES.map(s => R.normTexto(s[1])));
+  let rotExtras = new Map();
+  const rotuloSetor = s => NOME_SETOR[s] || rotExtras.get(s) || '';
+  function nomearExtras(base) {
+    rotExtras = new Map();
+    for (const l of base) if (l.rotSetor && !rotExtras.has(l.s)) rotExtras.set(l.s, NOMES_PAINEL.has(R.normTexto(l.rotSetor)) ? l.rotSetor + ' (fora das filas)' : l.rotSetor);
+  }
+  // Ordem das opções de fora das filas: alfabética, com "Sem cadastro" e "Sem setor responsável" no fim.
+  const FIM = [R.SETOR_SEM_CADASTRO, 'Sem setor responsável'].map(x => 'x:' + R.normTexto(x));
+  const ordemExtra = (a, b) => (FIM.indexOf(a) - FIM.indexOf(b)) || rotuloSetor(a).localeCompare(rotuloSetor(b), 'pt-BR');
+  const BALAO_SEM_SERVIDOR = 'Tarefa sem fila de servidor no painel';
+
   // Mesma ordem e mesmos nomes da Fila de Trabalho; Setor depois de Tarefa; Dias na tarefa e Servidor responsável em seguida.
   const COLUNAS = [
     ['n', 'Número do processo'], ['c', 'Classe'], ['t', 'Tarefa'], ['s', 'Setor'], ['ch', 'Data de chegada'], ['dias', 'Dias na tarefa', 'n'], ['resp', 'Servidor responsável'],
   ];
-  const valorOrdem = (l, c) => (c === 'resp' ? nomeDe(l.resp) : c === 's' ? NOME_SETOR[l.s] : l[c]);
+  const valorOrdem = (l, c) => (c === 'resp' ? (l.resp ? nomeDe(l.resp) : '') : c === 's' ? rotuloSetor(l.s) : l[c]);
   function ordenar(ls, f) {
     const dir = f.dir;
     return [...ls].sort((a, b) => {
@@ -43,8 +72,8 @@
   function linhaHTML(l, limite) {
     return `<tr${acima(l, limite) ? '' : ' class="par-abaixo"'}>
       <td class="nowrap"><button type="button" class="num" data-acao="copiar" data-n="${esc(l.n)}" data-balao="Copiar número" aria-description="Copiar número">${numeroHTML(l.n)}${letraMagHTML(l.mag)}</button>${selos(l)}</td>
-      <td>${esc(l.c || '—')}</td><td>${esc(l.t || '—')}</td><td>${esc(NOME_SETOR[l.s] || '—')}</td><td class="nowrap">${l.ch ? dataBR(l.ch) : '—'}</td>
-      <td class="n par-dias">${l.dias == null ? '—' : nBR(l.dias)}</td><td>${esc(nomeDe(l.resp))}</td></tr>`;
+      <td>${esc(l.c || '—')}</td><td>${esc(l.t || '—')}</td><td>${esc(rotuloSetor(l.s) || '—')}</td><td class="nowrap">${l.ch ? dataBR(l.ch) : '—'}</td>
+      <td class="n par-dias">${l.dias == null ? '—' : nBR(l.dias)}</td><td>${l.resp ? esc(nomeDe(l.resp)) : `<span class="muted" tabindex="0" role="note" data-balao="${BALAO_SEM_SERVIDOR}" aria-description="${BALAO_SEM_SERVIDOR}">—</span>`}</td></tr>`;
   }
 
   function resumoTarefas(todos, limite) {
@@ -77,7 +106,8 @@
 
   function tela() {
     const f = st.fParados;
-    const base = R.linhasPorSetor({ filas: st.filas, setores: CHAVES_SETOR, tarefas: st.mapaTarefas, marcas: P.marcasVigentesTodas(), urgencias: st.urgencias, prazos: P.prazosRetorno() });
+    const base = R.linhasPorSetor({ filas: st.filas, extras: ext.itens, setores: CHAVES_SETOR, tarefas: st.mapaTarefas, marcas: P.marcasVigentesTodas(), urgencias: st.urgencias, prazos: P.prazosRetorno() });
+    nomearExtras(base);
     const nenhumMag = magOffDe(f).length >= MAGISTRADOS.length;
     // ign: o filtro que fica de fora, para contar as opções dele com os outros aplicados.
     const passa = (l, ign) => (ign === 'mag' || (!nenhumMag && magPassa(f, l.mag)))
@@ -93,10 +123,13 @@
     const faixa = faixaMagHTML(f, letra => processos(base.filter(l => l.mag === letra && passa(l, 'mag'))), 'par-', 'rot-mag-parados');
     const nSetor = contarPor(base.filter(l => passa(l, 'setor') && naLista(l)), 's');
     const nServ = contarPor(base.filter(l => passa(l, 'servidor') && naLista(l)), 'resp');
+    // Setores: os seis do painel, divisória e os setores das tarefas fora das filas.
     const opSetores = SETORES.filter(([x]) => nSetor.get(x) || x === f.setor).map(([x, rot]) => opcaoHTML(x, rot, nSetor.get(x) || 0, f.setor)).join('');
-    const idsServ = new Set(nServ.keys()); if (f.servidor) idsServ.add(f.servidor);
+    const idsExtra = new Set([...nSetor.keys()].filter(x => rotExtras.has(x))); if (f.setor && !NOME_SETOR[f.setor]) idsExtra.add(f.setor);
+    const opExtras = [...idsExtra].sort(ordemExtra).map(x => opcaoHTML(x, rotuloSetor(x) || x.slice(2), nSetor.get(x) || 0, f.setor)).join('');
+    const idsServ = new Set([...nServ.keys()].filter(Boolean)); if (f.servidor) idsServ.add(f.servidor);
     const opServ = [...idsServ].sort((a, b) => nomeDe(a).localeCompare(nomeDe(b), 'pt-BR')).map(id => opcaoHTML(id, nomeDe(id), nServ.get(id) || 0, f.servidor)).join('');
-    const nomeSetor = NOME_SETOR[f.setor];
+    const nomeSetor = rotuloSetor(f.setor);
     const th = ([c, r, cls]) => `<th${cls ? ` class="${cls}"` : ''} aria-sort="${f.ordem === c ? (f.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" class="prod-th" data-acao="par-ordem" data-campo="${c}">${r}${f.ordem === c ? (f.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`;
     const tituloLista = f.todos ? (nomeSetor ? `Todos os processos de ${nomeSetor}` : 'Todos os processos') : `Parados há mais de ${nBR(f.limite)} dias`;
     const corpo = nenhumMag ? '<div class="vazio"><p>Selecione ao menos um(a) magistrado(a).</p></div>'
@@ -108,10 +141,11 @@
         <div class="tile"><span>% parado</span><b>${nProc ? (nPar / nProc * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0,0'}%</b></div>
         <div class="tile"><span>Maior tempo (dias)</span><b>${nBR(maior)}</b></div>
       </div>
-      <p class="atualizacao">Lista do PJe: ${ultimaLista ? dataHoraBR(ultimaLista) : 'ainda não enviada'} · Dias contados desde a chegada na tarefa · Clique no número para copiar.</p>
+      <p class="atualizacao">Lista do PJe: ${ultimaLista ? dataHoraBR(ultimaLista) : 'ainda não enviada'} · Inclui as tarefas fora das filas (menos as desmarcadas em “Nos Parados” na tabela de tarefas) · Dias contados desde a chegada na tarefa · Clique no número para copiar.</p>
+      ${ext.erro ? '<div class="aviso">Não consegui ler agora os processos das tarefas fora das filas; a tela mostra só os das filas.</div>' : ''}
       ${faixa}
       <div class="filtros par-filtros">
-        <select id="par-setor" aria-label="Filtrar por setor"><option value="">Todos os setores</option>${opSetores}</select>
+        <select id="par-setor" class="sel-linhas" aria-label="Filtrar por setor"><option value="">Todos os setores</option>${opSetores}${opExtras ? '<hr>' + opExtras : ''}</select>
         <select id="par-servidor" aria-label="Filtrar por servidor"><option value="">Todos os servidores</option>${opServ}</select>
         <label class="campo"><span>Parado há mais de</span><input type="number" id="par-limite" min="0" step="1" value="${f.limite}"><span>dias</span></label>
         <button type="button" class="btn" data-acao="par-todos" aria-pressed="${f.todos}">${f.todos ? 'Mostrar só os parados' : 'Mostrar todos'}</button>
@@ -126,6 +160,8 @@
   P.renderParados = function () {
     const tl = $('#v-parados');
     if (!podeVer()) { tl.innerHTML = '<div class="vazio"><h2>Processos Parados</h2><p>Esta área é restrita ao gestor, ao diretor e ao(à) magistrado(a).</p></div>'; ultimoHtml = ''; return; }
+    const ultimaLista = st.filas.reduce((m, r) => Math.max(m, ms(r.importado_em) || 0), 0);
+    if (!ext.carregando && ext.lidoLista !== ultimaLista) carregarExtras(ultimaLista);
     const h = tela();
     if (h === ultimoHtml && tl.innerHTML) return;
     ultimoHtml = h; tl.innerHTML = h;

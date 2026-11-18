@@ -527,6 +527,19 @@
       if (it.ch != null && (ja.ch == null || it.ch < ja.ch)) { ja.ch = it.ch; if (it.t) ja.t = it.t; if (m) ja.m = m; }
       else if (m && !ja.m) ja.m = m;
     };
+    // Processos Parados: as mesmas entradas de fora das filas, mas uma por processo e tarefa (sem juntar), com classe e sigilo.
+    // O setor e a coluna "Nos Parados" são lidos da tabela de tarefas na hora de mostrar, não aqui.
+    const parados = new Map();
+    const guardarParado = it => {
+      if (!it.n) return;
+      const k = soDigitos(it.n) + '|' + normTexto(it.t);
+      if (parados.has(k)) return;
+      const o = { n: it.n }, m = magistradoDeCargo(it.cg);
+      for (const c of ['c', 't', 'ch']) if (it[c] != null && it[c] !== '') o[c] = it[c];
+      if (it.sg) o.sg = 1;
+      if (m) o.m = m;
+      parados.set(k, o);
+    };
     // Tarefas que não existem na tabela (diferente de "Setor no painel = Ignorar", que é decisão do gestor): processos por tarefa.
     const semCad = new Map(), numsSemCad = new Set();
     const contarSemCadastro = it => {
@@ -544,12 +557,12 @@
         // Tarefa sem setor no painel (ex.: Assessoria) ou sem cadastro na tabela: continua só nas Metas CNJ, salvo exceção
         // por classe ou etiqueta válida em todos os setores (ex.: minutas do residente, cartas precatórias); aí entra
         // também na fila de quem a regra indica.
-        guardarOutro(it);
-        const ex = !pessoaFixa ? excecaoSemSetor(it, config) : null;
+        guardarOutro(it); guardarParado(it);
+        const ex =!pessoaFixa ? excecaoSemSetor(it, config) : null;
         if (!ex) { if (esperaPrazo) ignorados.antesDoPrazo++; else ignorados.foraDaVara++; continue; }
         s = SETOR_SEM_PAINEL; r = ex;
       } else {
-        if (linha.etiqueta && !temEtiqueta(it.e, linha.etiqueta)) { ignorados.semEtiqueta++; guardarOutro(it); continue; }
+        if (linha.etiqueta && !temEtiqueta(it.e, linha.etiqueta)) { ignorados.semEtiqueta++; guardarOutro(it); guardarParado(it); continue; }
         regraSetor = regraDeMudancaDeSetor(it, linha.painel, config);
         s = (regraSetor && regraSetor.setorDestino) || linha.painel;
         r = atribuir(it, s, config);
@@ -603,7 +616,7 @@
       (porPessoa[pessoa] = porPessoa[pessoa] || []).push(item);
     }
     const semCadastro = [...semCad.values()].map(g => ({ t: g.t, n: g.nums.size })).sort((a, b) => b.n - a.n || a.t.localeCompare(b.t, 'pt-BR'));
-    return { porPessoa, semResponsavel, ignorados, porSetor, porEtiqueta, outros: [...outros.values()], semCadastro, semCadastroProcessos: numsSemCad.size };
+    return { porPessoa, semResponsavel, ignorados, porSetor, porEtiqueta, outros: [...outros.values()], parados: [...parados.values()], semCadastro, semCadastroProcessos: numsSemCad.size };
   }
 
   // Filas do diretor e do gestor: escolhidas só por etiqueta, em qualquer tarefa ou setor (independem da tabela de tarefas).
@@ -882,7 +895,31 @@
         });
       }
     }
+    // Tarefas fora das filas (fora_vara.parados): entram todas, menos as desmarcadas em "Nos Parados" na tabela de tarefas.
+    // Setor: o "Setor responsável" da tarefa até a "/" (s = 'x:' + nome); sem servidor responsável e sem conclusão.
+    for (const it of e.extras || []) {
+      const linha = mapa.get(normTexto(it.t));
+      if (linha && linha.semParados) continue;
+      const k = chaveItem(it) + '|' + normTexto(it.t);
+      if (porEntrada.has(k)) continue;
+      const nome = setorDosParados(linha), tipoBase = tipoItem(it, mapa);
+      porEntrada.set(k, {
+        n: it.n, c: it.c, t: it.t, s: 'x:' + normTexto(nome), rotSetor: nome, ch: it.ch == null ? null : it.ch, sg: !!it.sg, mag: it.m || null,
+        resp: '', concluido: false, foraDasFilas: true,
+        dias: it.ch == null ? null : Math.max(0, Math.floor((agora - it.ch) / 86400000)),
+        tipo: tipoBase === 'urgente' || urgentes.has(soDigitos(it.n)) ? 'urgente' : tipoBase,
+      });
+    }
     return [...porEntrada.values()];
+  }
+
+  // Processos Parados: nome do setor de uma tarefa fora das filas, pelo "Setor responsável" da tabela de tarefas até a "/".
+  const SETOR_SEM_CADASTRO = 'Sem cadastro';
+  function setorDosParados(linha) {
+    if (!linha) return SETOR_SEM_CADASTRO;
+    const s = String(linha.setor || '').split('/')[0].trim();
+    if (!s) return 'Sem setor responsável';
+    return normTexto(s) === 'magistrado' ? 'Magistrado(a)' : s;
   }
 
   function paraCsv(linhas, nomes, comResp) {
@@ -902,7 +939,7 @@
 
   function tarefasParaCsv(itens) {
     const cols = [['Tarefa', t => t.tarefa], ['Setor responsável', t => t.setor], ['Setor no painel', t => t.painel], ['Só após (dias)', t => t.aposDias || ''], ['Etiqueta exigida', t => t.etiqueta],
-      ['Urgente?', t => (t.urgente ? 'Sim' : 'Não')], ['Urgente se etiqueta', t => t.etiquetaUrgente], ['Zerar?', t => (t.zerar ? 'Sim' : 'Não')], ['Fluxo Paralelo?', t => (t.paralelo ? 'Fluxo Paralelo' : '')]];
+      ['Urgente?', t => (t.urgente ? 'Sim' : 'Não')], ['Urgente se etiqueta', t => t.etiquetaUrgente], ['Zerar?', t => (t.zerar ? 'Sim' : 'Não')], ['Fluxo Paralelo?', t => (t.paralelo ? 'Fluxo Paralelo' : '')], ['Nos Parados?', t => (t.semParados ? 'Não' : 'Sim')]];
     const q = v => { const s = String(v == null ? '' : v); return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
     return '﻿' + [cols.map(c => q(c[0])).join(';'), ...itens.map(t => cols.map(c => q(c[1](t))).join(';'))].join('\r\n');
   }
@@ -1008,7 +1045,7 @@
 
   root.Regras = {
     lerCsv, lerLinhasCsv, lerData, digito, formatarCNJ, setorPainelDe, temEtiqueta, casaPadrao, mapaTarefas, tipoTarefa, tipoItem, prioridadeDaEtiqueta, regrasDoSetor, causasDeEtiqueta, causasDeClasse, resolverClasse, reconverterClasse, etiquetasQueCasam, criteriosItem, magistradoDeCargo,
-    atribuir, setorPorExcecao, causaExcecao, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, antesDoPrazo, estadoAnotacoes, conclusaoReaberta, marcasVigentes, concluidoAposAnotacao, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, elegivelPJE1, SITUACOES_PJE1, CAB_PJE1, resumirPJE1, partesPJE1, balaoPJE1, prcPJE1, casaJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, comparar, chaveItem,
+    atribuir, setorPorExcecao, causaExcecao, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, antesDoPrazo, estadoAnotacoes, conclusaoReaberta, marcasVigentes, concluidoAposAnotacao, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, elegivelPJE1, SITUACOES_PJE1, CAB_PJE1, resumirPJE1, partesPJE1, balaoPJE1, prcPJE1, casaJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, setorDosParados, SETOR_SEM_CADASTRO, comparar, chaveItem,
     paraCsv, tarefasParaCsv, slug, normTexto, soDigitos, chaveEmail, emailConcluido, pedidoDespacho,
     lerAnalise, analiseDesatualizada, mdParaHtml, LIMITE_ANALISE,
   };
