@@ -614,7 +614,15 @@ a.btn { display: inline-block; text-decoration: none; }
 .par-tabela td.nowrap { white-space: nowrap; }
 .par-tabela .par-dias { font-weight: 700; }
 .par-tabela tr.par-abaixo .par-dias { font-weight: 400; color: var(--muted); }
+/* Gráfico por servidor (Secretaria e Triagem inicial): mesma barra da Produtividade, linhas mais juntas. */
+.par-rank { display: grid; gap: 2px; }
+.par-rank-lin { display: grid; grid-template-columns: minmax(9rem, 16rem) 1fr 4rem; gap: 10px; align-items: center; min-height: 22px; }
+.par-rank-lin .prod-barra { height: 12px; }
+.par-rank-lin .prod-barra i { background: var(--prod-3); }
+.par-rank-lin b { text-align: right; }
+.par-rank-lin.escolhido .par-rank-nome, .par-rank-lin.escolhido b { font-weight: 700; }
 @media (max-width: 720px) { .contagens.par-contagens { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .par-rank-lin { grid-template-columns: minmax(0, 1fr) 1fr 3rem; gap: 8px; } }
 
 /* Análises da IA: etiqueta com o caminho sugerido na linha do processo e janela com a análise (analises-ui.js). */
 .ia-linha { margin-top: 6px; }

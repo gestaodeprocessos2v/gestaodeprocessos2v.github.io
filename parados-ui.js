@@ -91,6 +91,19 @@
       </tbody></table></div></section>`;
   }
 
+  // Gráfico por servidor (só em Secretaria e Triagem inicial): processos da lista de cada servidor do setor, com os outros filtros
+  // aplicados, menos o de servidor; o servidor escolhido no filtro fica em destaque.
+  const SETORES_GRAFICO = ['secretaria', 'triagem'];
+  function graficoServidores(ls, f) {
+    const n = contarPor(ls.filter(l => l.resp), 'resp');
+    const gs = [...n].sort((a, b) => b[1] - a[1] || nomeDe(a[0]).localeCompare(nomeDe(b[0]), 'pt-BR'));
+    if (!gs.length) return '';
+    const max = gs[0][1] || 1;
+    const titulo = f.todos ? 'Processos por servidor' : `Parados há mais de ${nBR(f.limite)} dias, por servidor`;
+    return `<section class="painel largo"><h3>${esc(titulo)}</h3><div class="par-rank">${gs.map(([id, v]) =>
+      `<div class="par-rank-lin${id === f.servidor ? ' escolhido' : ''}"><span class="par-rank-nome">${esc(nomeDe(id))}</span><span class="prod-barra"><i style="width:${(v / max) * 100}%"></i></span><b class="mono">${nBR(v)}</b></div>`).join('')}</div></section>`;
+  }
+
   // Opções de um filtro: só as que têm processos, com a quantidade. A opção já escolhida fica no menu mesmo com zero.
   const opcaoHTML = (x, rot, n, atual) => `<option value="${esc(x)}"${x === atual ? ' selected' : ''}>${esc(rot)} (${nBR(n)})</option>`;
   function contarPor(ls, campo) {
@@ -152,6 +165,7 @@
         ${f.limite !== LIMITE_PADRAO ? `<button type="button" class="btn discreto" data-acao="par-limite-padrao">Voltar a ${LIMITE_PADRAO} dias</button>` : ''}
         <span class="direita"><span class="small muted mono">${totalLista(lista)}</span></span>
       </div>
+      ${!nenhumMag && SETORES_GRAFICO.includes(f.setor) ? graficoServidores(base.filter(l => passa(l, 'servidor') && naLista(l)), f) : ''}
       ${corpo}`;
   }
 
