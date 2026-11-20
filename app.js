@@ -223,6 +223,7 @@
     produtividade: { rotulo: 'Produtividade da Vara', titulo: 'Produtividade da Vara', subtitulo: 'Atividades da equipe · 2ª Vara Federal', pagina: 'Produtividade da Vara · Gestão de Processos' },
     parados: { rotulo: 'Processos Parados', titulo: 'Processos Parados', subtitulo: 'Tempo na tarefa por setor · 2ª Vara Federal', pagina: 'Processos Parados · Gestão de Processos' },
     emails: { rotulo: 'E-mails', titulo: 'E-mails', subtitulo: 'Resumo diário dos e-mails da vara · 2ª Vara Federal', pagina: 'E-mails · Gestão de Processos' },
+    rotinas: { rotulo: 'Rotinas com IA', titulo: 'Rotinas com IA', subtitulo: 'Análises pelo Claude, a partir dos autos · 2ª Vara Federal', pagina: 'Rotinas com IA · Gestão de Processos' },
     ajuda: { rotulo: 'Ajuda', titulo: 'Ajuda', subtitulo: 'Guias passo a passo · 2ª Vara Federal', pagina: 'Ajuda · Gestão de Processos' },
   };
   const PERFIS_METAS = ['gestor', 'servidor', 'magistrado', 'diretor', 'eventual'];
@@ -238,11 +239,12 @@
     if (PERFIS_PRODUTIVIDADE.includes(st.perfil)) a.push('produtividade');
     if (PERFIS_PARADOS.includes(st.perfil)) a.push('parados');
     if (PERFIS_EMAILS.includes(st.perfil)) a.push('emails');
+    if (st.perfil === 'gestor') a.push('rotinas'); // Rotinas com IA (rotinas-ui.js): rodam no computador do Gestor
     a.push('ajuda'); // Ajuda (guias passo a passo): todos os perfis
     return a;
   }
   // Abas de cada área que não é a Fila (a Fila usa abasDisponiveis(), que depende do perfil).
-  const ABAS_AREA = { metas: ['visao', 'pendentes'], produtividade: ['resumo', 'pessoas'], get emails() { return window.PAINEL.abasEmails ? window.PAINEL.abasEmails() : ['emsub']; }, parados: [], ajuda: [] };
+  const ABAS_AREA = { metas: ['visao', 'pendentes'], produtividade: ['resumo', 'pessoas'], get emails() { return window.PAINEL.abasEmails ? window.PAINEL.abasEmails() : ['emsub']; }, parados: [], rotinas: [], ajuda: [] };
   function irParaArea(area) {
     st.menuAreas = false;
     if (!areasDisponiveis().includes(area)) area = 'fila';
@@ -478,21 +480,28 @@
     renderTopo();
     renderAvisos();
     const ok = st.estado === 'ok';
-    const emMetas = ok && st.area === 'metas', emProd = ok && st.area === 'produtividade', emPar = ok && st.area === 'parados', emEml = ok && st.area === 'emails', emAju = ok && st.area === 'ajuda';
+    const emMetas = ok && st.area === 'metas', emProd = ok && st.area === 'produtividade', emPar = ok && st.area === 'parados', emEml = ok && st.area === 'emails', emAju = ok && st.area === 'ajuda', emRot = ok && st.area === 'rotinas';
     $('#v-estado').hidden = ok;
-    for (const a of ['fila', 'geral', 'gestao', 'eventual']) $('#v-' + a).hidden = !ok || emMetas || emProd || emPar || emEml || emAju || st.aba !== a;
+    for (const a of ['fila', 'geral', 'gestao', 'eventual']) $('#v-' + a).hidden = !ok || emMetas || emProd || emPar || emEml || emAju || emRot || st.aba !== a;
     $('#v-metas').hidden = !emMetas;
     $('#v-prod').hidden = !emProd;
     $('#v-parados').hidden = !emPar;
     $('#v-emails').hidden = !emEml;
     $('#v-ajuda').hidden = !emAju;
+    $('#v-rotinas').hidden = !emRot;
     if (!ok) {
-      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod', 'parados', 'emails', 'ajuda']) $('#v-' + a).innerHTML = '';
+      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod', 'parados', 'emails', 'ajuda', 'rotinas']) $('#v-' + a).innerHTML = '';
       renderEstado(); renderModal(); return;
     }
     $('#v-estado').innerHTML = '';
     if (!emAju) $('#v-ajuda').innerHTML = '';
     if (!emPar) $('#v-parados').innerHTML = '';
+    if (!emRot) $('#v-rotinas').innerHTML = '';
+    if (emRot) {
+      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod', 'emails']) $('#v-' + a).innerHTML = '';
+      if (window.PAINEL.renderRotinas) window.PAINEL.renderRotinas();
+      renderModal(); return;
+    }
     if (emMetas) {
       for (const a of ['fila', 'geral', 'gestao', 'eventual', 'prod', 'emails']) $('#v-' + a).innerHTML = '';
       renderMetas(); renderModal(); return;
