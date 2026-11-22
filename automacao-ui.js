@@ -228,7 +228,13 @@
         if (h.name.toLowerCase() !== 'entrada') S.erroPasta = 'Você escolheu a pasta “' + h.name + '”. O esperado é a pasta “entrada” dentro de “extrator”.';
         await lerTodosStatus();
       } else if (aut === 'liberar') {
-        S.permissao = await S.pasta.requestPermission({ mode: 'read' });
+        // a pasta guardada pode ter ficado velha (pasta renomeada ou movida): o navegador recusa sem perguntar; então pede a pasta de novo
+        try { S.permissao = await S.pasta.requestPermission({ mode: 'read' }); } catch (e) { S.permissao = 'denied'; }
+        if (S.permissao !== 'granted') {
+          const h = await window.showDirectoryPicker({ id: 'painel-entrada', mode: 'read' });
+          S.pasta = h; S.permissao = 'granted'; await bdGravar('pasta', h);
+          if (h.name.toLowerCase() !== 'entrada') S.erroPasta = 'Você escolheu a pasta “' + h.name + '”. O esperado é a pasta “entrada” dentro de “extrator”.';
+        }
         await lerTodosStatus();
       } else if (aut === 'carregar') {
         const st = await lerStatus(alvo); S.status[alvo] = st;
