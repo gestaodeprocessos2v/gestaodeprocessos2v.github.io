@@ -74,8 +74,13 @@
       delete S.erroLer[alvo];
       return st;
     } catch (e) {
-      // pasta ainda sem extração é normal; o resto aparece na barra (antes o erro ficava calado)
-      if (e && e.name === 'NotFoundError') delete S.erroLer[alvo];
+      // "não encontrada": ou a extração ainda não existe (normal), ou a própria pasta guardada sumiu (pasta acima renomeada ou movida)
+      if (e && e.name === 'NotFoundError') {
+        let sumiu = false;
+        try { await S.pasta.values().next(); } catch (e2) { sumiu = !!(e2 && e2.name === 'NotFoundError'); }
+        if (sumiu) S.erroLer[alvo] = 'A pasta “' + S.pasta.name + '” guardada no navegador não existe mais nesse caminho (uma pasta acima dela foi renomeada ou movida?). Clique em “Trocar pasta” e escolha de novo a pasta “entrada” dentro de “extrator”.';
+        else delete S.erroLer[alvo];
+      }
       else { S.erroLer[alvo] = 'Não consegui ' + passo + ' (' + ((e && (e.name + ': ' + e.message)) || e) + ').'; console.error(e); }
       return null;
     }
