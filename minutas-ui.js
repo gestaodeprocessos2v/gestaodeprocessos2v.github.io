@@ -1,7 +1,7 @@
 /* Fila de Trabalho da Vara — minutas para o Residente.
    O Gestor envia um .txt por processo (Gestão → "Minutas para o Residente"); o residente abre o texto na fila.
    O texto é guardado e mostrado como veio (quebras de linha, linhas em branco e recuos). O banco apaga a minuta
-   90 dias depois da conclusão no painel (sql/minutas_residente.sql). Quem lê: Gestor e Residente (RLS). */
+   90 dias depois da conclusão no painel (sql/minutas_residente.sql). Quem lê: Gestor, Servidor, Estagiário e Residente (RLS, sql/minutas_leitura_todos.sql). */
 (function () {
   'use strict';
   const P = window.PAINEL;
@@ -9,7 +9,7 @@
   const { st, esc, toast, falha, dataBR, dataHoraBR, todas, iso, ms, pessoas, filaDe } = P;
   const $ = sel => document.querySelector(sel);
   const render = () => P.render();
-  const PERFIS_MINUTAS = ['gestor', 'residente'];
+  const PERFIS_MINUTAS = ['gestor', 'servidor', 'estagiario', 'residente'];   // perfis com fila (o eventual não tem o botão)
   const LIMITE = 20000;   // caracteres, o mesmo do banco
   const DIA = 86400000;
   const fmtCNJ = n => (n && n.length === 20 ? `${n.slice(0, 7)}-${n.slice(7, 9)}.${n.slice(9, 13)}.${n.slice(13, 14)}.${n.slice(14, 16)}.${n.slice(16)}` : n);
@@ -33,6 +33,18 @@
     return `<button class="btn" type="button" data-macao="abrir" data-n="${esc(digitos(l.n))}" data-balao="Ver a minuta feita por IA" aria-description="Ver a minuta feita por IA">Minuta</button>`;
   };
 
+  // Texto a copiar como minuta: o que vem depois da linha de pontos que fecha o bloco de controle
+  // (aviso "INÍCIO DA SENTENÇA"). Sem o marcador, devolve null (o botão "Copiar minuta" some).
+  function textoDaMinuta(t) {
+    const linhas = String(t == null ? '' : t).split(/\r?\n/);
+    const i = linhas.findIndex(l => /IN[ÍI]CIO DA SENTEN[ÇC]A/i.test(l));
+    if (i < 0) return null;
+    const j = linhas.findIndex((l, k) => k > i && /^\s*[·.]{4,}\s*$/.test(l));
+    if (j < 0) return null;
+    return linhas.slice(j + 1).join('\n').replace(/^\s*\n/, '');
+  }
+  P.textoDaMinuta = textoDaMinuta;
+
   // ---------- janela ----------
   function renderModal() {
     const el = $('#modal-minuta'); if (!el) return;
@@ -45,7 +57,8 @@
       <div class="corpo">
         ${corpo}
         <div class="linha-botoes">
-          <button class="btn primario" type="button" data-macao="copiar"${t == null ? ' disabled' : ''}>Copiar</button>
+          <button class="btn primario" type="button" data-macao="copiar"${t == null ? ' disabled' : ''} data-balao="Copia o arquivo inteiro, com o controle de leitura" aria-description="Copia o arquivo inteiro, com o controle de leitura">Copiar tudo</button>
+          ${t != null && textoDaMinuta(t) != null ? '<button class="btn primario" type="button" data-macao="copiar-minuta" data-balao="Copia só o texto da minuta, sem o controle de leitura" aria-description="Copia só o texto da minuta, sem o controle de leitura">Copiar minuta</button>' : ''}
           <button class="btn" type="button" data-macao="baixar"${t == null ? ' disabled' : ''}>Baixar .txt</button>
           <button class="btn" type="button" data-macao="fechar">Fechar</button>
         </div>
@@ -79,7 +92,8 @@
     try {
       if (acao === 'abrir') await abrir(a.dataset.n);
       else if (acao === 'fechar' || (acao === 'fechar-fundo' && e.target === a)) { m.modal = null; renderModal(); }
-      else if (acao === 'copiar' && m.modal) { await navigator.clipboard.writeText(m.textos[m.modal.n]); toast('Minuta copiada.'); }
+      else if (acao === 'copiar' && m.modal) { await navigator.clipboard.writeText(m.textos[m.modal.n]); toast('Arquivo inteiro copiado.'); }
+      else if (acao === 'copiar-minuta' && m.modal) { const x = textoDaMinuta(m.textos[m.modal.n]); if (x == null) return; await navigator.clipboard.writeText(x); toast('Minuta copiada.'); }
       else if (acao === 'baixar' && m.modal) baixarTxt(m.modal.n);
       else if (acao === 'escolher') { const i = $('#min-arquivos'); if (i) i.click(); }
       else if (acao === 'gravar') await gravar();
