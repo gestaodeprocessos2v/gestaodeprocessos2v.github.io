@@ -32,7 +32,18 @@
     });
   }
   async function bdLer(chave) { try { const d = await bd(); return await new Promise((ok, err) => { const q = d.transaction('kv').objectStore('kv').get(chave); q.onsuccess = () => ok(q.result); q.onerror = () => err(q.error); }); } catch (e) { return null; } }
-  async function bdGravar(chave, valor) { try { const d = await bd(); await new Promise((ok, err) => { const t = d.transaction('kv', 'readwrite'); t.objectStore('kv').put(valor, chave); t.oncomplete = ok; t.onerror = () => err(t.error); }); } catch (e) { /* sem guardar: pede a pasta de novo na próxima vez */ } }
+  // devolve '' se guardou, ou o motivo da falha (antes a falha ficava calada e a pasta sumia na visita seguinte)
+  async function bdGravar(chave, valor) {
+    try {
+      try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) { /* só um pedido de proteção */ }
+      const d = await bd();
+      await new Promise((ok, err) => { const t = d.transaction('kv', 'readwrite'); t.objectStore('kv').put(valor, chave); t.oncomplete = ok; t.onerror = () => err(t.error); t.onabort = () => err(t.error); });
+      d.close();
+      const volta = await bdLer(chave);   // confere se realmente ficou guardada
+      return volta ? '' : 'o navegador não manteve a pasta guardada';
+    } catch (e) { return (e && (e.message || e.name)) || 'erro desconhecido'; }
+  }
+  const avisoGuarda = motivo => 'A pasta foi aceita, mas o navegador não conseguiu guardá-la (' + motivo + '). Ela vale só até fechar esta aba; será preciso escolher de novo na próxima vez. Confira se o Edge não está apagando os dados do site ao fechar.';
 
   async function permissaoAtual() {
     if (!S.pasta) return 'sem';
@@ -224,16 +235,20 @@
       if (aut === 'pasta') {
         S.erroPasta = '';
         const h = await window.showDirectoryPicker({ id: 'painel-entrada', mode: 'read' });
-        S.pasta = h; S.permissao = 'granted'; await bdGravar('pasta', h);
+        S.pasta = h; S.permissao = 'granted';
+        const falha = await bdGravar('pasta', h);
         if (h.name.toLowerCase() !== 'entrada') S.erroPasta = 'Você escolheu a pasta “' + h.name + '”. O esperado é a pasta “entrada” dentro de “extrator”.';
+        else if (falha) S.erroPasta = avisoGuarda(falha);
         await lerTodosStatus();
       } else if (aut === 'liberar') {
         // a pasta guardada pode ter ficado velha (pasta renomeada ou movida): o navegador recusa sem perguntar; então pede a pasta de novo
         try { S.permissao = await S.pasta.requestPermission({ mode: 'read' }); } catch (e) { S.permissao = 'denied'; }
         if (S.permissao !== 'granted') {
           const h = await window.showDirectoryPicker({ id: 'painel-entrada', mode: 'read' });
-          S.pasta = h; S.permissao = 'granted'; await bdGravar('pasta', h);
+          S.pasta = h; S.permissao = 'granted';
+          const falha = await bdGravar('pasta', h);
           if (h.name.toLowerCase() !== 'entrada') S.erroPasta = 'Você escolheu a pasta “' + h.name + '”. O esperado é a pasta “entrada” dentro de “extrator”.';
+          else if (falha) S.erroPasta = avisoGuarda(falha);
         }
         await lerTodosStatus();
       } else if (aut === 'carregar') {
