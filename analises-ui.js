@@ -91,7 +91,16 @@
     });
   }
   async function bdLer(chave) { try { const d = await bd(); return await new Promise((ok, err) => { const q = d.transaction('kv').objectStore('kv').get(chave); q.onsuccess = () => ok(q.result); q.onerror = () => err(q.error); }); } catch (e) { return null; } }
-  async function bdGravar(chave, valor) { try { const d = await bd(); await new Promise((ok, err) => { const t = d.transaction('kv', 'readwrite'); t.objectStore('kv').put(valor, chave); t.oncomplete = ok; t.onerror = () => err(t.error); }); } catch (e) { /* sem guardar: pede a pasta de novo na próxima vez */ } }
+  // devolve '' se guardou, ou o motivo da falha
+  async function bdGravar(chave, valor) {
+    try {
+      try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) { /* só um pedido de proteção */ }
+      const d = await bd();
+      await new Promise((ok, err) => { const t = d.transaction('kv', 'readwrite'); t.objectStore('kv').put(valor, chave); t.oncomplete = ok; t.onerror = () => err(t.error); t.onabort = () => err(t.error); });
+      d.close();
+      return (await bdLer(chave)) ? '' : 'o navegador não manteve a pasta guardada';
+    } catch (e) { return (e && (e.message || e.name)) || 'erro desconhecido'; }
+  }
 
   async function situacaoPasta() {
     const a = A();
@@ -183,6 +192,10 @@
     const x = imp && imp.analises;
     if (st.perfil !== 'gestor' || !x) return '';
     const b = (acao, txt) => `<button class="btn" type="button" data-iaacao="${acao}">${txt}</button>`;
+    const ea = A().erroPasta ? `<div class="aviso erro">Não consegui usar a pasta das análises: ${esc(A().erroPasta)}</div>` : '';
+    return ea + previaCorpo(x, b);
+  };
+  function previaCorpo(x, b) {
     if (x.estado === 'sem-suporte') return '<div class="small muted">Análises da IA: este navegador não lê pastas do computador (use o Edge ou o Chrome).</div>';
     if (x.estado === 'sem-pasta') return `<div class="small">Análises da IA: escolha a pasta <b>Análise</b> (em “_Processos (Download)”) para o painel incluir as análises nos processos da lista. ${b('escolher', 'Escolher a pasta das análises')}</div>`;
     if (x.estado === 'prompt' || x.estado === 'denied') return `<div class="small">Análises da IA: a pasta das análises precisa ser liberada de novo neste navegador. ${b('liberar', 'Liberar a pasta')} ${b('escolher', 'Escolher outra pasta')}</div>`;
@@ -194,7 +207,7 @@
     if (x.saem) partes.push(`<b class="mono">${x.saem}</b> de processos fora da lista ${x.saem === 1 ? 'sai' : 'saem'} do painel`);
     const erros = x.erros.length ? `<div class="aviso erro"><b>${x.erros.length} ${x.erros.length === 1 ? 'análise não será gravada' : 'análises não serão gravadas'}</b>: ${x.erros.slice(0, 6).map(e => `${esc(e.arquivo)} (${esc(e.erro)})`).join('; ')}${x.erros.length > 6 ? '…' : ''}.</div>` : '';
     return `<div class="small">Análises da IA (pasta “${esc(x.pasta)}”): ${partes.length ? partes.join(' · ') : 'nenhuma para os processos desta lista'}. ${b('escolher', 'Trocar pasta')}</div>${erros}`;
-  };
+  }
 
   // Depois de gravar a lista: grava as análises dos processos que estão nas filas e apaga as dos que saíram.
   P.gravarAnalises = async function (imp) {
@@ -432,9 +445,11 @@
       if (e && e.name === 'AbortError') return;   // o Gestor cancelou
       console.error(e); a.erroPasta = `${e.name || 'Erro'}: ${e.message || e}`; render(); return;
     }
-    await bdGravar('pasta-analises', a.pasta);
-    await atualizarSituacao();
-    await P.prepararAnalises(st.importacao); render();
+    const falhaGuarda = await bdGravar('pasta-analises', a.pasta);
+    if (falhaGuarda) a.erroPasta = `a pasta foi aceita, mas o navegador não conseguiu guardá-la (${falhaGuarda}); ela vale só até fechar esta aba`;
+    try { await atualizarSituacao(); await P.prepararAnalises(st.importacao); }
+    catch (e) { console.error(e); a.erroPasta = `${e.name || 'Erro'}: ${e.message || e}`; }
+    render();
   }
   async function liberarPasta() {
     const a = A();
