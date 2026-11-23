@@ -703,5 +703,5 @@ a.btn { display: inline-block; text-decoration: none; }
 
 /* Área Rotinas com IA (rotinas-ui.js) */
 .rotinas { display: flex; flex-direction: column; gap: 16px; }
-.rotinas-grade { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); align-items: start; }
+.rotinas-grade { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); align-items: stretch; }   /* cartões da mesma linha com a altura do mais alto */
 .rotinas .automacao { margin: 0; }
