@@ -438,7 +438,7 @@
       <div class="tabela-wrap"><table class="urg-resumo"><thead><tr><th>Em aberto</th><th class="n">Quantidade</th><th></th></tr></thead><tbody>
         <tr><th colspan="3" class="small muted">Fila de processos</th></tr>
         ${linha('Urgências na minha fila (lista acima)', doGestor, '')}
-        <tr><th colspan="3" class="small muted">E-mails não concluídos${em ? `: <b class="mono">${em.total}</b>` : ' (ainda carregando)'}</th></tr>
+        <tr><th class="small muted">E-mails não concluídos${em ? '' : ' (ainda carregando)'}</th><th class="n mono">${em ? em.total : ''}</th><th></th></tr>
         ${linha('Urgentes', nEm('urgentes'), 'emails', 'Abre a área E-mails.')}
         ${linha('Despacho com o juiz', nEm('despacho'), 'emails', 'Abre a aba “Despacho com o juiz” da área E-mails.', 'emdesp')}
         ${linha('Pedem despacho, decisão ou sentença', nEm('minutas'), 'emails', 'Abre a área E-mails (abas do Juiz Titular, da Juíza Substituta e Não localizado).')}
