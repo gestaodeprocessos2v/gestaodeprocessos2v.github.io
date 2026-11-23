@@ -275,8 +275,87 @@
     finally { z.gravando = false; render(); }
   }
 
-  // ---------- quadro em Rotinas com IA ----------
+  // ---------- planilha (.xlsx) ----------
+  // Duas origens, as mesmas colunas: a prévia da pasta (traz também os processos que NÃO estavam nas filas) e as gravadas no painel.
   const SIT_TEXTO = { nova: 'Nova', substitui: 'Substitui a atual', igual: 'Sem mudança', fora: 'Fora das filas' };
+  const diaMs = d => { const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime() : ''; };
+  const diasDesde = ch => (ch == null ? '' : Math.max(0, Math.floor((Date.now() - Number(ch)) / 86400000)));
+  // Só as recomendações do arquivo gerado (itens da seção "Recomendações"), sem Markdown, em uma linha.
+  function textoPlano(md) {
+    const sec = String(md || '').replace(/\r\n?/g, '\n').match(/^##\s+Recomenda[çc][õo]es\s*\n([\s\S]*?)(?=^##\s|(?![\s\S]))/mi);
+    return (sec ? sec[1] : String(md || '')).split('\n').map(l => l.replace(/^\s*[-*]\s+/, '').replace(/\*\*/g, '').trim()).filter(Boolean).join(' | ');
+  }
+  // Processo → { item, pessoas } nas filas atuais (o primeiro item achado; o setor e a tarefa são os mesmos em todas).
+  function ondeEsta() {
+    const m = new Map();
+    for (const r of st.filas || []) for (const i of r.itens || []) {
+      const n = digitos(i.n), x = m.get(n) || m.set(n, { item: i, pessoas: [] }).get(n);
+      if (!x.item.s && i.s) x.item = i;
+      if (r.pessoa && !x.pessoas.includes(r.pessoa)) x.pessoas.push(r.pessoa);
+    }
+    return m;
+  }
+  // Conclusão no painel depois do dia do arquivo da juíza: a marca mais recente (não desfeita) do processo, em qualquer fila.
+  function concluidoDepois(n, desde) {
+    if (desde === '' || !P.marcasVigentesTodas) return null;
+    const fim = desde + 86400000;
+    let achou = null;
+    for (const [pessoa, marcas] of Object.entries(P.marcasVigentesTodas())) {
+      for (const [chave, mk] of Object.entries(marcas || {})) {
+        if (chave.split('|')[0] !== n || !mk || mk.desfeito || !mk.em || mk.em < fim) continue;
+        if (!achou || mk.em > achou.em) achou = { em: mk.em, pessoa };
+      }
+    }
+    return achou;
+  }
+  const COLUNAS_PLANILHA = [
+    { t: 'Número do processo', largura: 27 }, { t: 'Magistrada', largura: 12 }, { t: 'Recomendação', largura: 40 },
+    { t: 'Texto da recomendação', largura: 90 }, { t: 'Sem leitura dos autos', largura: 14 }, { t: 'Data do arquivo da juíza', tipo: 'data', largura: 16 },
+    { t: 'No painel', largura: 11 }, { t: 'Tarefa no PJe', largura: 44 }, { t: 'Data de entrada na tarefa', tipo: 'data', largura: 16 },
+    { t: 'Dias na tarefa', tipo: 'numero', largura: 12 }, { t: 'Setor no painel', largura: 22 }, { t: 'Classe', largura: 12 }, { t: 'Responsável na fila', largura: 30 },
+    { t: 'Situação da recomendação', largura: 34 }, { t: 'Concluído no painel depois do arquivo', largura: 18 }, { t: 'Concluído em', largura: 18 }, { t: 'Concluído por (fila)', largura: 28 },
+    { t: 'Situação no envio', largura: 20 }, { t: 'Gravada no painel em', largura: 18 },
+  ];
+  // r: { numero, mag, resumo, texto, semLeitura, dataArquivo, situacao, gravadoEm }
+  function linhaPlanilha(r, onde) {
+    const w = onde.get(r.numero), item = w && w.item, desde = diaMs(r.dataArquivo), c = concluidoDepois(r.numero, desde);
+    const velha = item ? R.recomendacaoDesatualizada({ dataArquivo: r.dataArquivo }, item) : '';
+    return [fmtCNJ(r.numero), r.mag, r.resumo, textoPlano(r.texto), r.semLeitura ? 'Sim' : 'Não', desde,
+      item ? 'Sim' : 'Não', item ? (item.t || '') : '', item && item.ch != null ? item.ch : '', item ? diasDesde(item.ch) : '',
+      item ? (P.NOME_SETOR[item.s] || item.s || '') : '', item ? (item.c || '') : '', w ? w.pessoas.map(p => P.nomeDe(p)).join(', ') : '',
+      !item ? 'Não está nas filas do painel' : velha ? 'Desatualizada: ' + velha : 'Em dia',
+      c ? 'Sim' : (item ? 'Não' : ''), c ? dataHoraBR(c.em) : '', c ? P.nomeDe(c.pessoa) : '',
+      r.situacao || '', r.gravadoEm ? dataHoraBR(r.gravadoEm) : ''];
+  }
+  const FONTE_PLANILHA = 'Arquivos _Recomendacao.md gerados pela IA a partir do arquivo da juíza, cruzados com as filas atuais do painel';
+
+  function planilhaPrevia() {
+    const z = Z(), x = z.envio;
+    if (!x || x.estado !== 'ok' || !x.itens.length) { toast('Verifique a pasta antes: não há nada para a planilha.'); return; }
+    const onde = ondeEsta();
+    P.baixarPlanilha({
+      arquivo: `recomendacoes-juiza-${x.m.toLowerCase()}`, titulo: `Recomendações da juíza ${x.m} (${NOME[x.m]}): pasta lida`, aba: 'Recomendações', fonte: FONTE_PLANILHA,
+      filtros: [`Magistrada: ${x.m}`],
+      colunas: COLUNAS_PLANILHA,
+      linhas: x.itens.map(i => linhaPlanilha({ numero: i.rec.numero, mag: x.m, resumo: i.rec.resumo, texto: i.rec.texto, semLeitura: i.rec.semLeitura, dataArquivo: i.rec.dataArquivo, situacao: SIT_TEXTO[i.sit] }, onde)),
+    });
+  }
+
+  async function planilhaGravadas() {
+    const z = Z(), onde = ondeEsta();
+    try {
+      const linhas = await todas((a, b) => st.sb.from('analises_juiza').select('numero,magistrada,resumo,sem_leitura,texto,data_arquivo,gravado_em').order('magistrada').order('numero').range(a, b));
+      if (!linhas.length) { toast('Não há recomendações gravadas no painel.'); return; }
+      P.baixarPlanilha({
+        arquivo: 'recomendacoes-juiza-gravadas', titulo: 'Recomendações da juíza gravadas no painel', aba: 'Recomendações', fonte: FONTE_PLANILHA,
+        colunas: COLUNAS_PLANILHA,
+        linhas: linhas.map(r => linhaPlanilha({ numero: r.numero, mag: r.magistrada, resumo: r.resumo, texto: r.texto, semLeitura: !!r.sem_leitura, dataArquivo: r.data_arquivo || '', situacao: 'Gravada no painel', gravadoEm: Date.parse(r.gravado_em) || null }, onde)),
+      });
+      z.msg = '';
+    } catch (e) { falha(e); }
+  }
+
+  // ---------- quadro em Rotinas com IA ----------
   const hora = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); };
   const balao = t => `data-balao="${esc(t)}" aria-description="${esc(t)}"`;
 
@@ -321,6 +400,7 @@
       ${erros}
       <div class="linha-botoes">
         <button class="btn primario" type="button" data-jzacao="gravar"${z.gravando || !entram.length ? ' disabled' : ''}>${z.gravando ? 'Gravando…' : `Gravar ${entram.length === 1 ? 'a recomendação' : entram.length + ' recomendações'}`}</button>
+        ${x.itens.length ? `<button class="btn" type="button" data-jzacao="planilha-previa" ${balao('Baixa em .xlsx todos os processos desta pasta, inclusive os que não estão nas filas, com a tarefa, a data de entrada e a situação no painel')}>Baixar planilha</button>` : ''}
         <button class="btn" type="button" data-jzacao="cancelar-envio">${entram.length ? 'Cancelar' : 'Fechar'}</button>
       </div>
     </div>`;
@@ -354,6 +434,7 @@
       ${previa()}
       <h3>Recomendações no painel</h3>
       ${resumo}
+      ${gravadas.length ? `<div class="linha-botoes"><button class="btn" type="button" data-jzacao="planilha-gravadas" ${balao('Baixa em .xlsx as recomendações gravadas, com a tarefa e a data de entrada de cada processo, se estão em dia e se foram concluídas no painel')}>Baixar planilha das gravadas</button></div>` : ''}
     </section>`;
   };
 
@@ -374,6 +455,8 @@
       else if (acao === 'enviar') await enviar();
       else if (acao === 'verificar') await verificar();
       else if (acao === 'gravar') await gravar();
+      else if (acao === 'planilha-previa') planilhaPrevia();
+      else if (acao === 'planilha-gravadas') await planilhaGravadas();
       else if (acao === 'cancelar-envio') { z.envio = null; render(); }
       else if (acao === 'relancar') { z.pedido = Date.now(); z.status = null; z.msg = ''; setTimeout(() => { render(); acompanhar(); }, 0); }   // o link painel:// segue o caminho normal
     } catch (err) { falha(err); }
