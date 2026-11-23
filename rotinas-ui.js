@@ -119,14 +119,15 @@
     const btn = href && !rodando
       ? `<a class="btn primario" href="${esc(href)}" data-rot="executar" data-alvo="${r.alvo}" ${balao('Roda a rotina neste computador (atalho do painel). O login no PJe continua seu, no Edge do painel.')}>${rotBotao}</a>`
       : `<button class="btn primario" type="button" disabled>${rodando ? 'Em andamento…' : rotBotao}</button>`;
-    const campo = r.numero === 'nao' ? '' : `<label class="campo"><span>Número do processo${r.numero === 'opcional' ? ' (opcional)' : ''}</span>
+    // sem campo de número, um espaço vazio no lugar: as caixas e os botões dos cartões ficam na mesma linha (subgrid em estilo.css)
+    const campo = r.numero === 'nao' ? '<div class="rot-sem-campo" aria-hidden="true"></div>' : `<label class="campo"><span>Número do processo${r.numero === 'opcional' ? ' (opcional)' : ''}</span>
       <input id="rot-num-${r.alvo}" data-alvo="${r.alvo}" class="rot-num" type="text" inputmode="numeric" autocomplete="off" value="${esc(S.numeros[r.alvo] || '')}" placeholder="0000000-00.0000.4.05.8200"></label>`;
     return `<section class="painel" data-rotina="${r.alvo}">
       <h2>${esc(r.titulo)}</h2>
       <p>${esc(r.texto)}</p>
       ${campo}
       <div class="automacao">${btn}</div>
-      ${situacao(r)}
+      <div class="rot-situacao">${situacao(r)}</div>
     </section>`;
   }
 

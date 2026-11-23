@@ -705,3 +705,8 @@ a.btn { display: inline-block; text-decoration: none; }
 .rotinas { display: flex; flex-direction: column; gap: 16px; }
 .rotinas-grade { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); align-items: stretch; }   /* cartões da mesma linha com a altura do mais alto */
 .rotinas .automacao { margin: 0; }
+/* cada cartão usa as 5 linhas da grade (título, texto, campo, botão, situação): caixas e botões ficam alinhados entre os cartões */
+.rotinas-grade > section.painel { display: grid; grid-row: span 5; grid-template-rows: subgrid; row-gap: 12px; align-content: start; }
+.rotinas-grade > section.painel > .campo, .rotinas-grade > section.painel > .automacao { align-self: end; }
+.rot-situacao { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.rot-situacao:empty { display: none; }
