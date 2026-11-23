@@ -124,7 +124,7 @@
       ${painelUrgenciasResumo()}
       ${painelSituacaoDados()}
       ${painelUrgencia()}`;
-    v.innerHTML = `${atalhosGestor()}<div class="paineis">${corpo}</div>`;
+    v.innerHTML = `<div class="paineis">${corpo}</div>`;
     ligarRecolher(v);
     marcarPendentes();
     manter.forEach(el => { const novo = document.getElementById(el.id); if (novo) novo.replaceWith(el); });
@@ -426,30 +426,17 @@
     </section>`;
   }
 
-  // ---------- Painel do Gestor: atalhos do topo e quadro de urgências (Início) ----------
-  function atalhosGestor() {
-    const nEm = P.emailsNaoLidos ? P.emailsNaoLidos() : 0;
-    const b = (area, txt, balao, n) => `<button class="btn" type="button" data-ir-area="${area}" data-balao="${esc(balao)}" aria-description="${esc(balao)}">${txt}${n ? ` <span class="contagem">${n}</span>` : ''}</button>`;
-    return `<nav class="linha-botoes atalhos-gestor" aria-label="Atalhos">
-      ${b('emails', 'E-mails', 'Abre o resumo diário dos e-mails da vara.', nEm)}
-      ${b('fila', 'Fila de Trabalho', 'Abre a Fila de Trabalho, com a lista Geral e o “Ver a fila como…”.')}
-      ${b('rotinas', 'Rotinas com IA', 'Abre os botões que rodam as análises do Claude neste computador.')}
-    </nav>`;
-  }
-
+  // ---------- Painel do Gestor: quadro de urgências (Início). Os atalhos para outras áreas ficam na barra verde (app.js). ----------
   function painelUrgenciasResumo() {
-    const abertas = p => P.filaDe(p).filter(l => l.tipo === 'urgente' && !l.concluido).length;
-    const doGestor = abertas(GESTOR_ID);
-    const daVara = pessoas().reduce((s, p) => s + abertas(p.id), 0);
+    const doGestor = P.filaDe(GESTOR_ID).filter(l => l.tipo === 'urgente' && !l.concluido).length;
     const em = P.emailsResumoGestor ? P.emailsResumoGestor() : null;
     const linha = (rotulo, n, area, balao, aba) => `<tr${n ? ' class="dado-velho"' : ''}><td>${esc(rotulo)}</td><td class="n mono">${n == null ? '—' : n}</td><td>${!area ? '' : `<button class="btn discreto" type="button" data-ir-area="${area}"${aba ? ` data-ir-aba="${aba}"` : ''} data-balao="${esc(balao)}" aria-description="${esc(balao)}">Abrir</button>`}</td></tr>`;
     const nEm = k => (em ? em[k] : null);
-    return `<section class="painel" id="painel-urgencias-resumo">
+    return `<section class="painel largo" id="painel-urgencias-resumo">
       <h2>Urgências</h2>
       <div class="tabela-wrap"><table><thead><tr><th>Em aberto</th><th>Quantidade</th><th></th></tr></thead><tbody>
         <tr><th colspan="3" class="small muted">Fila de processos</th></tr>
         ${linha('Urgências na minha fila (lista acima)', doGestor, '')}
-        ${linha('Processos urgentes nas filas da vara', daVara, 'fila', 'Abre a Fila de Trabalho (lista Geral).')}
         <tr><th colspan="3" class="small muted">E-mails não concluídos${em ? '' : ' (ainda carregando)'}</th></tr>
         ${linha('Urgentes', nEm('urgentes'), 'emails', 'Abre a área E-mails.')}
         ${linha('Despacho com o juiz', nEm('despacho'), 'emails', 'Abre a aba “Despacho com o juiz” da área E-mails.', 'emdesp')}

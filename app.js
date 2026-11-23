@@ -603,7 +603,15 @@
       if (sel.dataset.h !== h) { sel.innerHTML = h; sel.dataset.h = h; }
       sel.value = st.verComo;
     }
-    if (ok) $('#quem').innerHTML = `${esc(st.nome)} <small>${esc(PERFIS[st.perfil] || st.perfil)}</small>`;
+    if (ok) {
+      // Gestor fora do Painel do Gestor: o cartão com o nome vira o botão de volta (sugestão do Alberto, 23/11/2026).
+      const volta = st.perfil === 'gestor' && st.area !== 'gestor';
+      const q = $('#quem'), hq = `${volta ? '<span aria-hidden="true">←</span> ' : ''}${esc(st.nome)} <small>${esc(PERFIS[st.perfil] || st.perfil)}</small>`;
+      if (q.dataset.h !== hq) { q.innerHTML = hq; q.dataset.h = hq; }
+      q.disabled = !volta;
+      if (volta) { q.dataset.balao = 'Voltar ao Painel do Gestor'; q.setAttribute('aria-description', 'Voltar ao Painel do Gestor'); }
+      else { delete q.dataset.balao; q.removeAttribute('aria-description'); }
+    }
     const outraArea = ok && ABAS_AREA[st.area];
     const abas = !ok ? [] : outraArea || abasDisponiveis();
     const atual = st.area === 'gestor' ? st.abaGestor : st.area === 'metas' ? st.abaMetas : st.area === 'produtividade' ? st.abaProd : st.area === 'emails' ? st.abaEmails : st.aba;
@@ -611,9 +619,15 @@
     nav.hidden = abas.length < 2;
     const rot = { ginicio: 'Início', gextracao: 'Extração de dados', gconfig: 'Configurações', fila: 'Fila', eventual: 'Eventual', geral: 'Geral', visao: 'Visão geral', pendentes: 'Pendentes', resumo: 'Visão geral', pessoas: 'Por pessoa', emsub: 'Juíza Substituta', emtit: 'Juiz Titular', emnl: 'Não localizado', emsec: 'Secretaria', emdem: 'Demais', emgest: 'Só gestor', emanexo: 'Anexos para juntar', emdesp: 'Despacho com o juiz' };
     const nAvisos = st.area === 'gestor' ? urgenciasDoGestor() : 0;
-    const h = abas.map(a => `<button class="aba" role="tab" id="aba-${a}" aria-selected="${a === atual}" data-aba="${a}">${rot[a]}${a === 'ginicio' && nAvisos ? ` <span class="contagem">${nAvisos}</span>` : ''}${st.area === 'emails' && window.PAINEL.emailsNaoLidos && window.PAINEL.emailsNaoLidos(a) ? ` <span class="contagem">${window.PAINEL.emailsNaoLidos(a)}</span>` : ''}</button>`).join('');
+    // Painel do Gestor: depois das abas, uma divisória e os atalhos para as áreas que o gestor mais usa (levam a outra tela: ↗).
+    const atalho = (area, txt, balao) => `<button class="aba aba-atalho" type="button" data-ir-area="${area}" data-balao="${esc(balao)}" aria-description="${esc(balao)}">${txt} <span aria-hidden="true">↗</span></button>`;
+    const atalhos = st.area === 'gestor' ? '<span class="aba-sep" aria-hidden="true"></span>'
+      + atalho('emails', 'E-mails', 'Abre o resumo diário dos e-mails da vara.')
+      + atalho('fila', 'Fila de Trabalho', 'Abre a Fila de Trabalho, com a lista Geral e o “Ver a fila como…”.')
+      + atalho('rotinas', 'Rotinas com IA', 'Abre os botões que rodam as análises do Claude neste computador.') : '';
+    const h = abas.map(a => `<button class="aba" role="tab" id="aba-${a}" aria-selected="${a === atual}" data-aba="${a}">${rot[a]}${a === 'ginicio' && nAvisos ? ` <span class="contagem">${nAvisos}</span>` : ''}${st.area === 'emails' && window.PAINEL.emailsNaoLidos && window.PAINEL.emailsNaoLidos(a) ? ` <span class="contagem">${window.PAINEL.emailsNaoLidos(a)}</span>` : ''}</button>`).join('') + atalhos;
     if (nav.dataset.h !== h) { nav.innerHTML = h; nav.dataset.h = h; }
-    for (const b of nav.querySelectorAll('.aba')) b.setAttribute('aria-selected', String(b.dataset.aba === atual));
+    for (const b of nav.querySelectorAll('.aba[data-aba]')) b.setAttribute('aria-selected', String(b.dataset.aba === atual));
   }
 
   // Processos enviados ao gestor não geram aviso aqui: o número vermelho na aba Gestão já mostra (pedido do gestor).
@@ -1424,6 +1438,7 @@
       if (e.target.value) { st.verComo = e.target.value; st.aba = 'fila'; zerarMagVis(); render(); } else sairVerComo();
     });
     $('#abas').addEventListener('click', e => {
+      const ir = e.target.closest('[data-ir-area]'); if (ir) { irParaArea(ir.dataset.irArea); return; }
       const b = e.target.closest('.aba'); if (!b) return;
       if (st.area === 'gestor') { st.abaGestor = b.dataset.aba; guardar('fila.abaGestor.' + st.email, st.abaGestor); window.scrollTo({ top: 0 }); render(); return; }
       if (st.area === 'metas') { st.abaMetas = b.dataset.aba; render(); return; }
@@ -1438,7 +1453,9 @@
       else if (a.dataset.acao === 'sair') sair();
       else if (a.dataset.acao === 'tentar') iniciarSessao();
     });
-    // Painel do Gestor: atalhos do topo e números das urgências levam a outra área (E-mails, Fila de Trabalho, Rotinas com IA).
+    // Cartão com o nome: para o gestor fora do Painel do Gestor, volta a ele (fica desativado nos outros casos).
+    $('#quem').addEventListener('click', () => { if (st.perfil === 'gestor') irParaArea('gestor'); });
+    // Painel do Gestor: os "Abrir" do quadro de Urgências levam à área E-mails (e à aba certa).
     $('#v-gestao').addEventListener('click', e => {
       const b = e.target.closest('[data-ir-area]'); if (!b) return;
       if (b.dataset.irAba && b.dataset.irArea === 'emails') st.abaEmails = b.dataset.irAba;

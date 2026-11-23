@@ -310,7 +310,6 @@ ol.linhas { list-style: none; margin: 0; padding: 0; }
 .opcoes { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .opcoes label { display: inline-flex; gap: 6px; align-items: center; }
 .linha-botoes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.atalhos-gestor { margin-bottom: 12px; }
 .tabela-wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -365,6 +364,11 @@ body { margin: 0; }
 [hidden] { display: none !important; }
 .topo .quem { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; background: var(--band-2); color: var(--band-ink); border-radius: var(--r); padding: 7px 10px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .topo .quem small { color: var(--band-muted); font-weight: 500; font-size: 12px; }
+/* o cartão é um botão: só o gestor fora do Painel do Gestor pode clicar (volta ao painel); desativado, fica igual ao cartão de sempre */
+.topo button.quem { font: inherit; font-weight: 600; text-align: left; border: 1px solid transparent; cursor: pointer; }
+.topo button.quem:hover:not(:disabled) { border-color: var(--band-muted); }
+.topo button.quem:disabled { cursor: default; opacity: 1; color: var(--band-ink); }
+.aba-sep { width: 1px; align-self: stretch; margin: 4px; background: var(--band-muted); opacity: .5; }
 .btn.sair { background: var(--band-2); color: var(--band-ink); border-color: transparent; }
 .btn.sair:hover { border-color: var(--band-muted); background: var(--band-2); }
 .vazio .btn { margin-top: 14px; }
