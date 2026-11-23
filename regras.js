@@ -1008,6 +1008,47 @@
     return r;
   }
 
+  // ---------- Recomendações da juíza (<número>_Recomendacao.md, escritas pela rotina de IA em "Análise JS" ou "Análise JT") ----------
+  // Formato: título "# Recomendação da juíza — <número>", "- **Magistrada:** JS|JT", "- **Arquivo de origem:** <nome> (dd/mm/aaaa)"
+  // e, em "## Recomendações", um item por assunto: "- **<rótulo>** (lido|sem leitura dos autos): <texto>".
+  const LIMITE_RECOMENDACAO = 4000;
+  function lerRecomendacao(texto, nomeArquivo) {
+    const t = String(texto == null ? '' : texto).replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+    const numero = (soDigitos(nomeArquivo).match(/^\d{20}/) || [''])[0];
+    const r = { numero, arquivo: nomeArquivo || '', texto: t, magistrada: '', origem: '', dataArquivo: '', rotulos: [], resumo: '', semLeitura: false, erro: '' };
+    if (!numero) { r.erro = 'nome sem o número do processo'; return r; }
+    if (!t.trim()) { r.erro = 'arquivo vazio'; return r; }
+    if (t.length > LIMITE_RECOMENDACAO) { r.erro = 'texto com mais de 4.000 caracteres'; return r; }
+    const tit = t.match(/^#\s+Recomenda[çc][ãa]o da ju[íi]za\s*[—–-]\s*(.+)$/mi);
+    if (!tit || soDigitos(tit[1]).slice(0, 20) !== numero) { r.erro = 'o título não traz o mesmo número do nome do arquivo'; return r; }
+    const mag = t.match(/^\s*[-*]\s*\*\*Magistrada:\*\*\s*(JS|JT)\b/mi);
+    if (!mag) { r.erro = 'sem a magistrada (JS ou JT)'; return r; }
+    r.magistrada = mag[1].toUpperCase();
+    const org = t.match(/^\s*[-*]\s*\*\*Arquivo de origem:\*\*\s*(.+)$/mi);
+    if (org) {
+      r.origem = org[1].trim().slice(0, 200);
+      const dt = r.origem.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (dt) r.dataArquivo = `${dt[3]}-${dt[2].padStart(2, '0')}-${dt[1].padStart(2, '0')}`;
+    }
+    const sec = t.match(/^##\s+Recomenda[çc][õo]es\s*\n([\s\S]*?)(?=^##\s|(?![\s\S]))/mi);
+    const itens = [];
+    if (sec) for (const l of sec[1].split('\n')) {
+      const m = l.match(/^\s*[-*]\s*\*\*(.+?)\*\*\s*(?:\(([^)]*)\))?\s*:?\s*(.*)$/);
+      if (m && m[1].trim()) itens.push({ rotulo: m[1].trim().replace(/[.:;,]$/, ''), sem: /sem leitura/i.test(m[2] || '') });
+    }
+    if (!itens.length) { r.erro = 'a seção “Recomendações” não traz nenhum item em negrito'; return r; }
+    r.rotulos = [...new Set(itens.map(i => i.rotulo))];
+    r.semLeitura = itens.every(i => i.sem);
+    r.resumo = r.rotulos.join('; ').slice(0, 600);
+    return r;
+  }
+
+  // A recomendação vale para o dia do arquivo da juíza: fica desatualizada se o processo chegou à tarefa atual depois dele.
+  function recomendacaoDesatualizada(rec, item) {
+    const motivo = analiseDesatualizada({ tarefa: '', analisadoEm: rec && rec.dataArquivo }, item);
+    return motivo ? 'O processo chegou à tarefa atual depois do arquivo da juíza.' : '';
+  }
+
   // A análise vale para a tarefa em que o processo estava. Fica desatualizada se ele chegou à tarefa atual depois do dia
   // da análise ou se a tarefa mudou. Devolve o motivo (texto) ou '' quando está em dia.
   function analiseDesatualizada(a, item) {
@@ -1068,5 +1109,6 @@
     atribuir, setorPorExcecao, causaExcecao, pessoasDoSetor, excecaoSemSetor, SETOR_SEM_PAINEL, prepararLista, prepararEspeciais, guardarAnotados, antesDoPrazo, estadoAnotacoes, conclusaoReaberta, marcasVigentes, concluidoAposAnotacao, temAnotacaoNova, carimboAnotacao, textoAnotacoes, ETIQUETA_GESTOR_PADRAO, GESTOR_ID, etiquetasFiltro, resumirJD, partesJD, balaoJD, elegivelPJE1, SITUACOES_PJE1, CAB_PJE1, resumirPJE1, partesPJE1, balaoPJE1, prcPJE1, casaJD, fatiar, podarMarcas, marcaVencida, montarFila, linhasPorSetor, setorDosParados, SETOR_SEM_CADASTRO, comparar, chaveItem,
     paraPlanilha, tarefasParaPlanilha, slug, normTexto, soDigitos, chaveEmail, emailConcluido, pedidoDespacho,
     lerAnalise, analiseDesatualizada, classificarAnalises, mdParaHtml, LIMITE_ANALISE,
+    lerRecomendacao, recomendacaoDesatualizada, LIMITE_RECOMENDACAO,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -95,7 +95,7 @@
 
   function linhaHTML(l, limite) {
     return `<tr${acima(l, limite) ? '' : ' class="par-abaixo"'}>
-      <td class="nowrap"><button type="button" class="num" data-acao="copiar" data-n="${esc(l.n)}" data-balao="Copiar número" aria-description="Copiar número">${numeroHTML(l.n)}${letraMagHTML(l.mag)}</button>${selos(l)}</td>
+      <td class="nowrap"><button type="button" class="num" data-acao="copiar" data-n="${esc(l.n)}" data-balao="Copiar número" aria-description="Copiar número">${numeroHTML(l.n)}${letraMagHTML(l.mag)}</button>${selos(l)}${window.PAINEL.etiquetaRecomendacao ? window.PAINEL.etiquetaRecomendacao(l) : ''}</td>
       <td>${esc(l.c || '—')}</td><td>${esc(l.t || '—')}</td><td>${esc(rotuloSetor(l.s) || '—')}</td><td class="nowrap">${l.ch ? dataBR(l.ch) : '—'}</td>
       <td class="n par-dias">${l.dias == null ? '—' : nBR(l.dias)}</td><td>${l.resp ? esc(nomeDe(l.resp)) : `<span class="muted" tabindex="0" role="note" data-balao="${BALAO_SEM_SERVIDOR}" aria-description="${BALAO_SEM_SERVIDOR}">—</span>`}</td></tr>`;
   }

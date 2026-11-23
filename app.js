@@ -382,6 +382,7 @@
     if (PERFIS_EMAILS.includes(st.perfil) && window.PAINEL.carregarEmails) await window.PAINEL.carregarEmails();
     if (window.PAINEL.carregarMinutas) await window.PAINEL.carregarMinutas();
     if (window.PAINEL.carregarAnalises) await window.PAINEL.carregarAnalises();
+    if (window.PAINEL.carregarRecomendacoes) await window.PAINEL.carregarRecomendacoes();
     if (!st.rascOutros) st.rascOutros = null;
     st.ver++;
   }
@@ -884,6 +885,7 @@
         ${criteriosH}
         ${cardJD(l)}
         ${window.PAINEL.etiquetaAnalise ? window.PAINEL.etiquetaAnalise(l) : ''}
+        ${window.PAINEL.etiquetaRecomendacao ? window.PAINEL.etiquetaRecomendacao(l) : ''}
         ${nota}${resp}${etqHTML}
       </div>
       <div class="c-classe"><span class="rot-m">Classe</span>${esc(l.c || '—')}</div>

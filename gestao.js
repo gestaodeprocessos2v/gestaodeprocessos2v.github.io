@@ -414,6 +414,7 @@
       ['metas', 'Metas CNJ', ultimoEnvio(st.metas && st.metas.envios)],
       ['prod', 'Produtividade', ultimoEnvio(st.prod && st.prod.envios)],
       ['analises', 'Análises da IA (última gravação)', st.analises && st.analises.ultimaGravacao],
+      ['juiza', 'Recomendações da juíza (última gravação)', st.juiza && st.juiza.ultimaGravacao],
     ];
     let algumVelho = false;   // com dado desatualizado, o painel fica destacado quando oculto (classe "alerta")
     const linhas = fontes.map(([id, nome, t]) => {

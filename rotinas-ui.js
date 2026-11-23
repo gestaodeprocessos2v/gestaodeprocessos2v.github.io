@@ -140,6 +140,7 @@
         ${linhaPasta()}
       </section>
       <div class="rotinas-grade">${ROTINAS.map(cartao).join('')}</div>
+      ${P.painelRecomendacoesGestao ? P.painelRecomendacoesGestao() : ''}
       ${P.painelAnalisesGestao ? P.painelAnalisesGestao() : ''}
     </div>`;
   }

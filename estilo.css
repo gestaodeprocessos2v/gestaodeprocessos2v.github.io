@@ -18,6 +18,7 @@
   --pri: #8f5108;   --pri-bg: #fbefd9;
   --dev: #6a3fb0;   --dev-bg: #efe8fa;
   --novo: #1d5fbf;  --novo-bg: #e3edfc;
+  --jz: #4b4fb8;    --jz-bg: #e6e7fb;
   --ok: #2c7339;    --ok-bg: #e3f2e6;
   --jd: #c2189a;    --jd-bg: #fbe4f5;   --jd-ink: #ffffff;
   --prod-0: #7bc2b6; --prod-1: #8fb3e8; --prod-2: #c3a3e3; --prod-3: #a8d08d; --prod-4: #d9b8a0; --prod-5: #b5bdc9; --prod-6: #e6c682; --prod-7: #dda0c8;
@@ -34,6 +35,7 @@
     --accent: #5fc0b4; --accent-ink: #0a1715; --band: #1f3a37; --band-2: #2b4a46; --band-ink: #e9f3f0; --band-muted: #9fc7c0;
     --urg: #ff8f80; --urg-bg: #4a2f2c; --urg-ink: #2a0b08; --pri: #f0b45e; --pri-bg: #4a3b1e; --dev: #c5a8f6; --dev-bg: #3d3258;
     --novo: #8fb9f8; --novo-bg: #2a4166; --ok: #7fd08e; --ok-bg: #2c4a33;
+    --jz: #aab0ff; --jz-bg: #33366b;
     --jd: #ff6bd6; --jd-bg: #55294a; --jd-ink: #1a0615;
     --prod-0: #6fb0a5; --prod-1: #86a6da; --prod-2: #b496d4; --prod-3: #9ac080; --prod-4: #c9a790; --prod-5: #a6aeba; --prod-6: #d6b873; --prod-7: #cd93b9;
     --par-cab-bg: #35527f; --par-cab-ink: #dbe8fc;
@@ -46,6 +48,7 @@
   --accent: #5fc0b4; --accent-ink: #0a1715; --band: #1f3a37; --band-2: #2b4a46; --band-ink: #e9f3f0; --band-muted: #9fc7c0;
   --urg: #ff8f80; --urg-bg: #4a2f2c; --urg-ink: #2a0b08; --pri: #f0b45e; --pri-bg: #4a3b1e; --dev: #c5a8f6; --dev-bg: #3d3258;
   --novo: #8fb9f8; --novo-bg: #2a4166; --ok: #7fd08e; --ok-bg: #2c4a33;
+  --jz: #aab0ff; --jz-bg: #33366b;
   --jd: #ff6bd6; --jd-bg: #55294a; --jd-ink: #1a0615;
     --prod-0: #6fb0a5; --prod-1: #86a6da; --prod-2: #b496d4; --prod-3: #9ac080; --prod-4: #c9a790; --prod-5: #a6aeba; --prod-6: #d6b873; --prod-7: #cd93b9;
   --par-cab-bg: #35527f; --par-cab-ink: #dbe8fc;
@@ -663,6 +666,19 @@ a.btn { display: inline-block; text-decoration: none; }
 .ia-texto li { margin: 2px 0; }
 .ia-texto blockquote { margin: 6px 0; padding: 4px 10px; border-left: 3px solid var(--pri); background: var(--pri-bg); }
 .ia-pasta { margin-top: 8px; }
+/* Recomendações da juíza (JS/JT): mesma forma da etiqueta "IA", cor própria */
+.jz-linha { margin-top: 6px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.jz-etq { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 2px 6px; max-width: 100%; text-align: left; font: inherit; font-size: 12.5px; line-height: 1.35; padding: 3px 8px; border-radius: 6px; cursor: pointer; background: var(--jz-bg); color: var(--ink); border: 1px solid transparent; border-left: 3px solid var(--jz); }
+.jz-etq:hover { border-color: var(--jz); }
+.jz-etq:focus-visible { outline: 2px solid var(--jz); outline-offset: 1px; }
+.jz-rot { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--jz); }
+.jz-cam { font-weight: 600; }
+.jz-etq.velha, .jz-etq.sem-leitura { background: var(--sunken); border: 1px dashed var(--muted); border-left: 3px solid var(--muted); }
+.jz-etq.velha .jz-rot, .jz-etq.sem-leitura .jz-rot { color: var(--muted); }
+.jz-aviso { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+td .jz-etq { white-space: normal; max-width: 22rem; }
+.jz-mag { display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0; }
+.jz-mag label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 
 /* Quadro de avisos "Regras da fila" (quadro-ui.js). Só variáveis do tema: vale no claro e no escuro. */
 .qd-botao { font-size: 12.5px; padding: 0 6px; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
