@@ -619,6 +619,8 @@
     $('#marca-nome h1').textContent = area.titulo;
     $('#subtitulo').textContent = area.subtitulo;
     renderMenuAreas(ok);
+    // Fila de Trabalho, Metas CNJ e Produtividade: barra de uma linha só (abas à direita do título), como antes (pedido do Alberto, 23/11/2026)
+    $('.topo').classList.toggle('compacto', !ok || ['fila', 'metas', 'produtividade'].includes(st.area));
     const sel = $('#ver-como');
     const mostrarSel = ok && st.area === 'fila' && st.perfil === 'gestor' && pessoas().length > 0;
     sel.hidden = !mostrarSel;

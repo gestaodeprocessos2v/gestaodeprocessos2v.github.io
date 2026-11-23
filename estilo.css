@@ -119,6 +119,11 @@ select hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; height:
 .sou .btn.sair { margin-left: auto; }
 .sou label { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--band-muted); }
 .abas { display: flex; gap: 4px; flex: 1 1 100%; margin-left: 0; padding: 3px; border-radius: 10px; background: var(--band-2); }   /* 2ª linha da barra, de ponta a ponta */
+/* Fila de Trabalho, Metas CNJ e Produtividade (classe "compacto" no topo, app.js): barra de uma linha só, como antes de 23/11/2026:
+   abas à direita, na mesma linha do título, e o Sair ao lado do nome */
+.topo.compacto .sou { flex: 0 1 auto; }
+.topo.compacto .sou .btn.sair { margin-left: 0; }
+.topo.compacto .abas { flex: 0 1 auto; margin-left: auto; }
 .aba { border: 0; background: none; padding: 6px 16px; border-radius: 7px; cursor: pointer; font-weight: 600; color: var(--band-muted); }
 .aba:hover { color: var(--band-ink); }
 .aba[aria-selected="true"] { background: var(--band-ink); color: var(--band); }
@@ -265,6 +270,7 @@ ol.linhas { list-style: none; margin: 0; padding: 0; }
   .tile.concluido { grid-column: 1 / -1; }
   .abas { margin-left: 0; max-width: 100%; flex-wrap: wrap; }   /* 6 abas (gestor, E-mails) não cabem em uma linha: quebram em linhas */
   .aba { padding: 6px 11px; }
+  .topo.compacto .abas { margin-left: 0; max-width: 100%; }
   .aba-sep { display: none; }   /* com as abas quebrando em linhas, a divisória cairia no começo de uma linha */
   .grupo-cab p { flex-basis: 100%; margin: 0; }
 }
