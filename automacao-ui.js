@@ -136,7 +136,7 @@
     if (!liberada()) return 'Libere o acesso à pasta de entrada para o painel receber o arquivo.';
     const st = S.status[alvo];
     if (st && (st.estado === 'concluido' || st.estado === 'parcial')) return `Última extração: ${hora(st.gerado_em)}${st.mensagem ? ' — ' + st.mensagem : ''}`;
-    return '';
+    return `Pasta “${S.pasta.name}” liberada. Ainda não há extração concluída nela para ${ALVOS[alvo].rotulo || 'este item'}.`;   // antes ficava em branco e parecia que nada tinha acontecido
   }
   function botao(texto, aut, balao, extra) {
     const b = document.createElement('button');
