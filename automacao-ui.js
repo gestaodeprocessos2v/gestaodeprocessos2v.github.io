@@ -20,7 +20,7 @@
   const SUPORTE = typeof window.showDirectoryPicker === 'function';
   const ESPERA_MAX = 12 * 60 * 1000, INTERVALO = 3000;
 
-  const S = { pasta: null, permissao: 'desconhecida', aguardando: {}, status: {}, carregado: {}, msg: {}, timers: {}, erroPasta: '' };
+  const S = { pasta: null, permissao: 'desconhecida', aguardando: {}, status: {}, carregado: {}, msg: {}, timers: {}, erroPasta: '', erroLer: {} };
 
   // ---------- guarda do acesso à pasta (IndexedDB) ----------
   function bd() {
@@ -61,11 +61,24 @@
   const liberada = () => S.pasta && S.permissao === 'granted';
   async function lerStatus(alvo) {
     if (!liberada()) return null;
+    let passo = 'abrir a pasta “' + alvo + '”';
     try {
       const dir = await S.pasta.getDirectoryHandle(alvo);
-      const f = await (await dir.getFileHandle('status.json')).getFile();
-      return JSON.parse(await f.text());
-    } catch (e) { return null; }
+      passo = 'abrir o status.json';
+      const fh = await dir.getFileHandle('status.json');
+      passo = 'ler o status.json';
+      const f = await fh.getFile();
+      const txt = await f.text();
+      passo = 'interpretar o status.json';
+      const st = JSON.parse(txt);
+      delete S.erroLer[alvo];
+      return st;
+    } catch (e) {
+      // pasta ainda sem extração é normal; o resto aparece na barra (antes o erro ficava calado)
+      if (e && e.name === 'NotFoundError') delete S.erroLer[alvo];
+      else { S.erroLer[alvo] = 'Não consegui ' + passo + ' (' + ((e && (e.name + ': ' + e.message)) || e) + ').'; console.error(e); }
+      return null;
+    }
   }
   async function lerTodosStatus() { for (const a of Object.keys(ALVOS)) S.status[a] = await lerStatus(a); }
 
@@ -111,7 +124,7 @@
       if (Date.now() - S.aguardando[alvo] > ESPERA_MAX) { S.msg[alvo] = 'A extração demorou demais. Confira a janela do Edge do painel.'; parar(alvo); montar(); return; }
       if (!liberada()) return;
       const st = await lerStatus(alvo);
-      if (!st) return;
+      if (!st) { if (S.erroLer[alvo]) { S.msg[alvo] = 'Aguardando a extração… ' + S.erroLer[alvo]; montar(); } return; }
       S.status[alvo] = st;
       const pedido = S.aguardando[alvo];
       const recente = st.gerado_em && Date.parse(st.gerado_em) >= pedido - 5000;
@@ -134,6 +147,7 @@
     if (S.erroPasta) return S.erroPasta;
     if (!S.pasta) return 'Escolha a pasta de entrada (a pasta “entrada” dentro da pasta “extrator”) para o painel receber o arquivo.';
     if (!liberada()) return 'Libere o acesso à pasta de entrada para o painel receber o arquivo.';
+    if (S.erroLer[alvo]) return S.erroLer[alvo];
     const st = S.status[alvo];
     if (st && (st.estado === 'concluido' || st.estado === 'parcial')) return `Última extração: ${hora(st.gerado_em)}${st.mensagem ? ' — ' + st.mensagem : ''}`;
     return `Pasta “${S.pasta.name}” liberada. Ainda não há extração concluída nela para ${ALVOS[alvo].rotulo || 'este item'}.`;   // antes ficava em branco e parecia que nada tinha acontecido
