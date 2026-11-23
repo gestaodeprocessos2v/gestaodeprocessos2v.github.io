@@ -165,7 +165,7 @@
       email: '', perfil: '', nome: '', pessoa: '', magistrado: '', fMetas: { meta: '', inst: '', busca: '', limite: 300 }, config: null, rascunho: null, tarefas: [], mapaTarefas: new Map(), rascTarefas: null,
       tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, anotacoes: {}, dispensas: {}, acessos: [], negados: [],
       anotando: null, confirmaNota: null, devolvendo: null, modal: null, importacao: null,
-      area: 'fila', menuAreas: false, abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, metasImp: null,
+      area: 'fila', menuAreas: false, abaGestor: 'ginicio', abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, metasImp: null,
       abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null },
       quadro: null, recadoQuadro: '',
     });
@@ -199,7 +199,10 @@
       const abas = abasDisponiveis();
       const salva = ler('fila.aba.' + st.email);
       st.aba = abas.includes(salva) ? salva : abas[0];
-      st.area = 'fila'; st.menuAreas = false; // o painel sempre abre na Fila de Trabalho
+      // o Gestor abre no Painel do Gestor (na última subseção usada); os demais, na Fila de Trabalho
+      st.area = st.perfil === 'gestor' ? 'gestor' : 'fila'; st.menuAreas = false;
+      const salvaG = ler('fila.abaGestor.' + st.email);
+      st.abaGestor = ABAS_AREA.gestor.includes(salvaG) ? salvaG : 'ginicio';
       st.estado = 'ok'; render();
       if (window.PAINEL.abrirQuadro) window.PAINEL.abrirQuadro(true); // quadro de avisos "Regras da fila" (quadro-ui.js)
     } catch (e) {
@@ -211,13 +214,14 @@
   function abasDisponiveis() {
     if (temFila()) return ['fila', 'geral'];
     if (st.perfil === 'eventual') return ['eventual', 'geral'];
-    if (st.perfil === 'gestor') return st.verComo ? ['fila', 'geral', 'gestao'] : ['geral', 'gestao'];
+    if (st.perfil === 'gestor') return st.verComo ? ['fila', 'geral'] : ['geral'];   // a gestão fica no Painel do Gestor
     return ['geral'];
   }
 
   // Áreas do painel (menu do logo). Metas CNJ: gestor, servidores, magistrado(a), diretor de secretaria e servidor eventual.
   const HOJE = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   const AREAS = {
+    gestor: { rotulo: 'Painel do Gestor', titulo: 'Painel do Gestor', subtitulo: 'Gestão de Processos · 2ª Vara Federal · ' + HOJE, pagina: 'Painel do Gestor · Gestão de Processos' },
     fila: { rotulo: 'Fila de Trabalho', titulo: 'Fila de Trabalho', subtitulo: 'Gestão de Processos · 2ª Vara Federal · ' + HOJE, pagina: 'Fila de Trabalho · Gestão de Processos' },
     metas: { rotulo: 'Metas CNJ', titulo: 'Metas CNJ', subtitulo: 'Metas Nacionais 2026 · 2ª Vara Federal', pagina: 'Metas CNJ · Gestão de Processos' },
     produtividade: { rotulo: 'Produtividade da Vara', titulo: 'Produtividade da Vara', subtitulo: 'Atividades da equipe · 2ª Vara Federal', pagina: 'Produtividade da Vara · Gestão de Processos' },
@@ -233,21 +237,23 @@
   const PERFIS_EMAILS = ['gestor', 'diretor', 'magistrado'];
   // Processos Parados (tarefas de Secretaria): gestor, diretor e magistrado(a). Os dados são os das filas; a restrição é de menu e de tela.
   const PERFIS_PARADOS = ['gestor', 'diretor', 'magistrado'];
+  // Itens do menu ☰. Painel do Gestor: só o gestor, sempre o primeiro.
   function areasDisponiveis() {
-    const a = ['fila'];
+    const a = st.perfil === 'gestor' ? ['gestor', 'fila'] : ['fila'];
     if (PERFIS_METAS.includes(st.perfil)) a.push('metas');
     if (PERFIS_PRODUTIVIDADE.includes(st.perfil)) a.push('produtividade');
     if (PERFIS_PARADOS.includes(st.perfil)) a.push('parados');
     if (PERFIS_EMAILS.includes(st.perfil)) a.push('emails');
-    if (st.perfil === 'gestor') a.push('rotinas'); // Rotinas com IA (rotinas-ui.js): rodam no computador do Gestor
     a.push('ajuda'); // Ajuda (guias passo a passo): todos os perfis
     return a;
   }
+  // Áreas que a pessoa pode abrir: o menu e, para o gestor, Rotinas com IA (rotinas-ui.js), que só abre pelo botão do topo do Painel do Gestor.
+  const areasPermitidas = () => st.perfil === 'gestor' ? areasDisponiveis().concat('rotinas') : areasDisponiveis();
   // Abas de cada área que não é a Fila (a Fila usa abasDisponiveis(), que depende do perfil).
-  const ABAS_AREA = { metas: ['visao', 'pendentes'], produtividade: ['resumo', 'pessoas'], get emails() { return window.PAINEL.abasEmails ? window.PAINEL.abasEmails() : ['emsub']; }, parados: [], rotinas: [], ajuda: [] };
+  const ABAS_AREA = { gestor: ['ginicio', 'gextracao', 'gconfig'], metas: ['visao', 'pendentes'], produtividade: ['resumo', 'pessoas'], get emails() { return window.PAINEL.abasEmails ? window.PAINEL.abasEmails() : ['emsub']; }, parados: [], rotinas: [], ajuda: [] };
   function irParaArea(area) {
     st.menuAreas = false;
-    if (!areasDisponiveis().includes(area)) area = 'fila';
+    if (!areasPermitidas().includes(area)) area = 'fila';
     if (st.area !== area) { st.area = area; st.anotando = null; st.confirmaNota = null; st.devolvendo = null; st.modal = null; window.scrollTo({ top: 0 }); }
     render();
   }
@@ -481,8 +487,10 @@
     renderAvisos();
     const ok = st.estado === 'ok';
     const emMetas = ok && st.area === 'metas', emProd = ok && st.area === 'produtividade', emPar = ok && st.area === 'parados', emEml = ok && st.area === 'emails', emAju = ok && st.area === 'ajuda', emRot = ok && st.area === 'rotinas';
+    const emGes = ok && st.area === 'gestor';
     $('#v-estado').hidden = ok;
-    for (const a of ['fila', 'geral', 'gestao', 'eventual']) $('#v-' + a).hidden = !ok || emMetas || emProd || emPar || emEml || emAju || emRot || st.aba !== a;
+    for (const a of ['fila', 'geral', 'eventual']) $('#v-' + a).hidden = !ok || emMetas || emProd || emPar || emEml || emAju || emRot || emGes || st.aba !== a;
+    $('#v-gestao').hidden = !emGes;
     $('#v-metas').hidden = !emMetas;
     $('#v-prod').hidden = !emProd;
     $('#v-parados').hidden = !emPar;
@@ -497,6 +505,18 @@
     if (!emAju) $('#v-ajuda').innerHTML = '';
     if (!emPar) $('#v-parados').innerHTML = '';
     if (!emRot) $('#v-rotinas').innerHTML = '';
+    if (!emGes) $('#v-gestao').innerHTML = '';
+    if (emGes) {
+      for (const a of ['fila', 'geral', 'eventual', 'metas', 'prod', 'emails']) $('#v-' + a).innerHTML = '';
+      if (window.PAINEL.renderGestao) {
+        const foco = document.activeElement && document.activeElement.id;
+        const pos = foco === 'busca' ? document.activeElement.selectionStart : null;
+        window.PAINEL.renderGestao();
+        if (foco === 'busca') { const b = $('#busca'); if (b) { b.focus(); if (pos != null) b.setSelectionRange(pos, pos); } }
+        if (foco === 'nota-texto' || foco === 'dev-motivo') { const m = document.getElementById(foco); if (m) { m.focus(); m.setSelectionRange(m.value.length, m.value.length); } }
+      }
+      renderModal(); return;
+    }
     if (emRot) {
       for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod', 'emails']) $('#v-' + a).innerHTML = '';
       if (window.PAINEL.renderRotinas) window.PAINEL.renderRotinas();
@@ -526,17 +546,10 @@
       renderModal(); return;
     }
     $('#v-metas').innerHTML = ''; $('#v-prod').innerHTML = ''; $('#v-emails').innerHTML = '';
-    for (const a of ['fila', 'geral', 'gestao', 'eventual']) if (a !== st.aba) $('#v-' + a).innerHTML = '';
+    for (const a of ['fila', 'geral', 'eventual']) if (a !== st.aba) $('#v-' + a).innerHTML = '';
     if (st.aba === 'fila') renderLista('fila');
     else if (st.aba === 'geral') renderLista('geral');
     else if (st.aba === 'eventual') renderLista('eventual');
-    else if (window.PAINEL.renderGestao) {
-      const foco = document.activeElement && document.activeElement.id;
-      const pos = foco === 'busca' ? document.activeElement.selectionStart : null;
-      window.PAINEL.renderGestao();
-      if (foco === 'busca') { const b = $('#busca'); if (b) { b.focus(); if (pos != null) b.setSelectionRange(pos, pos); } }
-      if (foco === 'nota-texto' || foco === 'dev-motivo') { const m = document.getElementById(foco); if (m) { m.focus(); m.setSelectionRange(m.value.length, m.value.length); } }
-    }
     renderModal();
   }
 
@@ -567,7 +580,7 @@
     btn.setAttribute('aria-expanded', String(st.menuAreas));
     menu.hidden = !st.menuAreas;
     const itens = $('#itens-areas');
-    const h = multi ? lista.map(a => `<button class="item-area" type="button" role="menuitemradio" aria-checked="${a === st.area}" data-area="${a}">${AREAS[a].rotulo}${a === 'emails' && naoLidosEmails() ? ` <span class="contagem">${naoLidosEmails()}</span>` : ''}</button>`).join('') : '';
+    const h = multi ? lista.map(a => `<button class="item-area" type="button" role="menuitemradio" aria-checked="${a === st.area}" data-area="${a}">${AREAS[a].rotulo}${a === 'emails' && naoLidosEmails() ? ` <span class="contagem">${naoLidosEmails()}</span>` : ''}${a === 'gestor' && urgenciasDoGestor() ? ` <span class="contagem">${urgenciasDoGestor()}</span>` : ''}</button>`).join('') : '';
     if (itens.dataset.h !== h) { itens.innerHTML = h; itens.dataset.h = h; }
     itens.hidden = !multi; $('#menu-sep').hidden = !multi;
     for (const b of itens.querySelectorAll('.item-area')) b.setAttribute('aria-checked', String(b.dataset.area === st.area));
@@ -593,12 +606,12 @@
     if (ok) $('#quem').innerHTML = `${esc(st.nome)} <small>${esc(PERFIS[st.perfil] || st.perfil)}</small>`;
     const outraArea = ok && ABAS_AREA[st.area];
     const abas = !ok ? [] : outraArea || abasDisponiveis();
-    const atual = st.area === 'metas' ? st.abaMetas : st.area === 'produtividade' ? st.abaProd : st.area === 'emails' ? st.abaEmails : st.aba;
+    const atual = st.area === 'gestor' ? st.abaGestor : st.area === 'metas' ? st.abaMetas : st.area === 'produtividade' ? st.abaProd : st.area === 'emails' ? st.abaEmails : st.aba;
     const nav = $('#abas');
     nav.hidden = abas.length < 2;
-    const rot = { fila: 'Fila', eventual: 'Eventual', geral: 'Geral', gestao: 'Gestão', visao: 'Visão geral', pendentes: 'Pendentes', resumo: 'Visão geral', pessoas: 'Por pessoa', emsub: 'Juíza Substituta', emtit: 'Juiz Titular', emnl: 'Não localizado', emsec: 'Secretaria', emdem: 'Demais', emgest: 'Só gestor', emanexo: 'Anexos para juntar', emdesp: 'Despacho com o juiz' };
-    const nAvisos = outraArea ? 0 : urgenciasDoGestor();
-    const h = abas.map(a => `<button class="aba" role="tab" id="aba-${a}" aria-selected="${a === atual}" data-aba="${a}">${rot[a]}${a === 'gestao' && nAvisos ? ` <span class="contagem">${nAvisos}</span>` : ''}${st.area === 'emails' && window.PAINEL.emailsNaoLidos && window.PAINEL.emailsNaoLidos(a) ? ` <span class="contagem">${window.PAINEL.emailsNaoLidos(a)}</span>` : ''}</button>`).join('');
+    const rot = { ginicio: 'Início', gextracao: 'Extração de dados', gconfig: 'Configurações', fila: 'Fila', eventual: 'Eventual', geral: 'Geral', visao: 'Visão geral', pendentes: 'Pendentes', resumo: 'Visão geral', pessoas: 'Por pessoa', emsub: 'Juíza Substituta', emtit: 'Juiz Titular', emnl: 'Não localizado', emsec: 'Secretaria', emdem: 'Demais', emgest: 'Só gestor', emanexo: 'Anexos para juntar', emdesp: 'Despacho com o juiz' };
+    const nAvisos = st.area === 'gestor' ? urgenciasDoGestor() : 0;
+    const h = abas.map(a => `<button class="aba" role="tab" id="aba-${a}" aria-selected="${a === atual}" data-aba="${a}">${rot[a]}${a === 'ginicio' && nAvisos ? ` <span class="contagem">${nAvisos}</span>` : ''}${st.area === 'emails' && window.PAINEL.emailsNaoLidos && window.PAINEL.emailsNaoLidos(a) ? ` <span class="contagem">${window.PAINEL.emailsNaoLidos(a)}</span>` : ''}</button>`).join('');
     if (nav.dataset.h !== h) { nav.innerHTML = h; nav.dataset.h = h; }
     for (const b of nav.querySelectorAll('.aba')) b.setAttribute('aria-selected', String(b.dataset.aba === atual));
   }
@@ -880,7 +893,7 @@
     const f = st.vis[modo];
     const geral = modo === 'geral', eventual = modo === 'eventual';
     if (!st.config) {
-      v.innerHTML = `<div class="vazio"><h2>O painel ainda não foi configurado</h2><p>${st.perfil === 'gestor' ? 'Abra a aba Gestão para cadastrar as pessoas e as regras de distribuição.' : 'Aguarde o gestor cadastrar as pessoas e as regras de distribuição.'}</p></div>`;
+      v.innerHTML = `<div class="vazio"><h2>O painel ainda não foi configurado</h2><p>${st.perfil === 'gestor' ? 'Abra Painel do Gestor → Configurações para cadastrar as pessoas e as regras de distribuição.' : 'Aguarde o gestor cadastrar as pessoas e as regras de distribuição.'}</p></div>`;
       return;
     }
     const todas = aplicarVisao(modo, geral ? linhasGeral(f.pessoa) : eventual ? linhasEventual() : filaDe(pessoaAtiva()));
@@ -1412,6 +1425,7 @@
     });
     $('#abas').addEventListener('click', e => {
       const b = e.target.closest('.aba'); if (!b) return;
+      if (st.area === 'gestor') { st.abaGestor = b.dataset.aba; guardar('fila.abaGestor.' + st.email, st.abaGestor); window.scrollTo({ top: 0 }); render(); return; }
       if (st.area === 'metas') { st.abaMetas = b.dataset.aba; render(); return; }
       if (st.area === 'produtividade') { st.abaProd = b.dataset.aba; render(); return; }
       if (st.area === 'emails') { st.abaEmails = b.dataset.aba; render(); return; }
@@ -1423,6 +1437,12 @@
       if (a.dataset.acao === 'entrar') entrar();
       else if (a.dataset.acao === 'sair') sair();
       else if (a.dataset.acao === 'tentar') iniciarSessao();
+    });
+    // Painel do Gestor: atalhos do topo e números das urgências levam a outra área (E-mails, Fila de Trabalho, Rotinas com IA).
+    $('#v-gestao').addEventListener('click', e => {
+      const b = e.target.closest('[data-ir-area]'); if (!b) return;
+      if (b.dataset.irAba && b.dataset.irArea === 'emails') st.abaEmails = b.dataset.irAba;
+      irParaArea(b.dataset.irArea);
     });
     for (const [modo, raiz, dentro] of [['fila', '#v-fila', null], ['geral', '#v-geral', null], ['eventual', '#v-eventual', null], ['gestor', '#v-gestao', '#gestor-fila']]) {
       const v = $(raiz);

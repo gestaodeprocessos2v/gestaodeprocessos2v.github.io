@@ -119,6 +119,20 @@
     return n;
   };
 
+  // Quadro "Urgências" do Painel do Gestor: só as quantidades de cards não concluídos (um card pode contar em mais de um número).
+  // minutas = pedem despacho, decisão ou sentença (categoria "minuta"); despacho = pedido de despacho com o(a) magistrado(a).
+  P.emailsResumoGestor = function () {
+    if (!podeVer() || !st.emails || !st.emails.carregado) return null;
+    const r = { urgentes: 0, despacho: 0, minutas: 0 };
+    for (const g of grupos()) {
+      if (g.concluido) continue;
+      if (g.urgente) r.urgentes++;
+      if (g.despacho) r.despacho++;
+      if (g.msgs.some(m => m.categoria === 'minuta')) r.minutas++;
+    }
+    return r;
+  };
+
   // ---------- tela ----------
   const termoBusca = () => norm(E().busca).trim();
   const casaBusca = (g, q) => norm([g.numero, fmtCNJ(g.numero), g.rep.tarefa, ...g.msgs.map(m => `${m.remetente} ${m.pedido} ${m.assunto}`)].join(' ')).includes(q);

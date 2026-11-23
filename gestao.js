@@ -1,4 +1,5 @@
-/* Fila de Trabalho da Vara — Parte 2: aba Gestão (somente o gestor; o banco também confere isso por RLS). */
+/* Fila de Trabalho da Vara — Parte 2: área "Painel do Gestor" (antiga aba Gestão), com as subseções Início, Extração de dados e
+   Configurações (somente o gestor; o banco também confere isso por RLS). */
 (function () {
   'use strict';
   const P = window.PAINEL;
@@ -24,12 +25,12 @@
   }
 
   // Guarda o que o gestor digitou antes de redesenhar (os dados recarregam a qualquer momento).
+  // A urgência (Início) e a configuração (Configurações) ficam em subseções diferentes: cada parte só é lida se estiver na tela.
   function capturarGestao() {
+    if (document.getElementById('cfg-nova-pessoa')) { lerRascunho(); st.novaPessoa = $('#cfg-nova-pessoa').value; }
     if (!document.getElementById('urg-numero')) return;
-    lerRascunho();
     st.novaUrgencia = Object.assign({}, st.novaUrgencia, { numero: $('#urg-numero').value, setor: $('#urg-setor').value, motivo: $('#urg-motivo').value });
     if ($('#urg-setor').dataset.desenhado === $('#urg-setor').value) st.novaUrgencia.responsavel = $('#urg-resp').value;
-    st.novaPessoa = $('#cfg-nova-pessoa').value;
   }
 
   // Seções da aba e subseções da Configuração que o gestor ocultou. Ficam lembradas neste navegador;
@@ -98,27 +99,32 @@
     const manter = [['imp-arquivo', imp && (imp.resultado || imp.erro)], ['jd-arquivo', ji && (ji.resumo || ji.erro)], ['pje1-arquivo', p1 && (p1.resumo || p1.erro)],
       ['pr-lista-arq', pe && (pe.rasc || pe.erro)], ['pr-arq', pi && (pi.rel || pi.erro)], ['metas-arq-resumo', mi && (mi.resumo || mi.erroResumo)], ['metas-arq-pend', mi && (mi.pendentes || mi.erroPendentes)]]
       .map(([id, ativo]) => { const el = ativo && document.getElementById(id); return el && el.files && el.files.length ? el : null; }).filter(Boolean);
-    v.innerHTML = `<div class="paineis">
-      ${P.htmlGestorFila()}
-      ${painelSituacaoDados()}
-      ${painelUrgencia()}
+    const opc = f => (f ? f() : '');
+    // Painel do Gestor: três subseções (botões no topo). Os painéis são os mesmos de antes, só divididos.
+    const corpo = st.abaGestor === 'gextracao' ? `
       ${painelImportar()}
-      ${P.painelAnalisesGestao ? P.painelAnalisesGestao() : ''}
-      ${P.painelJDGestao ? P.painelJDGestao() : ''}
-      ${P.painelPJE1Gestao ? P.painelPJE1Gestao() : ''}
-      ${P.painelBIGestao ? P.painelBIGestao() : ''}
-      ${P.painelProdGestao ? P.painelProdGestao() : ''}
-      ${P.painelMetasGestao ? P.painelMetasGestao() : ''}
-      ${P.painelMinutasGestao ? P.painelMinutasGestao() : ''}
-      ${P.painelEquipeGestao ? P.painelEquipeGestao() : ''}
+      ${opc(P.painelAnalisesGestao)}
+      ${opc(P.painelJDGestao)}
+      ${opc(P.painelPJE1Gestao)}
+      ${opc(P.painelBIGestao)}
+      ${opc(P.painelProdGestao)}
+      ${opc(P.painelMetasGestao)}
+      ${opc(P.painelMinutasGestao)}`
+      : st.abaGestor === 'gconfig' ? `
+      ${opc(P.painelEquipeGestao)}
       ${painelResumo()}
       ${painelAcessosNegados()}
       ${painelManutencao()}
       ${painelTarefas()}
       ${painelEtiquetasPrioridade()}
-      ${P.painelQuadroGestao ? P.painelQuadroGestao() : ''}
-      ${painelConfig()}
-    </div>`;
+      ${opc(P.painelQuadroGestao)}
+      ${painelConfig()}`
+      : `
+      ${P.htmlGestorFila()}
+      ${painelUrgenciasResumo()}
+      ${painelSituacaoDados()}
+      ${painelUrgencia()}`;
+    v.innerHTML = `${atalhosGestor()}<div class="paineis">${corpo}</div>`;
     ligarRecolher(v);
     marcarPendentes();
     manter.forEach(el => { const novo = document.getElementById(el.id); if (novo) novo.replaceWith(el); });
@@ -417,6 +423,38 @@
     return `<section class="painel largo" id="painel-situacao-dados">
       <h2>Situação dos dados</h2>
       <div class="tabela-wrap"><table><thead><tr><th>Fonte</th><th>Prazo</th><th>Último envio</th><th>Há</th></tr></thead><tbody>${linhas}</tbody></table></div>
+    </section>`;
+  }
+
+  // ---------- Painel do Gestor: atalhos do topo e quadro de urgências (Início) ----------
+  function atalhosGestor() {
+    const nEm = P.emailsNaoLidos ? P.emailsNaoLidos() : 0;
+    const b = (area, txt, balao, n) => `<button class="btn" type="button" data-ir-area="${area}" data-balao="${esc(balao)}" aria-description="${esc(balao)}">${txt}${n ? ` <span class="contagem">${n}</span>` : ''}</button>`;
+    return `<nav class="linha-botoes atalhos-gestor" aria-label="Atalhos">
+      ${b('emails', 'E-mails', 'Abre o resumo diário dos e-mails da vara.', nEm)}
+      ${b('fila', 'Fila de Trabalho', 'Abre a Fila de Trabalho, com a lista Geral e o “Ver a fila como…”.')}
+      ${b('rotinas', 'Rotinas com IA', 'Abre os botões que rodam as análises do Claude neste computador.')}
+    </nav>`;
+  }
+
+  function painelUrgenciasResumo() {
+    const abertas = p => P.filaDe(p).filter(l => l.tipo === 'urgente' && !l.concluido).length;
+    const doGestor = abertas(GESTOR_ID);
+    const daVara = pessoas().reduce((s, p) => s + abertas(p.id), 0);
+    const em = P.emailsResumoGestor ? P.emailsResumoGestor() : null;
+    const linha = (rotulo, n, area, balao, aba) => `<tr${n ? ' class="dado-velho"' : ''}><td>${esc(rotulo)}</td><td class="n mono">${n == null ? '—' : n}</td><td>${!area ? '' : `<button class="btn discreto" type="button" data-ir-area="${area}"${aba ? ` data-ir-aba="${aba}"` : ''} data-balao="${esc(balao)}" aria-description="${esc(balao)}">Abrir</button>`}</td></tr>`;
+    const nEm = k => (em ? em[k] : null);
+    return `<section class="painel" id="painel-urgencias-resumo">
+      <h2>Urgências</h2>
+      <div class="tabela-wrap"><table><thead><tr><th>Em aberto</th><th>Quantidade</th><th></th></tr></thead><tbody>
+        <tr><th colspan="3" class="small muted">Fila de processos</th></tr>
+        ${linha('Urgências na minha fila (lista acima)', doGestor, '')}
+        ${linha('Processos urgentes nas filas da vara', daVara, 'fila', 'Abre a Fila de Trabalho (lista Geral).')}
+        <tr><th colspan="3" class="small muted">E-mails não concluídos${em ? '' : ' (ainda carregando)'}</th></tr>
+        ${linha('Urgentes', nEm('urgentes'), 'emails', 'Abre a área E-mails.')}
+        ${linha('Despacho com o juiz', nEm('despacho'), 'emails', 'Abre a aba “Despacho com o juiz” da área E-mails.', 'emdesp')}
+        ${linha('Pedem despacho, decisão ou sentença', nEm('minutas'), 'emails', 'Abre a área E-mails (abas do Juiz Titular, da Juíza Substituta e Não localizado).')}
+      </tbody></table></div>
     </section>`;
   }
 

@@ -310,6 +310,7 @@ ol.linhas { list-style: none; margin: 0; padding: 0; }
 .opcoes { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .opcoes label { display: inline-flex; gap: 6px; align-items: center; }
 .linha-botoes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.atalhos-gestor { margin-bottom: 12px; }
 .tabela-wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }

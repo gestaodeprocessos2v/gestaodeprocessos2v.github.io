@@ -70,7 +70,7 @@
   function telaVisao() {
     const envios = st.metas.envios, e = ultimo();
     if (st.metas.erro) return `<div class="vazio"><h2>Metas CNJ</h2><p>Não foi possível carregar os dados das metas agora. Tente de novo em instantes.</p></div>`;
-    if (!e) return `<div class="vazio"><h2>Metas CNJ</h2><p>Os números das Metas Nacionais do Poder Judiciário de 2026 ainda não foram enviados. ${st.perfil === 'gestor' ? 'Envie os relatórios do Portal BI na aba Gestão do painel Fila de Trabalho.' : 'Aguarde o gestor enviar os dados.'}</p></div>`;
+    if (!e) return `<div class="vazio"><h2>Metas CNJ</h2><p>Os números das Metas Nacionais do Poder Judiciário de 2026 ainda não foram enviados. ${st.perfil === 'gestor' ? 'Envie os relatórios do Portal BI em Painel do Gestor → Extração de dados.' : 'Aguarde o gestor enviar os dados.'}</p></div>`;
     const com = M.METAS.filter(m => valorPrincipal(e, m) != null);
     const sem = M.METAS.filter(m => valorPrincipal(e, m) == null);
     const cargas = envios.length;
@@ -192,7 +192,7 @@
     const diverge = !doEnvio || doEnvio.id !== e.id;
     return `<p class="small muted">Processos da 2ª Vara que ainda faltam julgar em cada meta (carga do Portal BI de ${esc(quando)}), do mais antigo para o mais novo pela data de entrada na tarefa do servidor responsável. Clique no número para copiar.</p>
       ${alertaSem}${infoOutros}
-      ${diverge && (st.metas.pend || []).length ? `<div class="aviso novo"><b>Atenção:</b> esta lista é de ${esc(quando)}, e não da carga mais recente dos percentuais (${esc(dataHoraBR(Date.parse(e.carga_bi)))}).${st.perfil === 'gestor' ? ' Envie os dois relatórios da mesma carga na aba Gestão.' : ''}</div>` : ''}
+      ${diverge && (st.metas.pend || []).length ? `<div class="aviso novo"><b>Atenção:</b> esta lista é de ${esc(quando)}, e não da carga mais recente dos percentuais (${esc(dataHoraBR(Date.parse(e.carga_bi)))}).${st.perfil === 'gestor' ? ' Envie os dois relatórios da mesma carga em Painel do Gestor → Extração de dados.' : ''}</div>` : ''}
       ${faixaMag}
       <div class="filtros">
         <input type="search" id="metas-busca" placeholder="Buscar por número, classe, servidor ou tarefa" aria-label="Buscar por número, classe, servidor ou tarefa" value="${esc(f.busca)}">

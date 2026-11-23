@@ -267,8 +267,8 @@
     if (!podeVer()) { v.innerHTML = vazio('Produtividade da Vara', 'Esta área é restrita ao gestor, ao diretor e ao(à) magistrado(a).'); return; }
     if (!s.carregado) { v.innerHTML = vazio('Produtividade da Vara', 'Carregando…'); return; }
     if (s.erro) { v.innerHTML = `<div class="aviso erro">Não foi possível carregar os dados da Produtividade agora. Tente de novo em instantes.</div>`; return; }
-    if (!s.equipe.length) { v.innerHTML = vazio('A lista da equipe ainda não foi cadastrada', st.perfil === 'gestor' ? 'Cadastre as pessoas em <b>Gestão → Equipe da Produtividade</b> e depois envie o relatório do BI.' : 'O gestor ainda precisa cadastrar a equipe.'); return; }
-    if (!s.envios.length) { v.innerHTML = vazio('Ainda não há dados de produtividade', st.perfil === 'gestor' ? 'Envie o relatório “Atividades por Usuário” do BI em <b>Gestão → Enviar produtividade do BI</b>.' : 'O gestor ainda não enviou o relatório do BI.'); return; }
+    if (!s.equipe.length) { v.innerHTML = vazio('A lista da equipe ainda não foi cadastrada', st.perfil === 'gestor' ? 'Cadastre as pessoas em <b>Painel do Gestor → Configurações → Equipe da Produtividade</b> e depois envie o relatório do BI.' : 'O gestor ainda precisa cadastrar a equipe.'); return; }
+    if (!s.envios.length) { v.innerHTML = vazio('Ainda não há dados de produtividade', st.perfil === 'gestor' ? 'Envie o relatório “Atividades por Usuário” do BI em <b>Painel do Gestor → Extração de dados → Enviar produtividade do BI</b>.' : 'O gestor ainda não enviou o relatório do BI.'); return; }
     garantirDados();
     if (!s.dias || s.dadosEnvio !== s.envios[0].id) { v.innerHTML = vazio('Carregando a produtividade…', 'Buscando os dados da equipe.'); return; }
     const foco = document.activeElement && document.activeElement.id, pos = foco === 'prod-busca' ? document.activeElement.selectionStart : null;
