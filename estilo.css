@@ -302,6 +302,8 @@ ol.linhas { list-style: none; margin: 0; padding: 0; }
 .painel.recolhido > h2:first-child { border-bottom: 0; }
 /* Painel com alteração ou prévia esperando gravação: fundo vermelho suave, o mesmo do card Urgentes (gestao.js, marcarPendentes). */
 .painel.pendente, .painel.pendente > h2:first-child { background: var(--urg-bg); }
+/* Painel do Gestor: oculto com algo a ver (urgência ou dado desatualizado) fica com o fundo dos desatualizados (--urg-bg muda com o tema) */
+.painel.recolhido.alerta, .painel.recolhido.alerta > h2:first-child, .gestor-fila.oculta.alerta { background: var(--urg-bg); }
 /* Situação dos dados (gestao.js): fonte com envio mais velho que o limite. As cores vêm das variáveis dos dois temas. */
 .dado-velho td { background: var(--urg-bg); }
 .cfg-sub { display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--line); padding-top: 12px; min-width: 0; }

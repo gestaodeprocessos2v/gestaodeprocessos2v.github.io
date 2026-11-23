@@ -1083,7 +1083,7 @@
     const etiqueta = st.config.etiquetaGestor == null ? R.ETIQUETA_GESTOR_PADRAO : st.config.etiquetaGestor;
     const novo = st.gOculta && nUrg > st.gBase;
     const cab = `<div class="gestor-cab"><h2>Fila do gestor</h2><span class="contagem">${nUrg} ${nUrg === 1 ? 'urgência' : 'urgências'} · ${nFila} na fila</span>${novo ? '<span class="selo urgente">Novo processo enviado</span>' : ''}<button class="btn" type="button" data-acao="gestor-ocultar">${st.gOculta ? 'Mostrar' : 'Ocultar'}</button></div>`;
-    if (st.gOculta) return `<div class="gestor-fila oculta" id="gestor-fila">${cab}</div>`;
+    if (st.gOculta) return `<div class="gestor-fila oculta${nUrg ? ' alerta' : ''}" id="gestor-fila">${cab}</div>`;   // oculta com urgência: destacada
     const busca = R.normTexto(f.busca), buscaDig = R.soDigitos(f.busca);
     // casaBase: concluídos e busca; o magistrado entra por cima (e fica de fora ao contar cada botão).
     const casaBase = l => {

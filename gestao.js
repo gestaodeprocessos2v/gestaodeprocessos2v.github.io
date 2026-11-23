@@ -415,13 +415,15 @@
       ['prod', 'Produtividade', ultimoEnvio(st.prod && st.prod.envios)],
       ['analises', 'Análises da IA (última gravação)', st.analises && st.analises.ultimaGravacao],
     ];
+    let algumVelho = false;   // com dado desatualizado, o painel fica destacado quando oculto (classe "alerta")
     const linhas = fontes.map(([id, nome, t]) => {
       const lim = prazoDados(id), velho = !!t && lim != null && Date.now() - t > lim * 3600000;
+      if (velho) algumVelho = true;
       const opcoes = [null, ...OPCOES_PRAZO_H].map(h => `<option value="${h == null ? '' : h}"${h === lim ? ' selected' : ''}>${textoPrazo(h)}</option>`).join('');
       const balaoPrazo = 'A linha fica destacada quando o último envio passa deste prazo. A escolha vale para todos os computadores.';
       return `<tr class="${velho ? 'dado-velho' : ''}"><td>${esc(nome)}</td><td><select class="sel-prazo" data-prazo="${id}" aria-label="Prazo de ${esc(nome)}" data-balao="${esc(balaoPrazo)}" aria-description="${esc(balaoPrazo)}">${opcoes}</select></td><td class="mono">${t ? esc(dataHoraBR(t)) : '—'}</td><td>${t ? esc(idade(t)) : 'ainda não enviado'}${velho ? ' · desatualizado' : ''}</td></tr>`;
     }).join('');
-    return `<section class="painel largo" id="painel-situacao-dados">
+    return `<section class="painel largo${algumVelho ? ' alerta' : ''}" id="painel-situacao-dados">
       <h2>Situação dos dados</h2>
       <div class="tabela-wrap"><table><thead><tr><th>Fonte</th><th>Prazo</th><th>Último envio</th><th>Há</th></tr></thead><tbody>${linhas}</tbody></table></div>
     </section>`;
@@ -433,7 +435,8 @@
     const em = P.emailsResumoGestor ? P.emailsResumoGestor() : null;
     const linha = (rotulo, n, area, balao, aba) => `<tr${n ? ' class="dado-velho"' : ''}><td>${esc(rotulo)}</td><td class="n mono">${n == null ? '—' : n}</td><td>${!area ? '' : `<button class="btn discreto" type="button" data-ir-area="${area}"${aba ? ` data-ir-aba="${aba}"` : ''} data-balao="${esc(balao)}" data-balao-dir="dir" aria-description="${esc(balao)}">Abrir</button>`}</td></tr>`;
     const nEm = k => (em ? em[k] : null);
-    return `<section class="painel largo" id="painel-urgencias-resumo">
+    const alerta = doGestor > 0 || ['urgentes', 'despacho', 'minutas'].some(k => nEm(k) > 0);   // destaca o painel quando oculto
+    return `<section class="painel largo${alerta ? ' alerta' : ''}" id="painel-urgencias-resumo">
       <h2>Urgências</h2>
       <div class="tabela-wrap"><table class="urg-resumo"><thead><tr><th>Em aberto</th><th class="n">Quantidade</th><th></th></tr></thead><tbody>
         <tr><th colspan="3" class="small muted">Fila de processos</th></tr>
