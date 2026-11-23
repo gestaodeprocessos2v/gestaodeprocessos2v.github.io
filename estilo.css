@@ -620,6 +620,10 @@ a.btn { display: inline-block; text-decoration: none; }
 .par-filtros input[type="number"] { width: 5.5rem; }
 .par-tabela th { background: var(--par-cab-bg); color: var(--par-cab-ink); }
 .par-tabela th.n { text-align: right; }
+/* Quadro "Urgências" do Painel do Gestor: título da quantidade alinhado aos números, e número e "Abrir" na mesma altura */
+.urg-resumo th.n { text-align: right; }
+.urg-resumo td { vertical-align: middle; }
+.urg-resumo td:last-child { width: 1%; white-space: nowrap; }
 .par-tabela td.nowrap { white-space: nowrap; }
 .par-tabela .par-dias { font-weight: 700; }
 .par-tabela tr.par-abaixo .par-dias { font-weight: 400; color: var(--muted); }

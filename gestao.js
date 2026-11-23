@@ -430,11 +430,11 @@
   function painelUrgenciasResumo() {
     const doGestor = P.filaDe(GESTOR_ID).filter(l => l.tipo === 'urgente' && !l.concluido).length;
     const em = P.emailsResumoGestor ? P.emailsResumoGestor() : null;
-    const linha = (rotulo, n, area, balao, aba) => `<tr${n ? ' class="dado-velho"' : ''}><td>${esc(rotulo)}</td><td class="n mono">${n == null ? '—' : n}</td><td>${!area ? '' : `<button class="btn discreto" type="button" data-ir-area="${area}"${aba ? ` data-ir-aba="${aba}"` : ''} data-balao="${esc(balao)}" aria-description="${esc(balao)}">Abrir</button>`}</td></tr>`;
+    const linha = (rotulo, n, area, balao, aba) => `<tr${n ? ' class="dado-velho"' : ''}><td>${esc(rotulo)}</td><td class="n mono">${n == null ? '—' : n}</td><td>${!area ? '' : `<button class="btn discreto" type="button" data-ir-area="${area}"${aba ? ` data-ir-aba="${aba}"` : ''} data-balao="${esc(balao)}" data-balao-dir="dir" aria-description="${esc(balao)}">Abrir</button>`}</td></tr>`;
     const nEm = k => (em ? em[k] : null);
     return `<section class="painel largo" id="painel-urgencias-resumo">
       <h2>Urgências</h2>
-      <div class="tabela-wrap"><table><thead><tr><th>Em aberto</th><th>Quantidade</th><th></th></tr></thead><tbody>
+      <div class="tabela-wrap"><table class="urg-resumo"><thead><tr><th>Em aberto</th><th class="n">Quantidade</th><th></th></tr></thead><tbody>
         <tr><th colspan="3" class="small muted">Fila de processos</th></tr>
         ${linha('Urgências na minha fila (lista acima)', doGestor, '')}
         <tr><th colspan="3" class="small muted">E-mails não concluídos${em ? '' : ' (ainda carregando)'}</th></tr>
