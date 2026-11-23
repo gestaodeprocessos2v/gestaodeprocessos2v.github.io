@@ -153,6 +153,27 @@
     if (error) { toast('Não foi possível iniciar o login com o Google.'); console.error(error); }
   }
 
+  // Botão "Sair" do topo: pede confirmação antes (pedido do Alberto, 23/11/2026, para todos os perfis).
+  function pedirConfirmacaoSair() {
+    let m = document.getElementById('modal-sair');
+    if (!m) { m = document.createElement('div'); m.id = 'modal-sair'; document.body.appendChild(m); }
+    const fechar = () => { m.innerHTML = ''; document.removeEventListener('keydown', esc_); $('#btn-sair').focus(); };
+    const esc_ = e => { if (e.key === 'Escape') fechar(); };
+    m.innerHTML = `<div class="modal-fundo" data-sair="fundo"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="sair-titulo">
+      <h2 id="sair-titulo">Sair do painel?</h2>
+      <div class="corpo">
+        <p>Você precisará entrar de novo com a sua conta Google.</p>
+        <div class="linha-botoes"><button class="btn primario" type="button" data-sair="sim">Sair</button><button class="btn" type="button" data-sair="nao">Cancelar</button></div>
+      </div></div></div>`;
+    m.onclick = e => {
+      const a = e.target.closest('[data-sair]'); if (!a) return;
+      if (a.dataset.sair === 'sim') { fechar(); sair(); }
+      else if (a.dataset.sair === 'nao' || (a.dataset.sair === 'fundo' && e.target === a)) fechar();
+    };
+    document.addEventListener('keydown', esc_);
+    m.querySelector('[data-sair="nao"]').focus();
+  }
+
   async function sair() {
     try { await st.sb.auth.signOut(); } catch (e) { console.error(e); }
     if (window.TEMA) window.TEMA.desligar();
@@ -1402,7 +1423,7 @@
   }
 
   function ligarEventos() {
-    $('#btn-sair').addEventListener('click', sair);
+    $('#btn-sair').addEventListener('click', pedirConfirmacaoSair);
     // Menu de áreas (logo): abre e fecha com clique, Esc ou clique fora; setas movem o foco entre as opções.
     $('#btn-areas').addEventListener('click', () => {
       st.menuAreas = !st.menuAreas; renderMenuAreas(st.estado === 'ok');
