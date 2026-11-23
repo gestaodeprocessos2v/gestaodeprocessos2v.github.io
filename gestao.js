@@ -37,6 +37,7 @@
   // ocultar é só visual (CSS): os campos continuam na página, e o que foi digitado não se perde.
   const CHAVE_OCULTAS = 'painel.gestao.ocultas';
   const ocultas = new Set((() => { try { return JSON.parse(ler(CHAVE_OCULTAS) || '[]'); } catch (e) { return []; } })());
+  ocultas.delete('painel-urgencias-resumo');   // o quadro "Urgências" sempre abre visível (pedido do Alberto); pode ser ocultado durante o uso
   const botaoOcultar = oculta => `<button class="btn" type="button" data-acao="sec-ocultar" aria-expanded="${!oculta}">${oculta ? 'Mostrar' : 'Ocultar'}</button>`;
 
   // Põe o botão Ocultar/Mostrar no título de cada painel (h2) e de cada subseção da Configuração (h3).
@@ -437,7 +438,7 @@
       <div class="tabela-wrap"><table class="urg-resumo"><thead><tr><th>Em aberto</th><th class="n">Quantidade</th><th></th></tr></thead><tbody>
         <tr><th colspan="3" class="small muted">Fila de processos</th></tr>
         ${linha('Urgências na minha fila (lista acima)', doGestor, '')}
-        <tr><th colspan="3" class="small muted">E-mails não concluídos${em ? '' : ' (ainda carregando)'}</th></tr>
+        <tr><th colspan="3" class="small muted">E-mails não concluídos${em ? `: <b class="mono">${em.total}</b>` : ' (ainda carregando)'}</th></tr>
         ${linha('Urgentes', nEm('urgentes'), 'emails', 'Abre a área E-mails.')}
         ${linha('Despacho com o juiz', nEm('despacho'), 'emails', 'Abre a aba “Despacho com o juiz” da área E-mails.', 'emdesp')}
         ${linha('Pedem despacho, decisão ou sentença', nEm('minutas'), 'emails', 'Abre a área E-mails (abas do Juiz Titular, da Juíza Substituta e Não localizado).')}

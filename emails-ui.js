@@ -123,9 +123,11 @@
   // minutas = pedem despacho, decisão ou sentença (categoria "minuta"); despacho = pedido de despacho com o(a) magistrado(a).
   P.emailsResumoGestor = function () {
     if (!podeVer() || !st.emails || !st.emails.carregado) return null;
-    const r = { urgentes: 0, despacho: 0, minutas: 0 };
+    // total = cards não concluídos (um por processo, como na área E-mails), contados pela aba de origem, como o número do menu
+    const r = { total: 0, urgentes: 0, despacho: 0, minutas: 0 }, minhas = P.abasEmails();
     for (const g of grupos()) {
       if (g.concluido) continue;
+      if (minhas.includes(g.aba)) r.total++;
       if (g.urgente) r.urgentes++;
       if (g.despacho) r.despacho++;
       if (g.msgs.some(m => m.categoria === 'minuta')) r.minutas++;

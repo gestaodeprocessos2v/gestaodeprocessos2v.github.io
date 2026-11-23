@@ -224,6 +224,9 @@
       st.area = st.perfil === 'gestor' ? 'gestor' : 'fila'; st.menuAreas = false;
       const salvaG = ler('fila.abaGestor.' + st.email);
       st.abaGestor = ABAS_AREA.gestor.includes(salvaG) ? salvaG : 'ginicio';
+      // Fila do gestor oculta ou aberta: lembrada neste navegador, com a base do aviso "Novo processo enviado"
+      st.gOculta = false; st.gBase = 0;
+      try { const g = JSON.parse(ler('fila.gOculta.' + st.email) || 'null'); if (g) { st.gOculta = !!g.oculta; st.gBase = Number(g.base) || 0; } } catch (e) { /* sem registro: aberta */ }
       st.estado = 'ok'; render();
       if (window.PAINEL.abrirQuadro) window.PAINEL.abrirQuadro(true); // quadro de avisos "Regras da fila" (quadro-ui.js)
     } catch (e) {
@@ -1329,6 +1332,7 @@
       } else if (acao === 'gestor-ocultar') {
         st.gOculta = !st.gOculta;
         if (st.gOculta) st.gBase = filaDe(GESTOR_ID).filter(l => l.tipo === 'urgente' && !l.concluido).length;
+        guardar('fila.gOculta.' + st.email, JSON.stringify({ oculta: st.gOculta, base: st.gBase }));
         render();
       } else if (acao === 'copiar') {
         const n = alvo.dataset.n;
