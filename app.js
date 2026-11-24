@@ -34,7 +34,7 @@
     filas: [], urgencias: [], devolucoes: [], marcas: {}, anotacoes: {}, dispensas: {}, acessos: [], negados: [],
     ver: 0, cache: { ver: -1, m: {} },
     aba: 'fila', verComo: '', area: 'fila', menuAreas: false,
-    abaMetas: 'visao', abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null },
+    abaMetas: 'visao', abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null }, fInspecao: { lista: '', prio: '', setor: '', ordem: 'prio', dir: 1, limite: 300, magOff: null }, inspecao: null,
     vis: {
       fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
       geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
@@ -187,7 +187,7 @@
       tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, anotacoes: {}, dispensas: {}, acessos: [], negados: [],
       anotando: null, confirmaNota: null, devolvendo: null, modal: null, importacao: null,
       area: 'fila', menuAreas: false, abaGestor: 'ginicio', abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, metasImp: null,
-      abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null },
+      abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null }, fInspecao: { lista: '', prio: '', setor: '', ordem: 'prio', dir: 1, limite: 300, magOff: null }, inspecao: null,
       quadro: null, recadoQuadro: '',
     });
     const mq = document.getElementById('modal-quadro'); if (mq) mq.innerHTML = '';
@@ -250,6 +250,7 @@
     metas: { rotulo: 'Metas CNJ', titulo: 'Metas CNJ', subtitulo: 'Metas Nacionais 2026 · 2ª Vara Federal', pagina: 'Metas CNJ · Gestão de Processos' },
     produtividade: { rotulo: 'Produtividade da Vara', titulo: 'Produtividade da Vara', subtitulo: 'Atividades da equipe · 2ª Vara Federal', pagina: 'Produtividade da Vara · Gestão de Processos' },
     parados: { rotulo: 'Processos Parados', titulo: 'Processos Parados', subtitulo: 'Tempo na tarefa por setor · 2ª Vara Federal', pagina: 'Processos Parados · Gestão de Processos' },
+    inspecao: { rotulo: 'Inspeção Integrada', titulo: 'Inspeção Integrada', subtitulo: 'Processos críticos, sem movimentação e com conclusão antiga · 2ª Vara Federal', pagina: 'Inspeção Integrada · Gestão de Processos' },
     emails: { rotulo: 'E-mails', titulo: 'E-mails', subtitulo: 'Resumo diário dos e-mails da vara · 2ª Vara Federal', pagina: 'E-mails · Gestão de Processos' },
     rotinas: { rotulo: 'Rotinas com IA', titulo: 'Rotinas com IA', subtitulo: 'Análises pelo Claude, a partir dos autos · 2ª Vara Federal', pagina: 'Rotinas com IA · Gestão de Processos' },
     ajuda: { rotulo: 'Ajuda', titulo: 'Ajuda', subtitulo: 'Guias passo a passo · 2ª Vara Federal', pagina: 'Ajuda · Gestão de Processos' },
@@ -261,12 +262,15 @@
   const PERFIS_EMAILS = ['gestor', 'diretor', 'magistrado'];
   // Processos Parados: gestor, diretor, magistrado(a) e visitante (só leitura). Os dados são os das filas e de fora_vara (RLS).
   const PERFIS_PARADOS = ['gestor', 'diretor', 'magistrado', 'visitante'];
+  // Inspeção Integrada (listas do painel de inspeção do BI): todos os perfis, só leitura; quem grava é só o gestor (RLS).
+  const PERFIS_INSPECAO = Object.keys(PERFIS);
   // Itens do menu ☰. Painel do Gestor: só o gestor, sempre o primeiro.
   function areasDisponiveis() {
     const a = st.perfil === 'gestor' ? ['gestor', 'fila'] : ['fila'];
     if (PERFIS_METAS.includes(st.perfil)) a.push('metas');
     if (PERFIS_PRODUTIVIDADE.includes(st.perfil)) a.push('produtividade');
     if (PERFIS_PARADOS.includes(st.perfil)) a.push('parados');
+    if (PERFIS_INSPECAO.includes(st.perfil)) a.push('inspecao');
     if (PERFIS_EMAILS.includes(st.perfil)) a.push('emails');
     a.push('ajuda'); // Ajuda (guias passo a passo): todos os perfis
     return a;
@@ -274,7 +278,7 @@
   // Áreas que a pessoa pode abrir: o menu e, para o gestor, Rotinas com IA (rotinas-ui.js), que só abre pelo botão do topo do Painel do Gestor.
   const areasPermitidas = () => st.perfil === 'gestor' ? areasDisponiveis().concat('rotinas') : areasDisponiveis();
   // Abas de cada área que não é a Fila (a Fila usa abasDisponiveis(), que depende do perfil).
-  const ABAS_AREA = { gestor: ['ginicio', 'gextracao', 'gconfig'], metas: ['visao', 'pendentes'], produtividade: ['resumo', 'pessoas'], get emails() { return window.PAINEL.abasEmails ? window.PAINEL.abasEmails() : ['emsub']; }, parados: [], rotinas: [], ajuda: [] };
+  const ABAS_AREA = { gestor: ['ginicio', 'gextracao', 'gconfig'], metas: ['visao', 'pendentes'], produtividade: ['resumo', 'pessoas'], get emails() { return window.PAINEL.abasEmails ? window.PAINEL.abasEmails() : ['emsub']; }, parados: [], inspecao: [], rotinas: [], ajuda: [] };
   function irParaArea(area) {
     st.menuAreas = false;
     if (!areasPermitidas().includes(area)) area = 'fila';
@@ -380,6 +384,7 @@
     await carregarPJE1();
     if (PERFIS_PRODUTIVIDADE.includes(st.perfil) && window.PAINEL.carregarProd) await window.PAINEL.carregarProd();
     if (PERFIS_EMAILS.includes(st.perfil) && window.PAINEL.carregarEmails) await window.PAINEL.carregarEmails();
+    if (st.perfil === 'gestor' && window.PAINEL.carregarInspecao) await window.PAINEL.carregarInspecao({ itens: false });
     if (window.PAINEL.carregarMinutas) await window.PAINEL.carregarMinutas();
     if (window.PAINEL.carregarAnalises) await window.PAINEL.carregarAnalises();
     if (window.PAINEL.carregarRecomendacoes) await window.PAINEL.carregarRecomendacoes();
@@ -511,24 +516,26 @@
     renderTopo();
     renderAvisos();
     const ok = st.estado === 'ok';
-    const emMetas = ok && st.area === 'metas', emProd = ok && st.area === 'produtividade', emPar = ok && st.area === 'parados', emEml = ok && st.area === 'emails', emAju = ok && st.area === 'ajuda', emRot = ok && st.area === 'rotinas';
+    const emMetas = ok && st.area === 'metas', emProd = ok && st.area === 'produtividade', emPar = ok && st.area === 'parados', emIns = ok && st.area === 'inspecao', emEml = ok && st.area === 'emails', emAju = ok && st.area === 'ajuda', emRot = ok && st.area === 'rotinas';
     const emGes = ok && st.area === 'gestor';
     $('#v-estado').hidden = ok;
-    for (const a of ['fila', 'geral', 'eventual']) $('#v-' + a).hidden = !ok || emMetas || emProd || emPar || emEml || emAju || emRot || emGes || st.aba !== a;
+    for (const a of ['fila', 'geral', 'eventual']) $('#v-' + a).hidden = !ok || emMetas || emProd || emPar || emIns || emEml || emAju || emRot || emGes || st.aba !== a;
     $('#v-gestao').hidden = !emGes;
     $('#v-metas').hidden = !emMetas;
     $('#v-prod').hidden = !emProd;
     $('#v-parados').hidden = !emPar;
+    $('#v-inspecao').hidden = !emIns;
     $('#v-emails').hidden = !emEml;
     $('#v-ajuda').hidden = !emAju;
     $('#v-rotinas').hidden = !emRot;
     if (!ok) {
-      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod', 'parados', 'emails', 'ajuda', 'rotinas']) $('#v-' + a).innerHTML = '';
+      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod', 'parados', 'inspecao', 'emails', 'ajuda', 'rotinas']) $('#v-' + a).innerHTML = '';
       renderEstado(); renderModal(); return;
     }
     $('#v-estado').innerHTML = '';
     if (!emAju) $('#v-ajuda').innerHTML = '';
     if (!emPar) $('#v-parados').innerHTML = '';
+    if (!emIns) $('#v-inspecao').innerHTML = '';
     if (!emRot) $('#v-rotinas').innerHTML = '';
     if (!emGes) $('#v-gestao').innerHTML = '';
     if (emGes) {
@@ -558,6 +565,11 @@
     if (emPar) {
       for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod', 'emails']) $('#v-' + a).innerHTML = '';
       if (window.PAINEL.renderParados) window.PAINEL.renderParados();
+      renderModal(); return;
+    }
+    if (emIns) {
+      for (const a of ['fila', 'geral', 'gestao', 'eventual', 'metas', 'prod', 'emails']) $('#v-' + a).innerHTML = '';
+      if (window.PAINEL.renderInspecao) window.PAINEL.renderInspecao();
       renderModal(); return;
     }
     if (emEml) {
@@ -691,7 +703,7 @@
   const DIAS_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
   const magDoDia = f => {
     const tipo = tipoAtivo();
-    if (!f || f === st.fMetas || f === st.fParados || f === st.vis.gestor || (tipo !== 'servidor' && tipo !== 'eventual')) return '';
+    if (!f || f === st.fMetas || f === st.fParados || f === st.fInspecao || f === st.vis.gestor || (tipo !== 'servidor' && tipo !== 'eventual')) return '';
     const l = ((st.config || {}).magPorDia || {})[new Date().getDay()];
     return l === 'T' || l === 'S' ? l : '';
   };
@@ -1555,7 +1567,7 @@
     st.sb.auth.onAuthStateChange((evento) => {
       if (evento === 'SIGNED_OUT' && st.estado === 'ok') setTimeout(() => { reiniciarEstado(); st.estado = 'login'; render(); }, 0);
     });
-    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, carregarPJE1, atualizar, baixarPlanilha, textoMagistrados, BALAO_PLANILHA, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS, PERFIS_PRODUTIVIDADE, PERFIS_EMAILS, PERFIS_PARADOS, prazosRetorno, anotadosDe, marcasVigentesTodas, numeroHTML, MAGISTRADOS, magDoCargo, magPadrao, magOffDe, noPadraoMag, magPassa, alternarMag, letraMagHTML, faixaMagHTML });
+    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, carregarPJE1, atualizar, baixarPlanilha, textoMagistrados, BALAO_PLANILHA, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS, PERFIS_PRODUTIVIDADE, PERFIS_EMAILS, PERFIS_PARADOS, PERFIS_INSPECAO, prazosRetorno, anotadosDe, marcasVigentesTodas, numeroHTML, MAGISTRADOS, magDoCargo, magPadrao, magOffDe, noPadraoMag, magPassa, alternarMag, letraMagHTML, faixaMagHTML });
     iniciarSessao();
   }
   iniciar();

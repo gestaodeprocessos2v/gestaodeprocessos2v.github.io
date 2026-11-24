@@ -96,8 +96,8 @@
     // Posição do cursor no campo em edição: o campo é recriado a cada desenho e, sem isso, o cursor volta ao início.
     let sel = null; try { const ae = document.activeElement; if (foco && ae.selectionStart != null) sel = [ae.selectionStart, ae.selectionEnd]; } catch (e) { /* campo sem cursor */ }
     // Os campos de arquivo são recriados vazios a cada desenho; os que ainda têm arquivo lido são mantidos.
-    const mi = st.metasImp, imp = st.importacao, ji = st.jdImp, p1 = st.pje1Imp, pe = st.prod && st.prod.eq, pi = st.prod && st.prod.imp;
-    const manter = [['imp-arquivo', imp && (imp.resultado || imp.erro)], ['jd-arquivo', ji && (ji.resumo || ji.erro)], ['pje1-arquivo', p1 && (p1.resumo || p1.erro)],
+    const mi = st.metasImp, imp = st.importacao, ji = st.jdImp, p1 = st.pje1Imp, pe = st.prod && st.prod.eq, pi = st.prod && st.prod.imp, ii = st.insImp;
+    const manter = [['ins-arquivos', ii && (ii.lotes.length || ii.erro)], ['imp-arquivo', imp && (imp.resultado || imp.erro)], ['jd-arquivo', ji && (ji.resumo || ji.erro)], ['pje1-arquivo', p1 && (p1.resumo || p1.erro)],
       ['pr-lista-arq', pe && (pe.rasc || pe.erro)], ['pr-arq', pi && (pi.rel || pi.erro)], ['metas-arq-resumo', mi && (mi.resumo || mi.erroResumo)], ['metas-arq-pend', mi && (mi.pendentes || mi.erroPendentes)]]
       .map(([id, ativo]) => { const el = ativo && document.getElementById(id); return el && el.files && el.files.length ? el : null; }).filter(Boolean);
     const opc = f => (f ? f() : '');
@@ -108,6 +108,7 @@
       ${opc(P.painelJDGestao)}
       ${opc(P.painelPJE1Gestao)}
       ${opc(P.painelBIGestao)}
+      ${opc(P.painelInspecaoGestao)}
       ${opc(P.painelProdGestao)}
       ${opc(P.painelMetasGestao)}
       ${opc(P.painelMinutasGestao)}`
@@ -380,7 +381,7 @@
   // Último envio de cada fonte e a idade. Passando do prazo (horas), a linha fica com o fundo dos urgentes.
   // Prazo null = só informa. O Gestor escolhe o prazo de cada fonte na coluna "Prazo" (config, chave 'prazos_dados',
   // valor { fonte: horas | null }); sem escolha, vale o padrão abaixo.
-  const LIMITE_DADOS_H = { pjer: 24, jd: 7 * 24, pje1: 7 * 24, metas: 7 * 24, prod: 7 * 24, analises: null };
+  const LIMITE_DADOS_H = { pjer: 24, jd: 7 * 24, pje1: 7 * 24, metas: 7 * 24, prod: 7 * 24, inspecao: 7 * 24, analises: null };
   const OPCOES_PRAZO_H = [24, 48, 72, 96, 120, 144, 168];
   const textoPrazo = h => (h == null ? 'Sem prazo' : h === 24 ? '24 horas' : `${h / 24} dias`);
   function prazoDados(id) {
@@ -413,6 +414,7 @@
       ['pje1', 'Requisitórios do PJE1', st.pje1 && st.pje1.em],
       ['metas', 'Metas CNJ', ultimoEnvio(st.metas && st.metas.envios)],
       ['prod', 'Produtividade', ultimoEnvio(st.prod && st.prod.envios)],
+      ['inspecao', 'Inspeção Integrada (BI)', st.inspecao && st.inspecao.envio && st.inspecao.envio.enviadoEm],
       ['analises', 'Análises da IA (última gravação)', st.analises && st.analises.ultimaGravacao],
       ['juiza', 'Recomendações da juíza (última gravação)', st.juiza && st.juiza.ultimaGravacao],
     ];
