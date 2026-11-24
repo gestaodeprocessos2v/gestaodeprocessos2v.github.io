@@ -254,13 +254,13 @@
     rotinas: { rotulo: 'Rotinas com IA', titulo: 'Rotinas com IA', subtitulo: 'Análises pelo Claude, a partir dos autos · 2ª Vara Federal', pagina: 'Rotinas com IA · Gestão de Processos' },
     ajuda: { rotulo: 'Ajuda', titulo: 'Ajuda', subtitulo: 'Guias passo a passo · 2ª Vara Federal', pagina: 'Ajuda · Gestão de Processos' },
   };
-  const PERFIS_METAS = ['gestor', 'servidor', 'magistrado', 'diretor', 'eventual'];
+  const PERFIS_METAS = ['gestor', 'servidor', 'magistrado', 'diretor', 'eventual', 'visitante'];
   // Produtividade da Vara (dados por pessoa): só gestor, diretor e magistrado. O banco também confere (RLS).
   const PERFIS_PRODUTIVIDADE = ['gestor', 'diretor', 'magistrado'];
   // E-mails (resumo diário da rotina): gestor, diretor e magistrado(a). O banco decide o que cada um vê (RLS).
   const PERFIS_EMAILS = ['gestor', 'diretor', 'magistrado'];
-  // Processos Parados (tarefas de Secretaria): gestor, diretor e magistrado(a). Os dados são os das filas; a restrição é de menu e de tela.
-  const PERFIS_PARADOS = ['gestor', 'diretor', 'magistrado'];
+  // Processos Parados: gestor, diretor, magistrado(a) e visitante (só leitura). Os dados são os das filas e de fora_vara (RLS).
+  const PERFIS_PARADOS = ['gestor', 'diretor', 'magistrado', 'visitante'];
   // Itens do menu ☰. Painel do Gestor: só o gestor, sempre o primeiro.
   function areasDisponiveis() {
     const a = st.perfil === 'gestor' ? ['gestor', 'fila'] : ['fila'];
@@ -854,6 +854,8 @@
     if (geral || eventual) {
       // Servidor eventual: só marca e desfaz a conclusão (sem enviar nem devolver)
       if (eventual) acoes = l.concluido ? '<button class="btn" data-acao="desfazer">Desfazer</button>' : '<button class="btn feito" data-acao="concluir">Marcar como concluído</button>';
+      // Visitante: sem fila própria, lê a minuta na Geral (só leitura; os demais perfis a veem na própria fila).
+      if (geral && st.perfil === 'visitante' && window.PAINEL.botaoMinuta) acoes += window.PAINEL.botaoMinuta(l);
     } else {
       if (l.concluido) {
         acoes = `<button class="btn" data-acao="desfazer"${dis}>Desfazer</button>`;
@@ -1009,7 +1011,7 @@
     ${faixaMag}
     <div class="filtros">
       <input type="search" id="busca" placeholder="Buscar por número, classe, tarefa ou anotação" value="${esc(f.busca)}" aria-label="Buscar">
-      ${geral && st.perfil !== 'visitante' ? `<select id="filtro-pessoa" aria-label="Filtrar por servidor">${opcoesPessoas(f.pessoa, 'Todos os servidores', null, { diretor: true })}</select>` : ''}
+      ${geral ? `<select id="filtro-pessoa" aria-label="Filtrar por servidor">${opcoesPessoas(f.pessoa, 'Todos os servidores', null, { diretor: true })}</select>` : ''}
       ${(() => { const vs = visoesDe(pessoaDaVisao(modo)); return vs.length ? `<select id="filtro-visao" aria-label="Mostrar"><option value="">Painel completo</option>${vs.map(v => `<option value="${esc(idVisao(v))}"${idVisao(v) === f.visao ? ' selected' : ''}>${esc(v.nome)}</option>`).join('')}</select>` : ''; })()}
       ${eventual ? `<select id="filtro-setor" aria-label="Filtrar por setor"><option value="">Todos os setores</option>${opSetores.map(o => `<option value="${o.x}"${o.x === f.setor ? ' selected' : ''}>${esc(o.rot)} (${o.n})</option>`).join('')}</select>` : ''}
       <select id="filtro-tarefa" aria-label="Filtrar por tarefa"><option value="">Todas as tarefas</option>${opTarefas.map(o => `<option value="${esc(o.x)}"${o.x === f.tarefa ? ' selected' : ''}>${esc(o.x)} (${o.n})</option>`).join('')}</select>

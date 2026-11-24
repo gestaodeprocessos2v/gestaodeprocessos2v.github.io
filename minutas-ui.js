@@ -1,7 +1,7 @@
 /* Fila de Trabalho da Vara — minutas para o Residente.
    O Gestor envia um .txt por processo (Gestão → "Minutas para o Residente"); o residente abre o texto na fila.
    O texto é guardado e mostrado como veio (quebras de linha, linhas em branco e recuos). O banco apaga a minuta
-   90 dias depois da conclusão no painel (sql/minutas_residente.sql). Quem lê: Gestor, Servidor, Estagiário e Residente (RLS, sql/minutas_leitura_todos.sql). */
+   90 dias depois da conclusão no painel (sql/minutas_residente.sql). Quem lê: Gestor, Servidor, Estagiário, Residente e Visitante (RLS, sql/minutas_leitura_todos.sql e sql/visitante_leitura.sql). */
 (function () {
   'use strict';
   const P = window.PAINEL;
@@ -9,7 +9,7 @@
   const { st, esc, toast, falha, dataBR, dataHoraBR, todas, iso, ms, pessoas, filaDe } = P;
   const $ = sel => document.querySelector(sel);
   const render = () => P.render();
-  const PERFIS_MINUTAS = ['gestor', 'servidor', 'estagiario', 'residente'];   // perfis com fila (o eventual não tem o botão)
+  const PERFIS_MINUTAS = ['gestor', 'servidor', 'estagiario', 'residente', 'visitante'];   // perfis com fila e o visitante, na Geral (o eventual não tem o botão)
   const LIMITE = 20000;   // caracteres, o mesmo do banco
   const DIA = 86400000;
   const fmtCNJ = n => (n && n.length === 20 ? `${n.slice(0, 7)}-${n.slice(7, 9)}.${n.slice(9, 13)}.${n.slice(13, 14)}.${n.slice(14, 16)}.${n.slice(16)}` : n);

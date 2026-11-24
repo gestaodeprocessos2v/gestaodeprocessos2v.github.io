@@ -814,7 +814,7 @@
       </div>
       <div class="cfg-sub" data-sub="outros">
         <h3>Outros acessos (sem fila própria) <span class="muted mono">${outros.length}</span></h3>
-        <p class="small muted">Gestor, Magistrado(a) e Diretor de Secretaria veem todas as filas; Visitante vê só o painel geral, sem filtrar por servidor. Só o Gestor acessa esta aba.</p>
+        <p class="small muted">Gestor, Magistrado(a) e Diretor de Secretaria veem todas as filas; Visitante vê o painel geral (com o filtro por servidor, RPV/precatório e minutas), as Metas CNJ, os Processos Parados e a Ajuda, só para leitura. Só o Gestor acessa esta aba.</p>
         ${outros.length ? '<div class="acesso-cfg cab-cfg"><span>Nome</span><span>Perfil</span><span>E-mail Google</span><span></span></div>' : ''}
         ${outrosH}
         <div class="linha-botoes"><button class="btn" type="button" data-acao="cfg-add-outro">Adicionar acesso</button></div>
