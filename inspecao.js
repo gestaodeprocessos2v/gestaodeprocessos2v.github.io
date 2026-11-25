@@ -209,8 +209,12 @@
     planilha: 'Atenção: no BI, a data da conclusão é a da última movimentação (qualquer movimento zera a contagem) e decisão lançada sem movimento de decisão não tira o processo da conclusão. Os dias de conclusão podem ser menores que os reais. Números mantidos como no BI, que são os que o CNJ vê.',
   };
 
+  // Filtro das listas no BI: "Período há mais de: 100" dias nas listas sem movimentação e conclusão antiga (o extrator só aceita
+  // a carga com 100; ver PERIODO_INSP em extrator\bi.py). Vai para o topo da planilha da área (pedido do Alberto, 25/11/2026).
+  const FILTRO_PERIODO_BI = 'Filtro das listas no BI: "Período há mais de: 100" dias. As listas sem movimentação e conclusão antiga só trazem processos com 100 dias ou mais; processos com menos dias não aparecem. Os críticos não têm esse filtro.';
+
   const api = { LISTAS, ROTULO_LISTA, ROTULO_PRIORIDADE, DESCRICAO_PRIORIDADE, detectarLista, lerArquivoBI, consolidar, contagens, diasDe, analisar, semCodigo,
-    VISAO_INDICADORES, SERIES_VISAO, rotuloMes, lerVisao, LIMITE_PRIORITARIOS, REGRA_URGENCIA, urgentesDaInspecao, RESSALVA };
+    VISAO_INDICADORES, SERIES_VISAO, rotuloMes, lerVisao, LIMITE_PRIORITARIOS, REGRA_URGENCIA, urgentesDaInspecao, RESSALVA, FILTRO_PERIODO_BI };
   raiz.Inspecao = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

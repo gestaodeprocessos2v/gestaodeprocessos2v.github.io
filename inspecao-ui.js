@@ -165,7 +165,7 @@
       `${r.a.n} - ${r.a.rotulo}`, r.dias, r.it.imp || '', r.it.mt || '', r.it.um || null, r.it.umv || '', r.it.dc || null, r.it.tc || '', r.a.motivos.join('; ')]);
     P.baixarPlanilha({
       arquivo: 'inspecao-integrada', titulo: 'Inspeção Integrada', aba: 'Inspeção', colunas: COLUNAS_XLSX, linhas,
-      fonte: [`Carga do BI: ${e ? dataHoraBR(e.carga) : '—'}${e && e.trimestre ? ' · ' + e.trimestre : ''}`, 'Prioridade: sugestão do painel, não do BI', I.RESSALVA.planilha],
+      fonte: [`Carga do BI: ${e ? dataHoraBR(e.carga) : '—'}${e && e.trimestre ? ' · ' + e.trimestre : ''}`, 'Prioridade: sugestão do painel, não do BI', I.FILTRO_PERIODO_BI, I.RESSALVA.planilha],
       filtros: [P.textoMagistrados(f), f.lista && 'Lista: ' + I.ROTULO_LISTA[f.lista], f.prio && 'Prioridade: ' + f.prio + ' - ' + I.ROTULO_PRIORIDADE[f.prio], f.setor && 'Setor: ' + (f.setor === FORA ? ROT_FORA : rotuloSetor(f.setor))],
       total: `${nBR(linhas.length)} ${linhas.length === 1 ? 'processo' : 'processos'}`,
     });
