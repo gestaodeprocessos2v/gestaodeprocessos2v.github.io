@@ -15,6 +15,8 @@
     pje1: { rotulo: 'PJE1', input: '#pje1-arquivo', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i, balao: 'Consulta no portal RPV/Precatório do TRF5 (público, só leitura) os processos 08 e 00 até 2018 de Pagamentos e monta a planilha. Pagos, cancelados e arquivados já gravados não são consultados de novo. Precisa do painel aberto como gestor no Edge do painel e do atalho instalado neste computador.' },
     // BI: um botão para cada parte, no painel "Atualizar dados do BI" (a barra de cada uma fica nesse painel, não junto do campo de arquivo).
     'bi-produtividade': { painel: true, input: '#pr-arq', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i, rotuloBotao: 'Extrair produtividade', semPasta: true, balao: 'Abre o Portal BI, escolhe a 2ª Vara e extrai a Produtividade da equipe (Atividades por Usuário). O login no Portal BI continua seu. Precisa do atalho instalado neste computador.' },
+    // Inspeção Integrada: as três listas vão juntas para o mesmo campo (ele aceita vários arquivos), com a carga e o trimestre lidos no BI.
+    'bi-inspecao': { rotulo: 'a Inspeção Integrada', input: '#ins-arquivos', varios: ['criticos', 'semmov', 'conclusao'], carga: '#ins-carga', tri: '#ins-tri', arquivo: /^[\w .+()-]{1,120}\.csv$/i, rotuloBotao: 'Extrair inspeção', balao: 'Abre o painel de Inspeção Integrada do Portal BI (2ª Vara, 3º trimestre) e extrai as três listas, conferidas com os contadores da tela, e a data da carga. Nada é baixado em Downloads. O login no Portal BI continua seu. Precisa do atalho instalado neste computador.' },
     'bi-metas': { painel: true, input: '#metas-arq-resumo', campos: { resumo: '#metas-arq-resumo', pendentes: '#metas-arq-pend' }, carga: '#metas-carga', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i, rotuloBotao: 'Extrair metas', balao: 'Abre o Portal BI, escolhe a 2ª Vara e extrai as Metas CNJ (Resumo, Pendentes por Meta e as contagens da Meta 3). O login no Portal BI continua seu. Precisa do atalho instalado neste computador.' },
   };
   const SUPORTE = typeof window.showDirectoryPicker === 'function';
@@ -97,21 +99,25 @@
     const cfg = ALVOS[alvo];
     if (alvo === 'bi-metas' && P.metasDefinirM3) P.metasDefinirM3(status.meta3 || {});   // Meta 3 lida do BI (não há campos para digitar)
     // [seletor do campo, nome do arquivo]: um campo só, ou vários (Metas)
-    const campos = cfg.campos ? Object.entries(cfg.campos).map(([k, sel]) => [sel, (status.arquivos || {})[k]]) : [[cfg.input, status.arquivo]];
-    for (const [sel, nome] of campos) {   // confere tudo antes de mexer na tela
+    // [seletor do campo, [nomes dos arquivos]]: um arquivo num campo, vários campos (Metas) ou vários arquivos num campo (Inspeção)
+    const campos = cfg.campos ? Object.entries(cfg.campos).map(([k, sel]) => [sel, [(status.arquivos || {})[k]]])
+      : cfg.varios ? [[cfg.input, cfg.varios.map(k => (status.arquivos || {})[k])]] : [[cfg.input, [status.arquivo]]];
+    for (const [sel, nomes] of campos) {   // confere tudo antes de mexer na tela
       if (!document.querySelector(sel)) throw new Error('O campo de arquivo não está na tela.');
-      if (!cfg.arquivo.test(nome || '')) throw new Error('Nome de arquivo inesperado no status da extração.');
+      if (!nomes.every(nome => cfg.arquivo.test(nome || ''))) throw new Error('Nome de arquivo inesperado no status da extração.');
     }
     const dir = await S.pasta.getDirectoryHandle(alvo);
-    if (cfg.carga && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(status.carga_bi || '')) {   // "Última Carga" do BI, lida pelo script
-      const c = document.querySelector(cfg.carga);
-      if (c) { c.value = status.carga_bi; c.dispatchEvent(new Event('input', { bubbles: true })); c.dispatchEvent(new Event('change', { bubbles: true })); await pausa(300); }
-    }
-    for (const [sel, nome] of campos) {
+    const preencher = async (sel, valor) => {
+      const c = document.querySelector(sel);
+      if (c) { c.value = valor; c.dispatchEvent(new Event('input', { bubbles: true })); c.dispatchEvent(new Event('change', { bubbles: true })); await pausa(300); }
+    };
+    if (cfg.carga && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(status.carga_bi || '')) await preencher(cfg.carga, status.carga_bi);   // carga do BI, lida pelo script
+    if (cfg.tri && /^[1-4]º Trimestre$/.test(status.trimestre || '')) await preencher(cfg.tri, status.trimestre);
+    for (const [sel, nomes] of campos) {
       const input = document.querySelector(sel);   // consulta de novo: a tela pode ter sido redesenhada
       if (!input) throw new Error('O campo de arquivo não está na tela.');
-      const arquivo = await (await dir.getFileHandle(nome)).getFile();
-      const dt = new DataTransfer(); dt.items.add(arquivo);
+      const dt = new DataTransfer();
+      for (const nome of nomes) dt.items.add(await (await dir.getFileHandle(nome)).getFile());
       input.files = dt.files;
       input.dispatchEvent(new Event('change', { bubbles: true }));   // o painel trata como um arquivo escolhido à mão (prévia)
       await pausa(400);

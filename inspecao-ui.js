@@ -290,7 +290,7 @@
     const aviso = s.lotes.length && faltam.length ? `<div class="aviso novo">Faltam: ${esc(faltam.join(', '))}. Só dá para gravar com as três listas, da mesma carga do BI.</div>` : '';
     return `<section class="painel">
       <h2>Enviar a Inspeção Integrada (BI)</h2>
-      <p>No painel “Inspeção integrada” do BI (serventia “PB - 2ª Vara Federal”), abra o trimestre, a aba “Processos críticos e sem movimentação” e use o botão <b>Exportar</b> de cada uma das três listas. Escolha aqui os três arquivos .csv de uma vez. O painel reconhece cada lista pelas colunas. Cada envio entra como a carga mais recente; os 20 últimos ficam guardados.</p>
+      <p>Use <b>Extrair inspeção</b>: o painel recebe as três listas, a data da carga e o trimestre lidos no BI, e você confere a prévia e grava. À mão: no painel “Inspeção integrada” do BI (serventia “PB - 2ª Vara Federal”), abra o trimestre, a aba “Processos críticos e sem movimentação” e use o botão <b>Exportar</b> de cada uma das três listas; escolha aqui os três arquivos .csv de uma vez e digite a data e hora do “Dados atualizados em”. O painel reconhece cada lista pelas colunas. Cada envio entra como a carga mais recente; os 20 últimos ficam guardados.</p>
       ${atual}
       <label class="campo"><span>Arquivos .csv do BI (os três)</span><input type="file" id="ins-arquivos" accept=".csv,text/csv,text/plain" multiple></label>
       <label class="campo"><span>Data e hora da carga do BI (“Dados atualizados em”, no cabeçalho do painel)</span><input type="datetime-local" id="ins-carga" value="${esc(s.carga)}"></label>
