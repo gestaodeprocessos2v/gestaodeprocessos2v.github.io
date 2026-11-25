@@ -199,7 +199,7 @@
     balao: 'No BI, a "data da conclusão" é a da última movimentação: qualquer intimação, certidão ou petição zera a contagem, e uma decisão lançada sem movimento de decisão não tira o processo da conclusão. Os dias de conclusão podem ser menores que os reais e, em alguns casos, o processo nem está mais concluso. O painel mantém os números do BI, que são os que o CNJ vê. Clique para ler mais.',
     titulo: 'Atenção: os dias de conclusão do BI podem não ser os reais',
     completa: [
-      'Os números desta área são os do painel de Inspeção do BI, porque são esses que o CNJ vê e cobra. Mas a lista de "conclusão antiga" tem falhas no cálculo, que o painel não corrige.',
+      'Os números desta área são os do painel de Inspeção do BI, sem alterações, mas a lista de "conclusão antiga" tem falhas no cálculo, que este painel não corrige.',
       '1. Qualquer movimento zera a contagem. Para o BI, a "data da conclusão" é a data da última movimentação de um processo concluso, e não a do movimento "Conclusão". Uma intimação, certidão, publicação ou petição, ou até um movimento automático do sistema, faz o processo parecer concluso há menos tempo.',
       '2. Decisão sem movimento de decisão não tira o processo da conclusão. O BI olha os códigos de movimento, não os documentos. Uma decisão assinada e lançada só com outro movimento (por exemplo, "Levantamento da Suspensão") continua contada como conclusão.',
       '3. Pode haver atraso entre os campos. Na carga de 24/11/2026, 13 processos vieram com a última movimentação de 23/11 e os dias ainda contados da movimentação anterior.',
