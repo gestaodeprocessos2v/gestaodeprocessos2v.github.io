@@ -36,13 +36,15 @@
 
   // Texto a copiar como minuta: o que vem depois da linha de pontos que fecha o bloco de controle
   // (aviso "INÍCIO DA SENTENÇA"). Sem o marcador, devolve null (o botão "Copiar minuta" some).
+  // Sai sem linhas em branco: o PJe já separa os parágrafos ao colar (decisão do Alberto, 25/11/2026).
+  // "Copiar tudo" e a janela continuam com o arquivo como veio.
   function textoDaMinuta(t) {
     const linhas = String(t == null ? '' : t).split(/\r?\n/);
     const i = linhas.findIndex(l => /IN[ÍI]CIO DA SENTEN[ÇC]A/i.test(l));
     if (i < 0) return null;
     const j = linhas.findIndex((l, k) => k > i && /^\s*[·.]{4,}\s*$/.test(l));
     if (j < 0) return null;
-    return linhas.slice(j + 1).join('\n').replace(/^\s*\n/, '');
+    return linhas.slice(j + 1).filter(l => l.trim() !== '').join('\n');
   }
   P.textoDaMinuta = textoDaMinuta;
 
