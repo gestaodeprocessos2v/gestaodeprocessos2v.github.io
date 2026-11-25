@@ -1,12 +1,13 @@
-/* Fila de Trabalho da Vara — minutas para o Residente.
-   O Gestor envia um .txt por processo (Gestão → "Minutas para o Residente"); o residente abre o texto na fila.
+/* Fila de Trabalho da Vara — minutas (nasceram para o Residente; a tabela continua minutas_residente).
+   O Gestor envia um .txt por processo (Painel do Gestor → Extração de dados → "Minutas"); quem tem o processo na fila
+   (Residente, Servidor, Estagiário ou o Gestor) abre o texto pelo botão "Minuta".
    O texto é guardado e mostrado como veio (quebras de linha, linhas em branco e recuos). O banco apaga a minuta
    90 dias depois da conclusão no painel (sql/minutas_residente.sql). Quem lê: Gestor, Servidor, Estagiário, Residente e Visitante (RLS, sql/minutas_leitura_todos.sql e sql/visitante_leitura.sql). */
 (function () {
   'use strict';
   const P = window.PAINEL;
   if (!P || !P.render) return;
-  const { st, esc, toast, falha, dataBR, dataHoraBR, todas, iso, ms, pessoas, filaDe } = P;
+  const { st, esc, toast, falha, dataBR, dataHoraBR, todas, iso, ms, pessoas, filaDe, nomeDe, R } = P;
   const $ = sel => document.querySelector(sel);
   const render = () => P.render();
   const PERFIS_MINUTAS = ['gestor', 'servidor', 'estagiario', 'residente', 'visitante'];   // perfis com fila e o visitante, na Geral (o eventual não tem o botão)
@@ -105,16 +106,33 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && st.minutas && st.minutas.modal) { st.minutas.modal = null; renderModal(); } });
 
   // ---------- Gestão ----------
-  // Números na fila atual dos residentes (processos da lista, inclusive os que saíram mas continuam por anotação).
-  function numerosDaFila() {
-    const s = new Set();
-    for (const p of pessoas().filter(x => x.tipo === 'residente')) for (const l of filaDe(p.id)) s.add(digitos(l.n));
-    return s;
+  // Em que filas está cada número (processos da lista, inclusive os que saíram mas continuam por anotação):
+  // { número: [{ id, ve }] }. "ve": a pessoa abre a minuta (o Diretor e o Servidor eventual têm fila, mas não leem minutas).
+  const TIPOS_QUE_LEEM = ['servidor', 'estagiario', 'residente'];
+  function filasPorNumero() {
+    const mapa = new Map();
+    const ids = [R.GESTOR_ID, ...pessoas().map(p => p.id)];
+    for (const id of ids) {
+      const ve = id === R.GESTOR_ID || TIPOS_QUE_LEEM.includes((pessoas().find(p => p.id === id) || {}).tipo);
+      for (const l of filaDe(id)) {
+        const n = digitos(l.n), lista = mapa.get(n) || mapa.set(n, []).get(n);
+        if (!lista.some(x => x.id === id)) lista.push({ id, ve });
+      }
+    }
+    return mapa;
   }
-  const foraDaFila = () => { const f = numerosDaFila(); return Object.keys(M().lista).filter(n => !f.has(n)); };
+  // Fora da fila = em nenhuma fila de quem lê a minuta.
+  const ninguemVe = (mapa, n) => !(mapa.get(n) || []).some(x => x.ve);
+  const foraDaFila = () => { const f = filasPorNumero(); return Object.keys(M().lista).filter(n => ninguemVe(f, n)); };
+  // "Na fila de Fulano e Beltrano"; quem tem fila mas não lê vem marcado.
+  function textoFilas(lista) {
+    const quem = (lista || []).map(x => esc(nomeDe(x.id)) + (x.ve ? '' : ' <span class="muted">(não abre)</span>'));
+    if (!quem.length) return '';
+    return 'Na fila de ' + (quem.length === 1 ? quem[0] : quem.slice(0, -1).join(', ') + ' e ' + quem[quem.length - 1]);
+  }
 
   async function lerArquivos(arquivos) {
-    const m = M(), naFila = numerosDaFila();
+    const m = M(), filas = filasPorNumero();
     const itens = [];
     for (const f of arquivos) {
       const n = (digitos(f.name).match(/^\d{20}/) || [''])[0];
@@ -125,7 +143,8 @@
       if (!erro && !n) erro = 'nome sem o número do processo';
       if (!erro && texto.length > LIMITE) erro = 'texto com mais de 20.000 caracteres';
       if (!erro && !texto.trim()) erro = 'arquivo vazio';
-      itens.push({ arquivo: f.name, n, texto, erro, naFila: !!n && naFila.has(n), substitui: !!n && !!m.lista[n] });
+      const quem = n ? filas.get(n) || [] : [];
+      itens.push({ arquivo: f.name, n, texto, erro, quem, naFila: !!n && !ninguemVe(filas, n), substitui: !!n && !!m.lista[n] });
     }
     m.imp = { itens };
     render();
@@ -165,11 +184,15 @@
   function previa(imp) {
     const ok = imp.itens.filter(i => !i.erro), naFila = ok.filter(i => i.naFila).length, foraFila = ok.length - naFila;
     const subst = ok.filter(i => i.substitui).length, erros = imp.itens.filter(i => i.erro);
-    const linhas = imp.itens.map(i => `<tr><td>${esc(i.arquivo)}</td><td class="mono">${i.n ? esc(fmtCNJ(i.n)) : '—'}</td><td>${i.erro ? `<b>Não será gravado:</b> ${esc(i.erro)}` : i.naFila ? 'Na fila do residente' : '<b>Não está na fila do residente</b>'}${!i.erro && i.substitui ? ' · substitui a anterior' : ''}</td></tr>`).join('');
+    const situacao = i => i.erro ? `<b>Não será gravado:</b> ${esc(i.erro)}`
+      : i.naFila ? textoFilas(i.quem)
+      : i.quem.length ? `<b>Só na fila de quem não abre minutas</b> (${i.quem.map(x => esc(nomeDe(x.id))).join(', ')})`
+      : '<b>Fora das filas</b>';
+    const linhas = imp.itens.map(i => `<tr><td>${esc(i.arquivo)}</td><td class="mono">${i.n ? esc(fmtCNJ(i.n)) : '—'}</td><td>${situacao(i)}${!i.erro && i.substitui ? ' · substitui a anterior' : ''}</td></tr>`).join('');
     return `<div class="previa">
-      <div><b>${imp.itens.length} ${imp.itens.length === 1 ? 'arquivo lido' : 'arquivos lidos'}</b>: ${naFila} na fila do residente${foraFila ? `, ${foraFila} de processos fora da fila` : ''}${subst ? `, ${subst} ${subst === 1 ? 'substitui' : 'substituem'} minuta já gravada` : ''}.</div>
+      <div><b>${imp.itens.length} ${imp.itens.length === 1 ? 'arquivo lido' : 'arquivos lidos'}</b>: ${naFila} na fila de alguém${foraFila ? `, ${foraFila} de processos fora das filas` : ''}${subst ? `, ${subst} ${subst === 1 ? 'substitui' : 'substituem'} minuta já gravada` : ''}.</div>
       ${erros.length ? `<div class="aviso erro"><b>${erros.length} ${erros.length === 1 ? 'arquivo não será gravado' : 'arquivos não serão gravados'}</b> (motivo na tabela).</div>` : ''}
-      ${foraFila ? '<div class="small muted">Processos fora da fila também são gravados: a minuta aparece quando o processo entrar na fila do residente (ao enviar a lista do PJe com a etiqueta).</div>' : ''}
+      ${foraFila ? '<div class="small muted">Processos fora das filas também são gravados: a minuta aparece quando o processo entrar na fila de alguém (no próximo envio da lista do PJe).</div>' : ''}
       <div class="tabela-wrap"><table><thead><tr><th>Arquivo</th><th>Processo</th><th>Situação</th></tr></thead><tbody>${linhas}</tbody></table></div>
       <div class="linha-botoes">
         <button class="btn primario" data-macao="gravar" ${M().gravando || !ok.length ? 'disabled' : ''}>${M().gravando ? 'Gravando…' : 'Gravar'}</button>
@@ -180,7 +203,7 @@
 
   // Linha de uma minuta gravada (busca e últimos envios).
   function linhaGravada(n, i, fora) {
-    return `<tr><td class="mono">${esc(fmtCNJ(n))}</td><td>${fora.has(n) ? '<span class="muted">Fora da fila</span>' : 'Na fila'}</td><td class="mono">${dataHoraBR(i.enviadoEm)}</td><td class="mono">${i.concluidaEm ? dataBR(i.concluidaEm) : '—'}</td><td class="mono">${i.concluidaEm ? dataBR(i.concluidaEm + 90 * DIA) : '—'}</td><td><button class="btn discreto" type="button" data-macao="apagar" data-n="${esc(n)}">Apagar</button></td></tr>`;
+    return `<tr><td class="mono">${esc(fmtCNJ(n))}</td><td>${fora.has(n) ? '<span class="muted">Fora das filas</span>' : 'Na fila'}</td><td class="mono">${dataHoraBR(i.enviadoEm)}</td><td class="mono">${i.concluidaEm ? dataBR(i.concluidaEm) : '—'}</td><td class="mono">${i.concluidaEm ? dataBR(i.concluidaEm + 90 * DIA) : '—'}</td><td><button class="btn discreto" type="button" data-macao="apagar" data-n="${esc(n)}">Apagar</button></td></tr>`;
   }
   const tabelaGravadas = linhas => `<div class="tabela-wrap"><table><thead><tr><th>Processo</th><th>Situação</th><th>Enviada em</th><th>Concluída em</th><th>Apagada em</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>`;
   const ULTIMAS = 5;
@@ -204,19 +227,19 @@
     const concluidas = lista.filter(([, i]) => i.concluidaEm).length;
     const ultimas = lista.slice(0, ULTIMAS).map(([n, i]) => linhaGravada(n, i, fora)).join('');
     return `<section class="painel" id="min-painel">
-      <h2>Minutas para o Residente</h2>
-      <p>Envie os arquivos .txt das minutas (um por processo, com o número do processo no nome do arquivo). O residente abre o texto pelo botão “Minuta” na fila dele, com a formatação do arquivo. A minuta é apagada sozinha 90 dias depois da conclusão do processo no painel.</p>
+      <h2>Minutas</h2>
+      <p>Envie os arquivos .txt das minutas (um por processo, com o número do processo no nome do arquivo). Quem tem o processo na fila (Residente, Servidor ou Estagiário) abre o texto pelo botão “Minuta”, com a formatação do arquivo. O Diretor de Secretaria e o Servidor eventual não abrem minutas. A minuta é apagada sozinha 90 dias depois da conclusão do processo no painel.</p>
       <div class="linha-botoes"><input type="file" id="min-arquivos" accept=".txt,text/plain" multiple hidden>
         <button class="btn" type="button" data-macao="escolher">Escolher arquivos .txt</button>
         <span class="small muted">ou arraste os arquivos para cá</span></div>
       ${m.imp ? previa(m.imp) : ''}
       <h3>Gravadas <span class="muted mono">${lista.length}</span></h3>
-      ${lista.length ? `<div class="small">Na fila do residente: <b class="mono">${lista.length - fora.size}</b> · Fora da fila: <b class="mono">${fora.size}</b> · Concluídas (aguardando exclusão automática): <b class="mono">${concluidas}</b></div>
+      ${lista.length ? `<div class="small">Na fila de alguém: <b class="mono">${lista.length - fora.size}</b> · Fora das filas: <b class="mono">${fora.size}</b> · Concluídas (aguardando exclusão automática): <b class="mono">${concluidas}</b></div>
         <label class="campo"><span>Buscar minuta pelo número do processo</span><input type="search" id="min-busca" class="mono" inputmode="numeric" placeholder="Ex.: 0801234" value="${esc(m.busca || '')}" autocomplete="off"></label>
         <div id="min-busca-res">${resultadoBusca(fora)}</div>
         <h3>Últimos envios</h3>
         ${tabelaGravadas(ultimas)}
-        ${fora.size ? `<div class="linha-botoes"><button class="btn" type="button" data-macao="apagar-fora">Apagar as ${fora.size} de processos fora da fila</button></div>` : ''}` : '<p class="small muted">Nenhuma minuta gravada.</p>'}
+        ${fora.size ? `<div class="linha-botoes"><button class="btn" type="button" data-macao="apagar-fora">Apagar as ${fora.size} de processos fora das filas</button></div>` : ''}` : '<p class="small muted">Nenhuma minuta gravada.</p>'}
     </section>`;
   };
 
