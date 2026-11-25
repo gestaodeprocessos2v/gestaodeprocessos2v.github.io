@@ -126,7 +126,49 @@
     return { n, rotulo: ROTULO_PRIORIDADE[n], motivos, mudou, andouDepois, noPainel };
   }
 
-  const api = { LISTAS, ROTULO_LISTA, ROTULO_PRIORIDADE, DESCRICAO_PRIORIDADE, detectarLista, lerArquivoBI, consolidar, contagens, diasDe, analisar, semCodigo };
+  // ---------- Visão geral (indicadores mensais da aba "Visão Geral" do painel de Inspeção do BI) ----------
+  // O arquivo visao-geral_<carga>.json vem do extrator (bi.montar_visao). Cada indicador: chave, título, unidade, séries
+  // (uma ou duas) e se "menor é melhor" (para a cor da variação). As de duas séries mostram o acumulado do ano.
+  const VISAO_INDICADORES = [
+    { k: 'novos_baixados', titulo: 'Casos novos × baixados', series: [['novos', 'Casos novos'], ['baixados', 'Baixados']], un: 'processos', ano: true },
+    { k: 'dist_julgados', titulo: 'Distribuídos × julgados', series: [['distribuidos', 'Distribuídos'], ['julgados', 'Julgados']], un: 'processos', ano: true },
+    { k: 'tm_concl_julg', titulo: 'Tempo médio da conclusão ao julgamento', series: [['tm_concl_julg', 'Dias']], un: 'dias', menor: true },
+    { k: 'tm_dist_julg', titulo: 'Tempo médio da distribuição ao julgamento', series: [['tm_dist_julg', 'Dias']], un: 'dias', menor: true },
+    { k: 'tm_dist_arq', titulo: 'Tempo médio da distribuição ao arquivamento', series: [['tm_dist_arq', 'Dias']], un: 'dias', menor: true },
+    { k: 'idade_concl', titulo: 'Idade média da conclusão', series: [['idade_concl', 'Dias']], un: 'dias', menor: true },
+    { k: 'idade_ult_dist', titulo: 'Idade média da última distribuição', series: [['idade_ult_dist', 'Dias']], un: 'dias', menor: true },
+    { k: 'semmov', titulo: 'Processos sem movimentação (100 dias ou mais)', series: [['semmov', 'Processos']], un: 'processos', menor: true },
+  ];
+  const SERIES_VISAO = VISAO_INDICADORES.flatMap(i => i.series.map(s => s[0]));
+  const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  // "2025-12" → "dez/25" (curto, para gráfico e tabela) ou "dez./2025" (como no BI)
+  function rotuloMes(am, longo) {
+    const m = /^(\d{4})-(\d{2})$/.exec(am || ''); if (!m) return am || '';
+    const nome = MESES_CURTOS[Number(m[2]) - 1] || m[2];
+    return longo ? `${nome}./${m[1]}` : `${nome}/${m[1].slice(2)}`;
+  }
+  // Confere e devolve a visão geral lida do .json do extrator (lança erro com mensagem para o Gestor se o formato não for o esperado).
+  function lerVisao(conteudo) {
+    let v;
+    try { v = JSON.parse(String(conteudo).replace(/^﻿/, '')); } catch (e) { throw new Error('O arquivo da visão geral não é um JSON válido.'); }
+    const num = x => x === null || (typeof x === 'number' && Number.isFinite(x));
+    if (!v || typeof v !== 'object' || !Array.isArray(v.meses) || !v.meses.length || v.meses.length > 24 || !v.meses.every(m => /^\d{4}-\d{2}$/.test(m)))
+      throw new Error('A visão geral não tem a lista de meses esperada.');
+    const series = {};
+    for (const s of SERIES_VISAO) {
+      const a = v.series && v.series[s];
+      if (!Array.isArray(a) || a.length !== v.meses.length || !a.every(num)) throw new Error(`A visão geral não tem a série “${s}” completa.`);
+      series[s] = a;
+    }
+    const atual = {};
+    for (const [s, o] of Object.entries(v.atual || {})) if (SERIES_VISAO.includes(s) && o && num(o.v)) atual[s] = { v: o.v, var: num(o.var) ? o.var : null };
+    const ano_acum = {};
+    for (const s of ['novos', 'baixados', 'distribuidos', 'julgados']) if (v.ano_acum && num(v.ano_acum[s])) ano_acum[s] = v.ano_acum[s];
+    return { ano: Number(v.ano) || Number(v.meses[v.meses.length - 1].slice(0, 4)), meses: v.meses.slice(), series, atual, ano_acum };
+  }
+
+  const api = { LISTAS, ROTULO_LISTA, ROTULO_PRIORIDADE, DESCRICAO_PRIORIDADE, detectarLista, lerArquivoBI, consolidar, contagens, diasDe, analisar, semCodigo,
+    VISAO_INDICADORES, SERIES_VISAO, rotuloMes, lerVisao };
   raiz.Inspecao = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

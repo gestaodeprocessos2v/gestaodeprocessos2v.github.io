@@ -16,7 +16,7 @@
   const LIMITE_MAIS = 300;
 
   // ---------- dados do envio mais recente (inspecao_envios) ----------
-  const D = () => st.inspecao || (st.inspecao = { envio: null, itens: [], itensDe: null, carregando: false, erro: false, checadoEm: 0 });
+  const D = () => st.inspecao || (st.inspecao = { envio: null, itens: [], itensDe: null, carregando: false, erro: false, checadoEm: 0, visao: null, visaoCarga: null, visaoPara: undefined, carregandoVisao: false, erroVisao: false });
   // itens: false lê só os dados do envio (usado pelo Painel do Gestor); true lê também os processos (ao abrir a área).
   async function carregarInspecao(o) {
     const d = D(); const opc = o || {};
@@ -42,6 +42,23 @@
     if (opc.itens && st.area === 'inspecao') render();   // a leitura sem os processos roda dentro de carregar(), que já é seguido de um desenho
   }
   P.carregarInspecao = carregarInspecao;
+
+  // Visão geral: a do envio mais recente que a tem (os envios manuais, só com os CSV, não trazem). Lida ao abrir a aba e quando o envio muda.
+  async function carregarVisao() {
+    const d = D(); if (d.carregandoVisao) return;
+    d.carregandoVisao = true;
+    const para = d.envio ? d.envio.id : null;
+    try {
+      const { data, error } = await st.sb.from('inspecao_envios').select('id,carga_bi,trimestre,visao').not('visao', 'is', null)
+        .order('carga_bi', { ascending: false }).order('id', { ascending: false }).limit(1);
+      if (error) throw error;
+      const e = data && data[0];
+      d.visao = e ? I.lerVisao(JSON.stringify(e.visao)) : null; d.visaoCarga = e ? ms(e.carga_bi) : null; d.visaoTri = e ? e.trimestre || '' : '';
+      d.erroVisao = false;
+    } catch (err) { console.error(err); d.erroVisao = true; }
+    d.visaoPara = para; d.carregandoVisao = false;
+    if (st.area === 'inspecao') render();
+  }
 
   // Tarefas fora das filas (fora_vara.parados): as mesmas que a área Processos Parados lê; só entram aqui para achar a tarefa atual.
   const ext = { itens: [], lidoLista: -1, carregando: false };
@@ -209,6 +226,78 @@
       ${corpo}`;
   }
 
+  // ---------- aba "Visão geral" (indicadores mensais da aba "Visão Geral" do painel de Inspeção do BI) ----------
+  const dec = (n, c) => n == null ? '—' : Number(n).toLocaleString('pt-BR', { minimumFractionDigits: c, maximumFractionDigits: c });
+  const valorInd = (ind, n) => n == null ? '—' : ind.un === 'dias' ? dec(n, 1) : nBR(Math.round(n));
+  // Minigráfico em SVG: barras (contagens; duas séries lado a lado) ou linha (tempos e idades). Os números exatos ficam na tabela abaixo.
+  function grafico(ind, v) {
+    const W = 240, H = 74, base = 60, topo = 6, n = v.meses.length, larg = W / n;
+    const series = ind.series.map(([s]) => v.series[s]);
+    const vals = series.flat().filter(x => x != null), max = Math.max(1, ...vals);
+    // barras começam no zero; a linha (tempos e idades) usa a faixa dos valores, com folga, para a variação aparecer
+    const linha = ind.un === 'dias', minL = linha ? Math.min(...vals) : 0, folga = linha ? Math.max((max - minL) * 0.15, 1) : 0;
+    const lo = linha ? Math.max(0, minL - folga) : 0, hi = linha ? max + folga : max;
+    const y = x => base - ((x - lo) / (hi - lo)) * (base - topo);
+    let marcas = '';
+    if (ind.un === 'dias') {
+      const pts = series[0].map((x, i) => x == null ? null : `${(i * larg + larg / 2).toFixed(1)},${y(x).toFixed(1)}`).filter(Boolean).join(' ');
+      marcas = `<polyline class="ins-lin" points="${pts}"/>` + series[0].map((x, i) => x == null ? '' : `<circle class="ins-pt${i === n - 1 ? ' ult' : ''}" cx="${(i * larg + larg / 2).toFixed(1)}" cy="${y(x).toFixed(1)}" r="${i === n - 1 ? 2.6 : 1.6}"/>`).join('');
+    } else {
+      const k = series.length, lb = (larg - 4) / k;
+      marcas = series.map((s, j) => s.map((x, i) => x == null ? '' : `<rect class="ins-b${j + 1}" x="${(i * larg + 2 + j * lb).toFixed(1)}" y="${y(x).toFixed(1)}" width="${(lb - 0.6).toFixed(1)}" height="${(base - y(x)).toFixed(1)}" rx="1"/>`).join('')).join('');
+    }
+    const meses = v.meses.map((m, i) => `<text class="ins-eixo" x="${(i * larg + larg / 2).toFixed(1)}" y="${H - 3}">${esc(I.rotuloMes(m).slice(0, 3))}</text>`).join('');
+    const resumo = `${ind.titulo}, de ${I.rotuloMes(v.meses[0], true)} a ${I.rotuloMes(v.meses[n - 1], true)}: ` + ind.series.map(([s, rot]) => `${rot} de ${valorInd(ind, v.series[s][0])} a ${valorInd(ind, v.series[s][n - 1])}`).join('; ');
+    return `<svg class="ins-graf" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(resumo)}"><line class="ins-base" x1="0" x2="${W}" y1="${base}" y2="${base}"/>${marcas}${meses}</svg>`;
+  }
+  function cartaoVisao(ind, v) {
+    const n = v.meses.length, mesAtual = I.rotuloMes(v.meses[n - 1]);
+    let corpo;
+    if (ind.ano) {
+      corpo = `<div class="valor-linha">${ind.series.map(([s, rot], j) => `<span class="ins-dupla"><i class="ins-leg ins-b${j + 1}" aria-hidden="true"></i><b class="valor">${nBR(v.ano_acum[s])}</b> <span class="small">${esc(rot.toLowerCase())}</span></span>`).join('')}</div>
+        <p class="small muted">Acumulado de ${v.ano}. Em ${esc(mesAtual)}: ${ind.series.map(([s, rot]) => `${nBR(v.series[s][n - 1])} ${esc(rot.toLowerCase())}`).join(' e ')}.</p>`;
+    } else {
+      const s = ind.series[0][0], a = v.atual[s] || { v: v.series[s][n - 1], var: null };
+      let dif = '';
+      if (a.var != null) {
+        const sobe = a.var > 0, melhor = ind.menor ? !sobe : sobe, txt = `${sobe ? '▲' : '▼'} ${dec(Math.abs(a.var) * 100, 1)}%`;
+        const bal = `Em relação a ${I.rotuloMes(`${Number(v.meses[n - 1].slice(0, 4)) - 1}-${v.meses[n - 1].slice(5)}`, true)} (mesmo mês do ano anterior), como no BI. ${melhor ? 'Melhorou' : 'Piorou'}: aqui, ${ind.menor ? 'menor' : 'maior'} é melhor.`;
+        dif = `<span class="dif ${melhor ? 'sobe' : 'desce'}" tabindex="0" role="note" data-balao="${esc(bal)}" aria-description="${esc(bal)}">${txt}</span>`;
+      }
+      corpo = `<div class="valor-linha"><b class="valor">${valorInd(ind, a.v)}</b><span class="small muted">${esc(ind.un)} em ${esc(mesAtual)}</span>${dif}</div>`;
+    }
+    return `<article class="meta-card ins-card"><header><h3>${esc(ind.titulo)}</h3></header>${corpo}${grafico(ind, v)}</article>`;
+  }
+  const COLUNAS_VISAO = () => I.VISAO_INDICADORES.flatMap(ind => ind.series.map(([s, rot]) => ({ s, ind, rot: ind.series.length > 1 ? rot : ind.titulo })));
+  function baixarPlanilhaVisao() {
+    const d = D(), v = d.visao; if (!v) return;
+    const cols = COLUNAS_VISAO();
+    P.baixarPlanilha({
+      arquivo: 'inspecao-visao-geral', titulo: 'Inspeção Integrada · Visão geral', aba: 'Visão geral',
+      colunas: [{ t: 'Mês', largura: 12 }].concat(cols.map(c => ({ t: c.rot + (c.ind.un === 'dias' ? ' (dias)' : ''), tipo: c.ind.un === 'dias' ? 'decimal' : 'numero', largura: 18 }))),
+      linhas: v.meses.map((m, i) => [I.rotuloMes(m, true)].concat(cols.map(c => v.series[c.s][i]))),
+      fonte: [`Carga do BI: ${dataHoraBR(d.visaoCarga)}`, 'Painel "Inspeção integrada" do BI, aba Visão Geral (2ª Vara Federal)'], filtros: [],
+      total: `${v.meses.length} meses`,
+    });
+  }
+  function telaVisao() {
+    const d = D(), v = d.visao, e = d.envio;
+    if (!v) {
+      return `<div class="vazio"><h2>Visão geral</h2><p>${d.erroVisao ? 'Não consegui ler agora a visão geral. Tente de novo em instantes.' : d.carregandoVisao || d.visaoPara === undefined ? 'Carregando…'
+        : 'Ainda não há visão geral no painel.' + (st.perfil === 'gestor' ? ' Use “Extrair inspeção” em Painel do Gestor → Extração de dados; o envio manual dos CSV não traz a visão geral.' : ' O gestor ainda não enviou a visão geral do BI.')}</p></div>`;
+    }
+    const n = v.meses.length, cols = COLUNAS_VISAO();
+    const antiga = e && d.visaoCarga && e.carga > d.visaoCarga ? `<div class="aviso">A carga mais recente do BI (${esc(dataHoraBR(e.carga))}) foi enviada sem a visão geral. Os números abaixo são da carga de ${esc(dataHoraBR(d.visaoCarga))}.</div>` : '';
+    const tabela = `<section class="painel largo"><h3>Mês a mês</h3><div class="tabela-wrap"><table class="par-tabela ins-visao-tab"><thead><tr><th>Mês</th>${cols.map(c => `<th class="n">${esc(c.rot)}${c.ind.un === 'dias' ? ' <span class="muted">(dias)</span>' : ''}</th>`).join('')}</tr></thead><tbody>
+      ${v.meses.map((m, i) => `<tr><td class="nowrap">${esc(I.rotuloMes(m, true))}</td>${cols.map(c => `<td class="n">${valorInd(c.ind, v.series[c.s][i])}</td>`).join('')}</tr>`).join('')}
+      </tbody></table></div>
+      <div class="linha-botoes"><button type="button" class="btn" data-acao="ins-visao-xlsx" data-balao="Baixa em .xlsx a tabela mês a mês desta tela." aria-description="Baixa em .xlsx a tabela mês a mês desta tela.">Baixar planilha</button></div></section>`;
+    return `<p class="atualizacao">Carga do BI: ${dataHoraBR(d.visaoCarga)}${d.visaoTri ? ' · ' + esc(d.visaoTri) : ''} · De ${esc(I.rotuloMes(v.meses[0], true))} a ${esc(I.rotuloMes(v.meses[n - 1], true))} · Números do painel “Inspeção integrada” do BI, aba Visão Geral, para a 2ª Vara Federal · A variação compara com o mesmo mês do ano anterior, como no BI.</p>
+      ${antiga}${d.erroVisao ? '<div class="aviso">Não consegui atualizar agora; a tela mostra a última visão geral lida.</div>' : ''}
+      <div class="metas-grid ins-visao">${I.VISAO_INDICADORES.map(ind => cartaoVisao(ind, v)).join('')}</div>
+      ${tabela}`;
+  }
+
   // A atualização automática do painel só redesenha se algo mudou: não tira o foco de quem está usando um filtro.
   let ultimoHtml = '';
   P.renderInspecao = function () {
@@ -216,9 +305,16 @@
     if (!P.PERFIS_INSPECAO.includes(st.perfil)) { tl.innerHTML = '<div class="vazio"><h2>Inspeção Integrada</h2><p>Esta área não está liberada para o seu perfil.</p></div>'; ultimoHtml = ''; return; }
     // Lê ao abrir a área, quando o envio mudou e a cada cerca de 1 minuto (sem envio nenhum, não insiste a cada desenho da tela).
     if (!d.carregando && (!d.checadoEm || (d.envio && d.itensDe !== d.envio.id) || Date.now() - d.checadoEm > 55000)) carregarInspecao({ itens: true });
-    const ultimaLista = dataLista();
-    if (!ext.carregando && ext.lidoLista !== ultimaLista) carregarExtras(ultimaLista);
-    const h = tela();
+    let h;
+    if (st.abaInspecao === 'insvisao') {
+      // a visão geral é lida de novo quando chega um envio novo (a leitura do envio roda a cada cerca de 1 minuto)
+      if (!d.carregandoVisao && d.checadoEm && d.visaoPara !== (d.envio ? d.envio.id : null)) carregarVisao();
+      h = telaVisao();
+    } else {
+      const ultimaLista = dataLista();
+      if (!ext.carregando && ext.lidoLista !== ultimaLista) carregarExtras(ultimaLista);
+      h = tela();
+    }
     if (h === ultimoHtml && tl.innerHTML) return;
     ultimoHtml = h; tl.innerHTML = h;
   };
@@ -236,6 +332,7 @@
       const b = v.querySelector(`[data-acao="ins-mag"][data-v="${l}"]`); if (b) b.focus();
     } else if (acao === 'ins-mag-padrao') { f.magOff = magPadrao(f); render(); }
     else if (acao === 'ins-xlsx') baixarPlanilha();
+    else if (acao === 'ins-visao-xlsx') baixarPlanilhaVisao();
     else if (acao === 'ins-mais') { f.limite += LIMITE_MAIS; render(); }
     else if (acao === 'ins-ordem') {
       const c = a.dataset.campo;
@@ -256,17 +353,18 @@
   });
 
   // ---------- Painel do Gestor → Extração de dados: envio das três listas ----------
-  const imp = () => st.insImp || (st.insImp = { lotes: [], ignoradas: 0, erro: '', carga: '', tri: '', gravando: false });
+  const imp = () => st.insImp || (st.insImp = { lotes: [], ignoradas: 0, erro: '', carga: '', tri: '', gravando: false, visao: null, visaoNome: '' });
   const cargaMs = () => { const t = new Date(imp().carga).getTime(); return isNaN(t) ? null : t; };
   async function lerTexto(arquivo) {
     const buf = await arquivo.arrayBuffer();
     try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch (e) { return new TextDecoder('windows-1252').decode(buf); }
   }
   async function lerArquivos(arquivos) {
-    const s = imp(); s.lotes = []; s.erro = ''; s.ignoradas = 0;
+    const s = imp(); s.lotes = []; s.erro = ''; s.ignoradas = 0; s.visao = null; s.visaoNome = '';
     const erros = [];
     for (const arq of arquivos || []) {
       try {
+        if (/\.json$/i.test(arq.name)) { s.visao = I.lerVisao(await lerTexto(arq)); s.visaoNome = arq.name; continue; }   // visão geral (só vem do "Extrair inspeção")
         const r = I.lerArquivoBI(await lerTexto(arq));
         s.lotes = s.lotes.filter(x => x.lista !== r.lista).concat([{ lista: r.lista, itens: r.itens, nome: arq.name }]);   // a mesma lista duas vezes: vale a última
         s.ignoradas += r.ignoradas;
@@ -286,13 +384,14 @@
     const previa = s.erro ? `<div class="aviso erro">${esc(s.erro)}</div>` : s.lotes.length ? `<div class="previa">
         ${I.LISTAS.map(([x, rot]) => { const l = s.lotes.find(y => y.lista === x); return `<div>${esc(rot)}: ${l ? `<b>${nBR(l.itens.length)} processos</b> em “${esc(l.nome)}”` : '<span class="muted">arquivo não enviado</span>'}</div>`; }).join('')}
         <div class="small">${nBR(cont.processos)} processos diferentes (um processo pode estar em mais de uma lista).${s.ignoradas ? ` ${nBR(s.ignoradas)} ${s.ignoradas === 1 ? 'linha ignorada' : 'linhas ignoradas'} (sem número de processo com 20 dígitos).` : ''}</div>
+        <div>Visão geral: ${s.visao ? `<b>${s.visao.meses.length} meses</b> (${esc(I.rotuloMes(s.visao.meses[0], true))} a ${esc(I.rotuloMes(s.visao.meses[s.visao.meses.length - 1], true))}) em “${esc(s.visaoNome)}”` : '<span class="muted">não enviada (só vem pelo “Extrair inspeção”; as listas podem ser gravadas sem ela)</span>'}</div>
       </div>` : '';
     const aviso = s.lotes.length && faltam.length ? `<div class="aviso novo">Faltam: ${esc(faltam.join(', '))}. Só dá para gravar com as três listas, da mesma carga do BI.</div>` : '';
     return `<section class="painel">
       <h2>Enviar a Inspeção Integrada (BI)</h2>
-      <p>Use <b>Extrair inspeção</b>: o painel recebe as três listas, a data da carga e o trimestre lidos no BI, e você confere a prévia e grava. À mão: no painel “Inspeção integrada” do BI (serventia “PB - 2ª Vara Federal”), abra o trimestre, a aba “Processos críticos e sem movimentação” e use o botão <b>Exportar</b> de cada uma das três listas; escolha aqui os três arquivos .csv de uma vez e digite a data e hora do “Dados atualizados em”. O painel reconhece cada lista pelas colunas. Cada envio entra como a carga mais recente; os 20 últimos ficam guardados.</p>
+      <p>Use <b>Extrair inspeção</b>: o painel recebe as três listas, a visão geral (indicadores dos últimos 12 meses, para a aba “Visão geral” da área), a data da carga e o trimestre lidos no BI, e você confere a prévia e grava. À mão: no painel “Inspeção integrada” do BI (serventia “PB - 2ª Vara Federal”), abra o trimestre, a aba “Processos críticos e sem movimentação” e use o botão <b>Exportar</b> de cada uma das três listas; escolha aqui os três arquivos .csv de uma vez e digite a data e hora do “Dados atualizados em”. O painel reconhece cada lista pelas colunas. Cada envio entra como a carga mais recente; os 20 últimos ficam guardados.</p>
       ${atual}
-      <label class="campo"><span>Arquivos .csv do BI (os três)</span><input type="file" id="ins-arquivos" accept=".csv,text/csv,text/plain" multiple></label>
+      <label class="campo"><span>Arquivos .csv do BI (os três)</span><input type="file" id="ins-arquivos" accept=".csv,text/csv,text/plain,.json,application/json" multiple></label>
       <label class="campo"><span>Data e hora da carga do BI (“Dados atualizados em”, no cabeçalho do painel)</span><input type="datetime-local" id="ins-carga" value="${esc(s.carga)}"></label>
       <label class="campo"><span>Trimestre (opcional)</span><input type="text" id="ins-tri" maxlength="40" placeholder="ex.: 3º Trimestre" value="${esc(s.tri)}"></label>
       ${previa}${aviso}${velho}
@@ -311,12 +410,13 @@
     try {
       const { error } = await st.sb.rpc('gravar_inspecao', {
         p_carga: iso(em), p_trimestre: s.tri || '', p_arquivos: s.lotes.map(l => ({ nome: l.nome, lista: l.lista, n: l.itens.length })), p_itens: itens,
-        p_n_criticos: c.criticos, p_n_semmov: c.semmov, p_n_conclusao: c.conclusao, p_email: st.email,
+        p_n_criticos: c.criticos, p_n_semmov: c.semmov, p_n_conclusao: c.conclusao, p_email: st.email, p_visao: s.visao || null,
       });
       if (error) throw error;
       st.insImp = null;
       toast('Inspeção Integrada gravada.');
       await carregarInspecao({ itens: true, forcar: true });
+      D().visaoPara = undefined;   // relê a visão geral na próxima vez que a aba for aberta
     } catch (e) { falha(e); s.gravando = false; }
     render();
   }

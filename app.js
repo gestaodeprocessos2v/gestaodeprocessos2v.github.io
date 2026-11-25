@@ -34,7 +34,7 @@
     filas: [], urgencias: [], devolucoes: [], marcas: {}, anotacoes: {}, dispensas: {}, acessos: [], negados: [],
     ver: 0, cache: { ver: -1, m: {} },
     aba: 'fila', verComo: '', area: 'fila', menuAreas: false,
-    abaMetas: 'visao', abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null }, fInspecao: { lista: '', prio: '', setor: '', ordem: 'prio', dir: 1, limite: 300, magOff: null }, inspecao: null,
+    abaMetas: 'visao', abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null }, fInspecao: { lista: '', prio: '', setor: '', ordem: 'prio', dir: 1, limite: 300, magOff: null }, inspecao: null, abaInspecao: 'inslista',
     vis: {
       fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
       geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
@@ -187,7 +187,7 @@
       tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, anotacoes: {}, dispensas: {}, acessos: [], negados: [],
       anotando: null, confirmaNota: null, devolvendo: null, modal: null, importacao: null,
       area: 'fila', menuAreas: false, abaGestor: 'ginicio', abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, metasImp: null,
-      abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null }, fInspecao: { lista: '', prio: '', setor: '', ordem: 'prio', dir: 1, limite: 300, magOff: null }, inspecao: null,
+      abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null }, fInspecao: { lista: '', prio: '', setor: '', ordem: 'prio', dir: 1, limite: 300, magOff: null }, inspecao: null, abaInspecao: 'inslista',
       quadro: null, recadoQuadro: '',
     });
     const mq = document.getElementById('modal-quadro'); if (mq) mq.innerHTML = '';
@@ -278,7 +278,7 @@
   // Áreas que a pessoa pode abrir: o menu e, para o gestor, Rotinas com IA (rotinas-ui.js), que só abre pelo botão do topo do Painel do Gestor.
   const areasPermitidas = () => st.perfil === 'gestor' ? areasDisponiveis().concat('rotinas') : areasDisponiveis();
   // Abas de cada área que não é a Fila (a Fila usa abasDisponiveis(), que depende do perfil).
-  const ABAS_AREA = { gestor: ['ginicio', 'gextracao', 'gconfig'], metas: ['visao', 'pendentes'], produtividade: ['resumo', 'pessoas'], get emails() { return window.PAINEL.abasEmails ? window.PAINEL.abasEmails() : ['emsub']; }, parados: [], inspecao: [], rotinas: [], ajuda: [] };
+  const ABAS_AREA = { gestor: ['ginicio', 'gextracao', 'gconfig'], metas: ['visao', 'pendentes'], produtividade: ['resumo', 'pessoas'], get emails() { return window.PAINEL.abasEmails ? window.PAINEL.abasEmails() : ['emsub']; }, parados: [], inspecao: ['inslista', 'insvisao'], rotinas: [], ajuda: [] };
   function irParaArea(area) {
     st.menuAreas = false;
     if (!areasPermitidas().includes(area)) area = 'fila';
@@ -653,17 +653,20 @@
     }
     const outraArea = ok && ABAS_AREA[st.area];
     const abas = !ok ? [] : outraArea || abasDisponiveis();
-    const atual = st.area === 'gestor' ? st.abaGestor : st.area === 'metas' ? st.abaMetas : st.area === 'produtividade' ? st.abaProd : st.area === 'emails' ? st.abaEmails : st.aba;
+    const atual = st.area === 'gestor' ? st.abaGestor : st.area === 'metas' ? st.abaMetas : st.area === 'produtividade' ? st.abaProd : st.area === 'emails' ? st.abaEmails : st.area === 'inspecao' ? st.abaInspecao : st.aba;
     const nav = $('#abas');
     nav.hidden = abas.length < 2;
-    const rot = { ginicio: 'Início', gextracao: 'Extração de dados', gconfig: 'Configurações', fila: 'Fila', eventual: 'Eventual', geral: 'Geral', visao: 'Visão geral', pendentes: 'Pendentes', resumo: 'Visão geral', pessoas: 'Por pessoa', emsub: 'Juíza Substituta', emtit: 'Juiz Titular', emnl: 'Não localizado', emsec: 'Secretaria', emdem: 'Demais', emgest: 'Só gestor', emanexo: 'Anexos para juntar', emdesp: 'Despacho com o juiz' };
+    const rot = { inslista: 'Processos', insvisao: 'Visão geral', ginicio: 'Início', gextracao: 'Extração de dados', gconfig: 'Configurações', fila: 'Fila', eventual: 'Eventual', geral: 'Geral', visao: 'Visão geral', pendentes: 'Pendentes', resumo: 'Visão geral', pessoas: 'Por pessoa', emsub: 'Juíza Substituta', emtit: 'Juiz Titular', emnl: 'Não localizado', emsec: 'Secretaria', emdem: 'Demais', emgest: 'Só gestor', emanexo: 'Anexos para juntar', emdesp: 'Despacho com o juiz' };
     const nAvisos = st.area === 'gestor' ? urgenciasDoGestor() : 0;
     // Painel do Gestor: depois das abas, uma divisória e os atalhos para as áreas que o gestor mais usa (levam a outra tela: ↗).
     const atalho = (area, txt, balao) => `<button class="aba aba-atalho" type="button" data-ir-area="${area}" data-balao="${esc(balao)}" aria-description="${esc(balao)}">${txt} <span aria-hidden="true">↗</span></button>`;
     const atalhos = st.area === 'gestor' ? '<span class="aba-sep" aria-hidden="true"></span>'
       + atalho('emails', 'E-mails', 'Abre o resumo diário dos e-mails da vara.')
       + atalho('fila', 'Fila de Trabalho', 'Abre a Fila de Trabalho, com a lista Geral e o “Ver a fila como…”.')
-      + atalho('rotinas', 'Rotinas com IA', 'Abre os botões que rodam as análises do Claude neste computador.') : '';
+      + atalho('rotinas', 'Rotinas com IA', 'Abre os botões que rodam as análises do Claude neste computador.')
+      // Inspeção Integrada: a aba "Metas" do painel de Inspeção do BI repete a área Metas CNJ; fica só o atalho (decisão do Alberto, 24/11/2026).
+      : st.area === 'inspecao' && areasPermitidas().includes('metas') ? '<span class="aba-sep" aria-hidden="true"></span>'
+      + atalho('metas', 'Metas CNJ', 'Abre a área Metas CNJ. A aba “Metas” do painel de Inspeção do BI mostra os mesmos dados.') : '';
     const h = abas.map(a => `<button class="aba" role="tab" id="aba-${a}" aria-selected="${a === atual}" data-aba="${a}">${rot[a]}${a === 'ginicio' && nAvisos ? ` <span class="contagem">${nAvisos}</span>` : ''}${st.area === 'emails' && window.PAINEL.emailsNaoLidos && window.PAINEL.emailsNaoLidos(a) ? ` <span class="contagem">${window.PAINEL.emailsNaoLidos(a)}</span>` : ''}</button>`).join('') + atalhos;
     if (nav.dataset.h !== h) { nav.innerHTML = h; nav.dataset.h = h; }
     for (const b of nav.querySelectorAll('.aba[data-aba]')) b.setAttribute('aria-selected', String(b.dataset.aba === atual));
@@ -1487,6 +1490,7 @@
       if (st.area === 'metas') { st.abaMetas = b.dataset.aba; render(); return; }
       if (st.area === 'produtividade') { st.abaProd = b.dataset.aba; render(); return; }
       if (st.area === 'emails') { st.abaEmails = b.dataset.aba; render(); return; }
+      if (st.area === 'inspecao') { st.abaInspecao = b.dataset.aba; window.scrollTo({ top: 0 }); render(); return; }
       st.aba = b.dataset.aba; guardar('fila.aba.' + st.email, st.aba);
       st.anotando = null; st.confirmaNota = null; st.devolvendo = null; render();
     });

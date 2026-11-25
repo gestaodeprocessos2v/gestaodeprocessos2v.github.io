@@ -638,6 +638,21 @@ a.btn { display: inline-block; text-decoration: none; }
 .par-tabela td.nowrap { white-space: nowrap; }
 /* Inspeção Integrada: a prioridade traz o motivo embaixo; coluna larga o bastante para o texto não ficar em fila de palavras. */
 .par-tabela td.ins-prio { min-width: 16rem; }
+/* Inspeção Integrada, aba "Visão geral": cartões das Metas (.meta-card) com um minigráfico de 12 meses; só variáveis do tema (claro e escuro) */
+.ins-visao { margin-bottom: 16px; }
+.ins-card .valor-linha { gap: 8px 16px; }
+.ins-card .valor { font-size: 1.7rem; }
+.ins-dupla { display: inline-flex; align-items: baseline; gap: 5px; }
+.ins-leg { display: inline-block; width: 10px; height: 10px; border-radius: 2px; align-self: center; }
+.ins-graf { width: 100%; height: auto; margin-top: 4px; overflow: visible; }
+.ins-graf .ins-base { stroke: var(--line); stroke-width: 1; }
+.ins-graf .ins-eixo { fill: var(--muted); font-size: 7.5px; text-anchor: middle; font-family: var(--font-body); }
+.ins-graf .ins-lin { fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+.ins-graf .ins-pt { fill: var(--accent); }
+.ins-graf .ins-pt.ult { stroke: var(--surface); stroke-width: 1; }
+.ins-b1, .ins-leg.ins-b1 { fill: var(--prod-1); background: var(--prod-1); }
+.ins-b2, .ins-leg.ins-b2 { fill: var(--prod-4); background: var(--prod-4); }
+.ins-visao-tab th { white-space: normal; min-width: 6.5rem; vertical-align: bottom; }
 .par-tabela .par-dias { font-weight: 700; }
 .par-tabela tr.par-abaixo .par-dias { font-weight: 400; color: var(--muted); }
 /* Gráfico por servidor (Secretaria e Triagem inicial): mesma barra da Produtividade, linhas mais juntas. */

@@ -16,7 +16,8 @@
     // BI: um botão para cada parte, no painel "Atualizar dados do BI" (a barra de cada uma fica nesse painel, não junto do campo de arquivo).
     'bi-produtividade': { painel: true, input: '#pr-arq', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i, rotuloBotao: 'Extrair produtividade', semPasta: true, balao: 'Abre o Portal BI, escolhe a 2ª Vara e extrai a Produtividade da equipe (Atividades por Usuário). O login no Portal BI continua seu. Precisa do atalho instalado neste computador.' },
     // Inspeção Integrada: as três listas vão juntas para o mesmo campo (ele aceita vários arquivos), com a carga e o trimestre lidos no BI.
-    'bi-inspecao': { rotulo: 'a Inspeção Integrada', input: '#ins-arquivos', varios: ['criticos', 'semmov', 'conclusao'], carga: '#ins-carga', tri: '#ins-tri', arquivo: /^[\w .+()-]{1,120}\.csv$/i, rotuloBotao: 'Extrair inspeção', balao: 'Abre o painel de Inspeção Integrada do Portal BI (2ª Vara, 3º trimestre) e extrai as três listas, conferidas com os contadores da tela, e a data da carga. Nada é baixado em Downloads. O login no Portal BI continua seu. Precisa do atalho instalado neste computador.' },
+    // A visão geral (.json) é opcional: o script a entrega quando ela fecha com os cartões do BI.
+    'bi-inspecao': { rotulo: 'a Inspeção Integrada', input: '#ins-arquivos', varios: ['criticos', 'semmov', 'conclusao'], opcionais: ['visao'], carga: '#ins-carga', tri: '#ins-tri', arquivo: /^[\w .+()-]{1,120}\.(csv|json)$/i, rotuloBotao: 'Extrair inspeção', balao: 'Abre o painel de Inspeção Integrada do Portal BI (2ª Vara, 3º trimestre) e extrai as três listas, conferidas com os contadores da tela, a visão geral (indicadores dos últimos 12 meses) e a data da carga. Nada é baixado em Downloads. O login no Portal BI continua seu. Precisa do atalho instalado neste computador.' },
     'bi-metas': { painel: true, input: '#metas-arq-resumo', campos: { resumo: '#metas-arq-resumo', pendentes: '#metas-arq-pend' }, carga: '#metas-carga', arquivo: /^[\w .+()-]{1,120}\.xlsx$/i, rotuloBotao: 'Extrair metas', balao: 'Abre o Portal BI, escolhe a 2ª Vara e extrai as Metas CNJ (Resumo, Pendentes por Meta e as contagens da Meta 3). O login no Portal BI continua seu. Precisa do atalho instalado neste computador.' },
   };
   const SUPORTE = typeof window.showDirectoryPicker === 'function';
@@ -104,7 +105,8 @@
     // [seletor do campo, nome do arquivo]: um campo só, ou vários (Metas)
     // [seletor do campo, [nomes dos arquivos]]: um arquivo num campo, vários campos (Metas) ou vários arquivos num campo (Inspeção)
     const campos = cfg.campos ? Object.entries(cfg.campos).map(([k, sel]) => [sel, [(status.arquivos || {})[k]]])
-      : cfg.varios ? [[cfg.input, cfg.varios.map(k => (status.arquivos || {})[k])]] : [[cfg.input, [status.arquivo]]];
+      : cfg.varios ? [[cfg.input, cfg.varios.map(k => (status.arquivos || {})[k]).concat((cfg.opcionais || []).map(k => (status.arquivos || {})[k]).filter(Boolean))]]
+      : [[cfg.input, [status.arquivo]]];
     for (const [sel, nomes] of campos) {   // confere tudo antes de mexer na tela
       if (!document.querySelector(sel)) throw new Error('O campo de arquivo não está na tela.');
       if (!nomes.every(nome => cfg.arquivo.test(nome || ''))) throw new Error('Nome de arquivo inesperado no status da extração.');
