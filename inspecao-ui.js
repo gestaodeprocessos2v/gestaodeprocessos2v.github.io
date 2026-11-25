@@ -262,7 +262,7 @@
       if (a.var != null) {
         const sobe = a.var > 0, melhor = ind.menor ? !sobe : sobe, txt = `${sobe ? '▲' : '▼'} ${dec(Math.abs(a.var) * 100, 1)}%`;
         const bal = `Em relação a ${I.rotuloMes(`${Number(v.meses[n - 1].slice(0, 4)) - 1}-${v.meses[n - 1].slice(5)}`, true)} (mesmo mês do ano anterior), como no BI. ${melhor ? 'Melhorou' : 'Piorou'}: aqui, ${ind.menor ? 'menor' : 'maior'} é melhor.`;
-        dif = `<span class="dif ${melhor ? 'sobe' : 'desce'}" tabindex="0" role="note" data-balao="${esc(bal)}" aria-description="${esc(bal)}">${txt}</span>`;
+        dif = `<span class="dif ${melhor ? 'sobe' : 'desce'}" tabindex="0" role="note" data-balao="${esc(bal)}" data-balao-dir="dir" aria-description="${esc(bal)}">${txt}</span>`;
       }
       corpo = `<div class="valor-linha"><b class="valor">${valorInd(ind, a.v)}</b><span class="small muted">${esc(ind.un)} em ${esc(mesAtual)}</span>${dif}</div>`;
     }
