@@ -167,8 +167,32 @@
     return { ano: Number(v.ano) || Number(v.meses[v.meses.length - 1].slice(0, 4)), meses: v.meses.slice(), series, atual, ano_acum };
   }
 
+  // ---------- Urgência nas filas (decisão do Alberto, 24/11/2026) ----------
+  // Processos que o próprio BI aponta como prioridade, na carga mais recente gravada: Impacto Alto ou Médio dos críticos e os
+  // "processos prioritários" da consolidação do trimestre (os 20 ATIVOS há mais tempo sem movimentação e as 20 conclusões mais
+  // antigas; mesma regra do t3cTop20 do painel do BI: ordem por dias, decrescente). Automática: sai sozinha numa carga nova.
+  const LIMITE_PRIORITARIOS = 20;
+  const REGRA_URGENCIA = `Processos que o painel “Inspeção integrada” do BI aponta como prioridade, na carga mais recente: impacto Alto ou Médio na lista de críticos, os ${LIMITE_PRIORITARIOS} processos ativos há mais tempo sem movimentação e as ${LIMITE_PRIORITARIOS} conclusões mais antigas (os “processos prioritários” da consolidação do trimestre). Saem da urgência sozinhos quando deixam de estar nesses critérios numa carga nova do BI.`;
+  // itens: os do envio (consolidar). Devolve Map(20 dígitos do número → [motivos]).
+  function urgentesDaInspecao(itens) {
+    const m = new Map();
+    const add = (it, motivo) => { const k = soDigitos(it.n); (m.get(k) || m.set(k, []).get(k)).push(motivo); };
+    const lista = itens || [];
+    for (const it of lista) {
+      if (!it.l || !it.l.includes('c')) continue;
+      if (it.imp === 'Alto') add(it, 'Impacto Alto no BI');
+      else if (it.imp === 'Médio') add(it, 'Impacto Médio no BI');
+    }
+    const topo = (filtro, dias) => lista.filter(filtro).sort((a, b) => (dias(b) - dias(a)) || soDigitos(a.n).localeCompare(soDigitos(b.n))).slice(0, LIMITE_PRIORITARIOS);
+    for (const it of topo(it => it.l && it.l.includes('s') && normTexto(it.sit).startsWith('ativ'), it => it.ds || 0))
+      add(it, `Entre os ${LIMITE_PRIORITARIOS} há mais tempo sem movimentação no BI (${it.ds} dias)`);
+    for (const it of topo(it => it.l && it.l.includes('k'), it => it.dk || 0))
+      add(it, `Entre as ${LIMITE_PRIORITARIOS} conclusões mais antigas no BI (${it.dk} dias)`);
+    return m;
+  }
+
   const api = { LISTAS, ROTULO_LISTA, ROTULO_PRIORIDADE, DESCRICAO_PRIORIDADE, detectarLista, lerArquivoBI, consolidar, contagens, diasDe, analisar, semCodigo,
-    VISAO_INDICADORES, SERIES_VISAO, rotuloMes, lerVisao };
+    VISAO_INDICADORES, SERIES_VISAO, rotuloMes, lerVisao, LIMITE_PRIORITARIOS, REGRA_URGENCIA, urgentesDaInspecao };
   raiz.Inspecao = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

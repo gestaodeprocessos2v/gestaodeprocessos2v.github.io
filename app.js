@@ -34,7 +34,7 @@
     filas: [], urgencias: [], devolucoes: [], marcas: {}, anotacoes: {}, dispensas: {}, acessos: [], negados: [],
     ver: 0, cache: { ver: -1, m: {} },
     aba: 'fila', verComo: '', area: 'fila', menuAreas: false,
-    abaMetas: 'visao', abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null }, fInspecao: { lista: '', prio: '', setor: '', ordem: 'prio', dir: 1, limite: 300, magOff: null }, inspecao: null, abaInspecao: 'inslista',
+    abaMetas: 'visao', abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, metasImp: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null }, fInspecao: { lista: '', prio: '', setor: '', ordem: 'prio', dir: 1, limite: 300, magOff: null }, inspecao: null, abaInspecao: 'inslista', inspUrg: new Map(), inspUrgDe: undefined,
     vis: {
       fila: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
       geral: { busca: '', tarefa: '', concl: false, limite: LIMITE_NORMAL, pessoa: '', visao: '', etiqueta: '', jd: '', magOff: null },
@@ -187,7 +187,7 @@
       tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, anotacoes: {}, dispensas: {}, acessos: [], negados: [],
       anotando: null, confirmaNota: null, devolvendo: null, modal: null, importacao: null,
       area: 'fila', menuAreas: false, abaGestor: 'ginicio', abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, metasImp: null,
-      abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null }, fInspecao: { lista: '', prio: '', setor: '', ordem: 'prio', dir: 1, limite: 300, magOff: null }, inspecao: null, abaInspecao: 'inslista',
+      abaProd: 'resumo', prod: null, abaEmails: 'emsub', emails: null, ajuda: null, fParados: { setor: 'secretaria', servidor: '', limite: 120, todos: false, ordem: 'dias', dir: -1, magOff: null }, fInspecao: { lista: '', prio: '', setor: '', ordem: 'prio', dir: 1, limite: 300, magOff: null }, inspecao: null, abaInspecao: 'inslista', inspUrg: new Map(), inspUrgDe: undefined,
       quadro: null, recadoQuadro: '',
     });
     const mq = document.getElementById('modal-quadro'); if (mq) mq.innerHTML = '';
@@ -382,6 +382,7 @@
     st.negados = (negados.data || []).map(r => ({ email: r.email, em: ms(r.em) }));
     await carregarJD();
     await carregarPJE1();
+    await carregarInspUrg();
     if (PERFIS_PRODUTIVIDADE.includes(st.perfil) && window.PAINEL.carregarProd) await window.PAINEL.carregarProd();
     if (PERFIS_EMAILS.includes(st.perfil) && window.PAINEL.carregarEmails) await window.PAINEL.carregarEmails();
     if (st.perfil === 'gestor' && window.PAINEL.carregarInspecao) await window.PAINEL.carregarInspecao({ itens: false });
@@ -390,6 +391,26 @@
     if (window.PAINEL.carregarRecomendacoes) await window.PAINEL.carregarRecomendacoes();
     if (!st.rascOutros) st.rascOutros = null;
     st.ver++;
+  }
+
+  // Urgência pela Inspeção Integrada (todos os perfis): processos que o BI aponta como prioridade na carga mais recente gravada
+  // (regra em Inspecao.urgentesDaInspecao). Lê só o id do envio mais recente; os processos, só quando chega um envio novo.
+  // Se falhar, a fila segue sem essa urgência.
+  async function carregarInspUrg() {
+    const I = window.Inspecao; if (!I) return;
+    try {
+      const d = await st.sb.from('inspecao_envios').select('id').order('carga_bi', { ascending: false }).order('id', { ascending: false }).limit(1);
+      if (d.error) throw d.error;
+      const id = d.data && d.data[0] ? d.data[0].id : null;
+      if (id === st.inspUrgDe) return;
+      let itens = [];
+      if (id != null) {
+        const a = st.inspecao;   // a área Inspeção pode já ter os processos deste envio
+        if (a && a.itensDe === id) itens = a.itens;
+        else { const r = await st.sb.from('inspecao_envios').select('itens').eq('id', id).single(); if (r.error) throw r.error; itens = (r.data && r.data.itens) || []; }
+      }
+      st.inspUrg = I.urgentesDaInspecao(itens); st.inspUrgDe = id;
+    } catch (e) { console.error(e); }
   }
 
   async function atualizar() {
@@ -419,7 +440,14 @@
     const umaEt = etGestor && !etGestor.includes('|') ? etGestor : '';
     // Já concluído depois da última anotação (em outra data de chegada): a anotação não o segura mais.
     const seguraFora = num => estadoDe(num).segura && !R.concluidoAposAnotacao(st.marcas[p], num, anotP[num]);
-    for (const r of st.filas) if (r.pessoa === p) for (const it of r.itens || []) if (!it.fora || seguraFora(R.soDigitos(it.n))) itens.push(umaEt && !it.ed ? Object.assign({}, it, { ed: [umaEt] }) : it);
+    // Urgência pela Inspeção Integrada (carregarInspUrg): marca o item como urgente (u) e guarda o motivo (iu), como a urgência por etiqueta.
+    const urgInsp = st.inspUrg || new Map();
+    for (const r of st.filas) if (r.pessoa === p) for (const it of r.itens || []) if (!it.fora || seguraFora(R.soDigitos(it.n))) {
+      let x = umaEt && !it.ed ? Object.assign({}, it, { ed: [umaEt] }) : it;
+      const iu = urgInsp.get(R.soDigitos(it.n));
+      if (iu) x = Object.assign({}, x, { u: true, iu });
+      itens.push(x);
+    }
     // Conclusão reaberta por anotação, com o processo na lista atual, conta como desfeita.
     const marcasV = R.marcasVigentes(p, st.marcas[p], itens, anotP, dispP);
     const umMes = Date.now() - 30 * DIA;

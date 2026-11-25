@@ -147,6 +147,9 @@
         add('urgente', 'urgente:tarefa-etiqueta:' + norm(t.tarefa), 'Na tarefa ' + aspas(t.tarefa) + ', quando tiver ' + (ets.length > 1 ? 'uma das etiquetas ' : 'a etiqueta ') + listaE(ets.map(aspas)) + onde, null, { grupo: 'Tarefas com etiqueta' });
       }
     }
+    // Urgência pela Inspeção Integrada do BI (fixa no código; decisão do Alberto, 24/11/2026). Texto em inspecao.js (REGRA_URGENCIA).
+    const regraInsp = raiz.Inspecao && raiz.Inspecao.REGRA_URGENCIA;
+    if (regraInsp) add('urgente', 'urgente:inspecao', regraInsp, 'urgente:inspecao:alto-medio-20-20', { grupo: 'Inspeção Integrada (BI)' });
     if (itens.some(x => x.secao === 'urgente') && itens.some(x => x.secao === 'prioritaria')) add('prioritaria', 'urgente-vence', 'Se um processo é urgente e prioritário ao mesmo tempo, vale a urgência.', null, { nota: true });
 
     // ---- Regras de tempo ----

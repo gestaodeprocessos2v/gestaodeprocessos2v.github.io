@@ -414,9 +414,11 @@
       if (linha && linha.urgente) out.push({ r: 'Urgência pela tarefa' });
       let e = l.eu || [];
       // Processos gravados antes de guardarmos as etiquetas: a urgência vinda de "Urgente se etiqueta" é explicada pela tarefa.
-      if (!e.length && l.u && linha && linha.etiquetaUrgente) e = String(linha.etiquetaUrgente).split('|').map(s => s.trim()).filter(Boolean);
+      // (o "u" que vem da Inspeção Integrada tem motivo próprio, em l.iu)
+      if (!e.length && l.u && !(l.iu && l.iu.length) && linha && linha.etiquetaUrgente) e = String(linha.etiquetaUrgente).split('|').map(s => s.trim()).filter(Boolean);
       if (e.length) out.push({ r: 'Urgência pela etiqueta', e });
       if (l.ecu && l.ecu.length) out.push({ r: 'Urgência pela classe', e: l.ecu });
+      if (l.iu && l.iu.length) out.push({ r: 'Urgência pela Inspeção Integrada (BI)', e: l.iu });
     } else if (l.tipo === 'prioritaria') {
       if (linha && linha.zerar) out.push({ r: 'Prioridade pela tarefa' });
       if (l.ep && l.ep.length) out.push({ r: 'Prioridade pela etiqueta', e: l.ep });
@@ -829,8 +831,8 @@
       const vencidas = concluidas.length ? [] : lista.map(x => marcas[chaveItem(x)]).filter(m => m && m.em != null);
       if (vencidas.length) escolhido = Object.assign({}, escolhido, { retornoGrupo: Math.max(...vencidas.map(m => m.em)) });
       const uniao = campo => [...new Set(lista.flatMap(x => x[campo] || []))];
-      const eu = uniao('eu'), ep = uniao('ep'), ecu = uniao('ecu'), ecp = uniao('ecp'), xe = uniao('xe'), xc = uniao('xc');
-      porNumero.set(k, paralelo ? Object.assign({}, escolhido, { fp: true, u: lista.some(x => x.u) || escolhido.u, p: lista.some(x => x.p) || escolhido.p }, eu.length ? { eu } : {}, ep.length ? { ep } : {}, ecu.length ? { ecu } : {}, ecp.length ? { ecp } : {}, xe.length ? { xe } : {}, xc.length ? { xc } : {}) : escolhido);
+      const eu = uniao('eu'), ep = uniao('ep'), ecu = uniao('ecu'), ecp = uniao('ecp'), xe = uniao('xe'), xc = uniao('xc'), iu = uniao('iu');
+      porNumero.set(k, paralelo ? Object.assign({}, escolhido, { fp: true, u: lista.some(x => x.u) || escolhido.u, p: lista.some(x => x.p) || escolhido.p }, eu.length ? { eu } : {}, ep.length ? { ep } : {}, ecu.length ? { ecu } : {}, ecp.length ? { ecp } : {}, xe.length ? { xe } : {}, xc.length ? { xc } : {}, iu.length ? { iu } : {}) : escolhido);
     }
     const linhas = [];
     const especiais = [
