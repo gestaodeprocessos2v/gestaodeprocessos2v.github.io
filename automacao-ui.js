@@ -47,9 +47,12 @@
   }
   const avisoGuarda = motivo => 'A pasta foi aceita, mas o navegador não conseguiu guardá-la (' + motivo + '). Ela vale só até fechar esta aba; será preciso escolher de novo na próxima vez. Confira se o Edge não está apagando os dados do site ao fechar.';
 
+  // O Edge às vezes não responde à consulta de permissão (fica esperando para sempre, visto em 24/11/2026): sem resposta em 3 s,
+  // vale como "não liberada", e o botão "Liberar pasta" resolve pela janela de escolher pasta.
+  const comLimite = (promessa, ms, valor) => Promise.race([promessa, new Promise(ok => setTimeout(() => ok(valor), ms))]);
   async function permissaoAtual() {
     if (!S.pasta) return 'sem';
-    try { return await S.pasta.queryPermission({ mode: 'read' }); } catch (e) { return 'sem'; }
+    try { return await comLimite(S.pasta.queryPermission({ mode: 'read' }), 3000, 'sem resposta'); } catch (e) { return 'sem'; }
   }
   async function iniciar() {
     if (!SUPORTE) return;
@@ -266,15 +269,15 @@
         else if (falha) S.erroPasta = avisoGuarda(falha);
         await lerTodosStatus();
       } else if (aut === 'liberar') {
-        // a pasta guardada pode ter ficado velha (pasta renomeada ou movida): o navegador recusa sem perguntar; então pede a pasta de novo
-        try { S.permissao = await S.pasta.requestPermission({ mode: 'read' }); } catch (e) { S.permissao = 'denied'; }
-        if (S.permissao !== 'granted') {
-          const h = await window.showDirectoryPicker({ id: 'painel-entrada', mode: 'read' });
-          S.pasta = h; S.permissao = 'granted';
-          const falha = await bdGravar('pasta', h);
-          if (h.name.toLowerCase() !== 'entrada') S.erroPasta = 'Você escolheu a pasta “' + h.name + '”. O esperado é a pasta “entrada” dentro de “extrator”.';
-          else if (falha) S.erroPasta = avisoGuarda(falha);
-        }
+        // Vai direto à janela de escolher pasta (abre na última pasta usada, a "entrada"): escolher a pasta já dá a permissão.
+        // Antes pedia a permissão da pasta guardada (requestPermission); em 24/11/2026 o Edge deixou de responder a esse pedido e o botão
+        // parecia não fazer nada. Pedir a permissão antes também gastaria o clique, e a janela de pasta não abriria mais depois dele.
+        S.erroPasta = '';
+        const h = await window.showDirectoryPicker({ id: 'painel-entrada', mode: 'read' });
+        S.pasta = h; S.permissao = 'granted';
+        const falha = await bdGravar('pasta', h);
+        if (h.name.toLowerCase() !== 'entrada') S.erroPasta = 'Você escolheu a pasta “' + h.name + '”. O esperado é a pasta “entrada” dentro de “extrator”.';
+        else if (falha) S.erroPasta = avisoGuarda(falha);
         await lerTodosStatus();
       } else if (aut === 'carregar') {
         const st = await lerStatus(alvo); S.status[alvo] = st;
