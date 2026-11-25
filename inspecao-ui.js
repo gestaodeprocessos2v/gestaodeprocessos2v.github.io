@@ -165,7 +165,7 @@
       `${r.a.n} - ${r.a.rotulo}`, r.dias, r.it.imp || '', r.it.mt || '', r.it.um || null, r.it.umv || '', r.it.dc || null, r.it.tc || '', r.a.motivos.join('; ')]);
     P.baixarPlanilha({
       arquivo: 'inspecao-integrada', titulo: 'Inspeção Integrada', aba: 'Inspeção', colunas: COLUNAS_XLSX, linhas,
-      fonte: [`Carga do BI: ${e ? dataHoraBR(e.carga) : '—'}${e && e.trimestre ? ' · ' + e.trimestre : ''}`, 'Prioridade: sugestão do painel, não do BI'],
+      fonte: [`Carga do BI: ${e ? dataHoraBR(e.carga) : '—'}${e && e.trimestre ? ' · ' + e.trimestre : ''}`, 'Prioridade: sugestão do painel, não do BI', I.RESSALVA.planilha],
       filtros: [P.textoMagistrados(f), f.lista && 'Lista: ' + I.ROTULO_LISTA[f.lista], f.prio && 'Prioridade: ' + f.prio + ' - ' + I.ROTULO_PRIORIDADE[f.prio], f.setor && 'Setor: ' + (f.setor === FORA ? ROT_FORA : rotuloSetor(f.setor))],
       total: `${nBR(linhas.length)} ${linhas.length === 1 ? 'processo' : 'processos'}`,
     });
@@ -276,7 +276,7 @@
       arquivo: 'inspecao-visao-geral', titulo: 'Inspeção Integrada · Visão geral', aba: 'Visão geral',
       colunas: [{ t: 'Mês', largura: 12 }].concat(cols.map(c => ({ t: c.rot + (c.ind.un === 'dias' ? ' (dias)' : ''), tipo: c.ind.un === 'dias' ? 'decimal' : 'numero', largura: 18 }))),
       linhas: v.meses.map((m, i) => [I.rotuloMes(m, true)].concat(cols.map(c => v.series[c.s][i]))),
-      fonte: [`Carga do BI: ${dataHoraBR(d.visaoCarga)}`, 'Painel "Inspeção integrada" do BI, aba Visão Geral (2ª Vara Federal)'], filtros: [],
+      fonte: [`Carga do BI: ${dataHoraBR(d.visaoCarga)}`, 'Painel "Inspeção integrada" do BI, aba Visão Geral (2ª Vara Federal)', I.RESSALVA.planilha], filtros: [],
       total: `${v.meses.length} meses`,
     });
   }
@@ -318,6 +318,30 @@
     if (h === ultimoHtml && tl.innerHTML) return;
     ultimoHtml = h; tl.innerHTML = h;
   };
+
+  // ---------- ressalva sobre a conclusão antiga do BI (botão na barra das abas, desenhado em app.js) ----------
+  // Janela com o texto completo de I.RESSALVA; abre pelo clique no botão da barra e fecha em "Fechar", no fundo ou com Esc.
+  P.RESSALVA_INSPECAO = I.RESSALVA;
+  let ressalvaAberta = false;
+  function renderRessalva() {
+    let el = $('#modal-ressalva-inspecao');
+    if (!el) { el = document.createElement('div'); el.id = 'modal-ressalva-inspecao'; document.body.appendChild(el); }
+    if (!ressalvaAberta) { el.innerHTML = ''; return; }
+    const r = I.RESSALVA;
+    el.innerHTML = `<div class="modal-fundo" data-rsacao="fechar-fundo"><div class="modal em-modal ins-ressalva-modal" role="dialog" aria-modal="true" aria-labelledby="rs-modal-tit">
+      <h2 id="rs-modal-tit">⚠ ${esc(r.titulo)}</h2>
+      <div class="corpo">
+        ${r.completa.map(p => `<p>${esc(p)}</p>`).join('')}
+        <div class="linha-botoes"><button class="btn" type="button" data-rsacao="fechar">Fechar</button></div>
+      </div></div></div>`;
+    const b = el.querySelector('[data-rsacao="fechar"]'); if (b) b.focus();
+  }
+  P.abrirRessalvaInspecao = () => { ressalvaAberta = true; renderRessalva(); };
+  document.addEventListener('click', e => {
+    const a = e.target.closest('[data-rsacao]'); if (!a) return;
+    if (a.dataset.rsacao === 'fechar' || (a.dataset.rsacao === 'fechar-fundo' && e.target === a)) { ressalvaAberta = false; renderRessalva(); }
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && ressalvaAberta) { ressalvaAberta = false; renderRessalva(); } });
 
   const v = $('#v-inspecao');
   v.addEventListener('click', async e => {

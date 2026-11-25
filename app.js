@@ -693,8 +693,10 @@
       + atalho('fila', 'Fila de Trabalho', 'Abre a Fila de Trabalho, com a lista Geral e o “Ver a fila como…”.')
       + atalho('rotinas', 'Rotinas com IA', 'Abre os botões que rodam as análises do Claude neste computador.')
       // Inspeção Integrada: a aba "Metas" do painel de Inspeção do BI repete a área Metas CNJ; fica só o atalho (decisão do Alberto, 24/11/2026).
-      : st.area === 'inspecao' && areasPermitidas().includes('metas') ? '<span class="aba-sep" aria-hidden="true"></span>'
-      + atalho('metas', 'Metas CNJ', 'Abre a área Metas CNJ. A aba “Metas” do painel de Inspeção do BI mostra os mesmos dados.') : '';
+      : st.area === 'inspecao' ? (areasPermitidas().includes('metas') ? '<span class="aba-sep" aria-hidden="true"></span>'
+      + atalho('metas', 'Metas CNJ', 'Abre a área Metas CNJ. A aba “Metas” do painel de Inspeção do BI mostra os mesmos dados.') : '')
+      // Ressalva sobre a conclusão antiga do BI (decisão do Alberto, 25/11/2026): balão com o resumo; o clique abre a janela (inspecao-ui.js).
+      + (window.PAINEL.RESSALVA_INSPECAO ? `<button class="aba aba-ressalva" type="button" data-ressalva="inspecao" aria-haspopup="dialog" data-balao="${esc(window.PAINEL.RESSALVA_INSPECAO.balao)}" data-balao-dir="dir" aria-description="${esc(window.PAINEL.RESSALVA_INSPECAO.balao)}"><span aria-hidden="true">⚠</span> ${esc(window.PAINEL.RESSALVA_INSPECAO.curta)}</button>` : '') : '';
     const h = abas.map(a => `<button class="aba" role="tab" id="aba-${a}" aria-selected="${a === atual}" data-aba="${a}">${rot[a]}${a === 'ginicio' && nAvisos ? ` <span class="contagem">${nAvisos}</span>` : ''}${st.area === 'emails' && window.PAINEL.emailsNaoLidos && window.PAINEL.emailsNaoLidos(a) ? ` <span class="contagem">${window.PAINEL.emailsNaoLidos(a)}</span>` : ''}</button>`).join('') + atalhos;
     if (nav.dataset.h !== h) { nav.innerHTML = h; nav.dataset.h = h; }
     for (const b of nav.querySelectorAll('.aba[data-aba]')) b.setAttribute('aria-selected', String(b.dataset.aba === atual));
@@ -1513,6 +1515,7 @@
     });
     $('#abas').addEventListener('click', e => {
       const ir = e.target.closest('[data-ir-area]'); if (ir) { irParaArea(ir.dataset.irArea); return; }
+      if (e.target.closest('[data-ressalva="inspecao"]')) { if (window.PAINEL.abrirRessalvaInspecao) window.PAINEL.abrirRessalvaInspecao(); return; }
       const b = e.target.closest('.aba'); if (!b) return;
       if (st.area === 'gestor') { st.abaGestor = b.dataset.aba; guardar('fila.abaGestor.' + st.email, st.abaGestor); window.scrollTo({ top: 0 }); render(); return; }
       if (st.area === 'metas') { st.abaMetas = b.dataset.aba; render(); return; }
