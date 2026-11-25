@@ -195,9 +195,9 @@
   // números do BI, porque são os que o CNJ vê e cobra (decisão do Alberto, 25/11/2026); a ressalva aparece na barra das abas da
   // área (balão e janela) e no topo das planilhas baixadas. Um texto só, usado nos três lugares.
   const RESSALVA = {
-    curta: 'Atenção: o BI calcula mal a conclusão',
-    balao: 'No BI, a "data da conclusão" é a da última movimentação: qualquer intimação, certidão ou petição zera a contagem, e uma decisão lançada sem movimento de decisão não tira o processo da conclusão. Os dias de conclusão podem ser bem menores que os reais. O painel mantém os números do BI, que são os que o CNJ vê. Clique para ler mais.',
-    titulo: 'Atenção: o BI calcula mal a conclusão',
+    curta: 'Atenção: os dias de conclusão do BI podem não ser os reais',
+    balao: 'No BI, a "data da conclusão" é a da última movimentação: qualquer intimação, certidão ou petição zera a contagem, e uma decisão lançada sem movimento de decisão não tira o processo da conclusão. Os dias de conclusão podem ser menores que os reais e, em alguns casos, o processo nem está mais concluso. O painel mantém os números do BI, que são os que o CNJ vê. Clique para ler mais.',
+    titulo: 'Atenção: os dias de conclusão do BI podem não ser os reais',
     completa: [
       'Os números desta área são os do painel de Inspeção do BI, porque são esses que o CNJ vê e cobra. Mas a lista de "conclusão antiga" tem falhas no cálculo, que o painel não corrige.',
       '1. Qualquer movimento zera a contagem. Para o BI, a "data da conclusão" é a data da última movimentação de um processo concluso, e não a do movimento "Conclusão". Uma intimação, certidão, publicação ou petição, ou até um movimento automático do sistema, faz o processo parecer concluso há menos tempo.',
@@ -206,7 +206,7 @@
       'Conferência no PJe (25/11/2026), com 59 processos que estão nas listas de conclusão antiga e sem movimentação: em 52, o BI mostra menos dias de conclusão que o real (diferença típica de 17 dias; mais de 90 dias em 10 processos; até 664 dias a menos). Um dos processos, com decisão assinada em março de 2026, nem deveria estar concluso.',
       'Na prática: os processos conclusos há mais tempo podem ficar fora das "conclusões mais antigas" desta área e das urgências da fila. Antes de agir pela lista, confira no PJe a data da última conclusão sem despacho, decisão ou sentença depois dela.',
     ],
-    planilha: 'Atenção: no BI, a data da conclusão é a da última movimentação (qualquer movimento zera a contagem) e decisão lançada sem movimento de decisão não tira o processo da conclusão. Os dias de conclusão podem ser menores que os reais. Números mantidos como no BI, que são os que o CNJ vê.',
+    planilha: 'Atenção: no BI, a data da conclusão é a da última movimentação (qualquer movimento zera a contagem) e decisão lançada sem movimento de decisão não tira o processo da conclusão. Os dias de conclusão podem não ser os reais. Números mantidos como no BI, que são os que o CNJ vê.',
   };
 
   // Filtro das listas no BI: "Período há mais de: 100" dias nas listas sem movimentação e conclusão antiga (o extrator só aceita
