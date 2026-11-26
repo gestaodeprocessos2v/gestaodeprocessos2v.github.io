@@ -16,7 +16,7 @@
   const GRANS = [['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês']];
   const dBR = d => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : '—');
   const dCurta = d => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '—');
-  const podeVer = () => P.PERFIS_PRODUTIVIDADE.includes(st.perfil);
+  const podeVer = () => P.podeVerProd();
 
   // ---------- estado ----------
   const S = () => st.prod || (st.prod = {

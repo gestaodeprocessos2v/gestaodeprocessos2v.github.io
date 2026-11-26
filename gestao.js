@@ -21,7 +21,7 @@
     const porPessoa = Object.fromEntries(st.acessos.filter(a => a.pessoa_id).map(a => [a.pessoa_id, a.email]));
     for (const p of st.rascunho.pessoas || []) if (p.email == null) p.email = porPessoa[p.id] || '';
     st.rascunho.etiquetasFiltro = R.etiquetasFiltro(st.rascunho);   // formato antigo (só texto) vira { e, s: 'pagamentos' }
-    st.rascOutros = st.acessos.filter(a => !a.pessoa_id).map(a => ({ nome: a.nome, email: a.email, perfil: a.perfil, magistrado: a.magistrado || '' }));
+    st.rascOutros = st.acessos.filter(a => !a.pessoa_id).map(a => ({ nome: a.nome, email: a.email, perfil: a.perfil, magistrado: a.magistrado || '', verProd: !!a.ver_produtividade }));
   }
 
   // Guarda o que o gestor digitou antes de redesenhar (os dados recarregam a qualquer momento).
@@ -768,7 +768,7 @@
       const eu = o.email === st.email;
       return `<div class="acesso-cfg">
       <input type="text" id="cfg-o-nome-${i}" value="${esc(o.nome)}" aria-label="Nome">
-      <span class="perfil-cel"><select id="cfg-o-perfil-${i}" aria-label="Perfil" ${eu ? 'disabled' : ''}>${opcPerfil(o.perfil)}</select>${o.perfil === 'magistrado' ? `<select id="cfg-o-mag-${i}" aria-label="Magistrado(a): titular ou substituta"><option value=""${!o.magistrado ? ' selected' : ''}>Não definido</option><option value="T"${o.magistrado === 'T' ? ' selected' : ''}>Titular</option><option value="S"${o.magistrado === 'S' ? ' selected' : ''}>Substituta</option></select>` : ''}</span>
+      <span class="perfil-cel"><select id="cfg-o-perfil-${i}" aria-label="Perfil" ${eu ? 'disabled' : ''}>${opcPerfil(o.perfil)}</select>${o.perfil === 'magistrado' ? `<select id="cfg-o-mag-${i}" aria-label="Magistrado(a): titular ou substituta"><option value=""${!o.magistrado ? ' selected' : ''}>Não definido</option><option value="T"${o.magistrado === 'T' ? ' selected' : ''}>Titular</option><option value="S"${o.magistrado === 'S' ? ' selected' : ''}>Substituta</option></select>` : ''}${o.perfil === 'visitante' ? `<label class="small ver-prod" data-balao="Abre também a área Produtividade da Vara (dados por pessoa) para este Visitante" aria-description="Abre também a área Produtividade da Vara (dados por pessoa) para este Visitante"><input type="checkbox" id="cfg-o-prod-${i}"${o.verProd ? ' checked' : ''}> Vê a Produtividade</label>` : ''}</span>
       <input type="text" id="cfg-o-email-${i}" value="${esc(o.email || '')}" aria-label="E-mail Google" inputmode="email" autocomplete="off" placeholder="E-mail Google (Gmail)" ${eu ? 'disabled' : ''}>
       <button class="btn" type="button" data-acao="cfg-remover-outro" data-i="${i}" ${eu ? 'disabled data-balao="Seu próprio acesso não pode ser removido" data-balao-dir="dir" aria-description="Seu próprio acesso não pode ser removido"' : ''}>Remover</button></div>`;
     }).join('');
@@ -899,6 +899,7 @@
       const nome = val(`cfg-o-nome-${i}`); if (nome != null) o.nome = nome.trim();
       const perfil = val(`cfg-o-perfil-${i}`); if (perfil) o.perfil = perfil;
       const mag = val(`cfg-o-mag-${i}`); if (mag != null) o.magistrado = mag;
+      const pr = document.getElementById(`cfg-o-prod-${i}`); if (pr) o.verProd = pr.checked;
       const email = val(`cfg-o-email-${i}`); if (email != null) o.email = email.trim();
     });
     (c.regrasClasse || []).forEach((r, i) => {
@@ -968,14 +969,14 @@
       for (const p of c.pessoas || []) {
         if (!p.nome) throw new Error('Há uma pessoa sem nome.');
         const e = checa(p.nome, p.email, p.nome);
-        if (e) desejados.push({ email: e, nome: p.nome, perfil: p.tipo || 'servidor', pessoa_id: p.id, magistrado: null });
+        if (e) desejados.push({ email: e, nome: p.nome, perfil: p.tipo || 'servidor', pessoa_id: p.id, magistrado: null, ver_produtividade: false });
       }
       for (const o of outros) {
         if (!o.email && !o.nome) continue;
         if (!o.nome) throw new Error('Há um acesso sem nome.');
         if (!o.email) throw new Error(`Informe o e-mail de ${o.nome}.`);
         // magistrado: 'T' (titular) ou 'S' (substituta), só para o perfil Magistrado(a); define o padrão do filtro das Metas
-        desejados.push({ email: checa(o.nome, o.email, o.nome), nome: o.nome, perfil: o.perfil, pessoa_id: null, magistrado: o.perfil === 'magistrado' && (o.magistrado === 'T' || o.magistrado === 'S') ? o.magistrado : null });
+        desejados.push({ email: checa(o.nome, o.email, o.nome), nome: o.nome, perfil: o.perfil, pessoa_id: null, magistrado: o.perfil === 'magistrado' && (o.magistrado === 'T' || o.magistrado === 'S') ? o.magistrado : null, ver_produtividade: o.perfil === 'visitante' && !!o.verProd });
       }
     } catch (e) { toast(e.message); return; }
     const eu = desejados.find(d => d.email === st.email);
@@ -1071,7 +1072,7 @@
     else if (id === 'tf-filtro-painel') { st.filtroTabela.painel = e.target.value; render(); }
     else if (id === 'urg-setor') sugerirResponsavel();
     else if (id === 'urg-resp' || id === 'urg-motivo') st.novaUrgencia = Object.assign(st.novaUrgencia || {}, { responsavel: $('#urg-resp').value, motivo: $('#urg-motivo').value });
-    else if (/^cfg-s-.*-modo$/.test(id) || /^cfg-o-perfil-\d+$/.test(id)) { lerRascunho(); render(); }   // o perfil Magistrado(a) mostra o seletor titular/substituta
+    else if (/^cfg-s-.*-modo$/.test(id) || /^cfg-o-perfil-\d+$/.test(id)) { lerRascunho(); render(); }   // o perfil Magistrado(a) mostra o seletor titular/substituta; o Visitante, a caixa "Vê a Produtividade"
     else if (/^cfg-v-tipo-\d+$/.test(id)) {
       lerRascunho();
       const v = st.rascunho.visoes[Number(id.split('-').pop())];

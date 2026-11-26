@@ -406,6 +406,7 @@ body { margin: 0; }
 .acesso-cfg { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 20.5rem) minmax(0, 1.3fr) auto; gap: 6px; align-items: center; }
 .acesso-cfg .perfil-cel { flex-direction: row; }
 .acesso-cfg .perfil-cel select { flex: 0 1 10rem; min-width: 0; }
+.acesso-cfg .ver-prod { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .pessoa-cfg { grid-template-columns: minmax(0, 1fr) minmax(0, 10rem) minmax(0, 1.3fr) auto; }
 .cab-cfg { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .02em; }
 @media (max-width: 560px) {

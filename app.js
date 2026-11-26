@@ -25,7 +25,7 @@
 
   const st = {
     sb: null, estado: 'carregando', erro: '',
-    email: '', perfil: '', nome: '', pessoa: '', magistrado: '',
+    email: '', perfil: '', nome: '', pessoa: '', magistrado: '', verProd: false,
     config: null, rascunho: null,
     tarefas: [], mapaTarefas: new Map(), tarefasEm: null, rascTarefas: null, tarefasAlteradas: false,
     filtroTabela: { busca: '', painel: '' },
@@ -183,7 +183,7 @@
 
   function reiniciarEstado() {
     Object.assign(st, {
-      email: '', perfil: '', nome: '', pessoa: '', magistrado: '', fMetas: { meta: '', inst: '', busca: '', limite: 300 }, config: null, rascunho: null, tarefas: [], mapaTarefas: new Map(), rascTarefas: null,
+      email: '', perfil: '', nome: '', pessoa: '', magistrado: '', verProd: false, fMetas: { meta: '', inst: '', busca: '', limite: 300 }, config: null, rascunho: null, tarefas: [], mapaTarefas: new Map(), rascTarefas: null,
       tarefasAlteradas: false, resumo: null, filas: [], urgencias: [], devolucoes: [], marcas: {}, anotacoes: {}, dispensas: {}, acessos: [], negados: [],
       anotando: null, confirmaNota: null, devolvendo: null, modal: null, importacao: null,
       area: 'fila', menuAreas: false, abaGestor: 'ginicio', abaMetas: 'visao', metas: { envios: [], pend: null, pendEnvio: null, carregando: false, erro: false }, metasImp: null,
@@ -207,10 +207,11 @@
     st.email = String(session.user.email || '').toLowerCase();
     st.estado = 'carregando'; render();
     try {
-      const { data, error } = await st.sb.from('acesso').select('nome,perfil,pessoa_id,magistrado').eq('email', st.email).maybeSingle();
+      const { data, error } = await st.sb.from('acesso').select('nome,perfil,pessoa_id,magistrado,ver_produtividade').eq('email', st.email).maybeSingle();
       if (error) throw error;
       if (!data) { st.estado = 'negado'; render(); registrarNegado(st.email); return; }
       st.magistrado = data.magistrado || ''; // 'T' (titular) ou 'S' (substituta): só define o padrão do filtro das Metas
+      st.verProd = !!data.ver_produtividade; // Visitante marcado pelo gestor: também vê a Produtividade da Vara (RLS confere)
       st.nome = data.nome; st.perfil = data.perfil; st.pessoa = data.perfil === 'gestor' ? GESTOR_ID : (data.pessoa_id || '');
       if (window.TEMA) window.TEMA.ligar(st.sb, st.email); // aparência guardada na conta (não bloqueia o carregamento)
       const visto = Number(ler('fila.visita.' + st.email));
@@ -258,6 +259,8 @@
   const PERFIS_METAS = ['gestor', 'servidor', 'magistrado', 'diretor', 'eventual', 'visitante'];
   // Produtividade da Vara (dados por pessoa): só gestor, diretor e magistrado. O banco também confere (RLS).
   const PERFIS_PRODUTIVIDADE = ['gestor', 'diretor', 'magistrado'];
+  // ...e o Visitante que o gestor marcar no cadastro de acesso ("Vê a Produtividade", coluna acesso.ver_produtividade).
+  const podeVerProd = () => PERFIS_PRODUTIVIDADE.includes(st.perfil) || (st.perfil === 'visitante' && st.verProd);
   // E-mails (resumo diário da rotina): gestor, diretor e magistrado(a). O banco decide o que cada um vê (RLS).
   const PERFIS_EMAILS = ['gestor', 'diretor', 'magistrado'];
   // Processos Parados: gestor, diretor, magistrado(a) e visitante (só leitura). Os dados são os das filas e de fora_vara (RLS).
@@ -268,7 +271,7 @@
   function areasDisponiveis() {
     const a = st.perfil === 'gestor' ? ['gestor', 'fila'] : ['fila'];
     if (PERFIS_METAS.includes(st.perfil)) a.push('metas');
-    if (PERFIS_PRODUTIVIDADE.includes(st.perfil)) a.push('produtividade');
+    if (podeVerProd()) a.push('produtividade');
     if (PERFIS_PARADOS.includes(st.perfil)) a.push('parados');
     if (PERFIS_INSPECAO.includes(st.perfil)) a.push('inspecao');
     if (PERFIS_EMAILS.includes(st.perfil)) a.push('emails');
@@ -330,7 +333,7 @@
       todas((a, b) => sb.from('marcas').select('pessoa,chave,em,devolvido,item,desfeito,concluida_por').gte('em', desdeMarcas).order('pessoa').order('chave').range(a, b)),
       todas((a, b) => sb.from('anotacoes').select(COL_ANOT).order('id').range(a, b)),
       todas((a, b) => sb.from('anotacoes_dispensa').select('pessoa,numero,em').order('pessoa').order('numero').range(a, b)),
-      gestor ? todas((a, b) => sb.from('acesso').select('email,nome,perfil,pessoa_id,magistrado').order('email').range(a, b)) : Promise.resolve([]),
+      gestor ? todas((a, b) => sb.from('acesso').select('email,nome,perfil,pessoa_id,magistrado,ver_produtividade').order('email').range(a, b)) : Promise.resolve([]),
       gestor ? sb.from('acessos_negados').select('email,em').order('em', { ascending: false }).limit(200) : Promise.resolve({ data: [] }),
     ]);
     if (cfg.error) throw cfg.error;
@@ -383,7 +386,7 @@
     await carregarJD();
     await carregarPJE1();
     await carregarInspUrg();
-    if (PERFIS_PRODUTIVIDADE.includes(st.perfil) && window.PAINEL.carregarProd) await window.PAINEL.carregarProd();
+    if (podeVerProd() && window.PAINEL.carregarProd) await window.PAINEL.carregarProd();
     if (PERFIS_EMAILS.includes(st.perfil) && window.PAINEL.carregarEmails) await window.PAINEL.carregarEmails();
     if (st.perfil === 'gestor' && window.PAINEL.carregarInspecao) await window.PAINEL.carregarInspecao({ itens: false });
     if (window.PAINEL.carregarMinutas) await window.PAINEL.carregarMinutas();
@@ -1602,7 +1605,7 @@
     st.sb.auth.onAuthStateChange((evento) => {
       if (evento === 'SIGNED_OUT' && st.estado === 'ok') setTimeout(() => { reiniciarEstado(); st.estado = 'login'; render(); }, 0);
     });
-    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, carregarPJE1, atualizar, baixarPlanilha, textoMagistrados, BALAO_PLANILHA, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS, PERFIS_PRODUTIVIDADE, PERFIS_EMAILS, PERFIS_PARADOS, PERFIS_INSPECAO, prazosRetorno, anotadosDe, marcasVigentesTodas, numeroHTML, MAGISTRADOS, magDoCargo, magPadrao, magOffDe, noPadraoMag, magPassa, alternarMag, letraMagHTML, faixaMagHTML });
+    Object.assign(window.PAINEL, { render, toast, esc, ms, iso, dataBR, dataHoraBR, falha, todas, carregar, carregarPJE1, atualizar, baixarPlanilha, textoMagistrados, BALAO_PLANILHA, pessoas, nomes, nomeDe, tipoDe, opcoesPessoas, opcoesTipo, filaDe, guardar, ler, htmlGestorFila, ehEspecial, PERFIS_METAS, PERFIS_PRODUTIVIDADE, podeVerProd, PERFIS_EMAILS, PERFIS_PARADOS, PERFIS_INSPECAO, prazosRetorno, anotadosDe, marcasVigentesTodas, numeroHTML, MAGISTRADOS, magDoCargo, magPadrao, magOffDe, noPadraoMag, magPassa, alternarMag, letraMagHTML, faixaMagHTML });
     iniciarSessao();
   }
   iniciar();
